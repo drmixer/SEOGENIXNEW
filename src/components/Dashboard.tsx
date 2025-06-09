@@ -75,6 +75,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         if (user) {
           const profile = await userDataService.getUserProfile(user.id);
           hasCompletedOnboarding = !!profile?.onboarding_completed_at;
+          
+          console.log('Walkthrough check:', {
+            onboardingData: !!onboardingData,
+            hasCompletedOnboarding,
+            shouldTriggerWalkthrough: !!shouldTriggerWalkthrough,
+            walkthroughCompleted: !!walkthroughCompleted,
+            profile: profile
+          });
         }
       } catch (error) {
         console.error('Error checking onboarding status:', error);
@@ -82,6 +90,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       
       // Show walkthrough if onboarding was completed (either localStorage or database) and walkthrough hasn't been shown
       if ((onboardingData || hasCompletedOnboarding || shouldTriggerWalkthrough) && !walkthroughCompleted) {
+        console.log('Triggering walkthrough - conditions met');
         
         // Clear the trigger flag
         if (shouldTriggerWalkthrough) {
@@ -89,8 +98,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         }
         
         setTimeout(() => {
+          console.log('Setting showWalkthrough to true');
           setShowWalkthrough(true);
         }, 1500);
+      } else {
+        console.log('Walkthrough not triggered - conditions not met');
       }
     };
     
@@ -100,8 +112,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Listen for onboarding completion event (for immediate trigger after onboarding)
   React.useEffect(() => {
     const handleOnboardingComplete = () => {
+      console.log('Onboarding completed event received');
       const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
       if (!walkthroughCompleted) {
+        console.log('Starting walkthrough immediately after onboarding');
         setTimeout(() => {
           setShowWalkthrough(true);
         }, 500);
