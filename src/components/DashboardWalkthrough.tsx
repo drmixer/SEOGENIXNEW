@@ -119,9 +119,8 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
+      console.log('Walkthrough completed - calling onComplete');
       onComplete();
-      // Also clear any trigger flags
-      localStorage.removeItem('seogenix_trigger_walkthrough');
     }
   };
 

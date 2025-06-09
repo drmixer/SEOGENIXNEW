@@ -28,14 +28,35 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Extract first name from user data
   const getFirstName = () => {
     console.log('Getting first name for user:', user);
+    
+    // Check user_metadata first
     if (user?.user_metadata?.full_name) {
-      console.log('Using full_name:', user.user_metadata.full_name);
-      return user.user_metadata.full_name.split(' ')[0];
+      const firstName = user.user_metadata.full_name.split(' ')[0];
+      console.log('Using full_name from user_metadata:', firstName);
+      return firstName;
     }
+    
+    // Check raw_user_meta_data as backup
+    if (user?.raw_user_meta_data?.full_name) {
+      const firstName = user.raw_user_meta_data.full_name.split(' ')[0];
+      console.log('Using full_name from raw_user_meta_data:', firstName);
+      return firstName;
+    }
+    
+    // Check app_metadata
+    if (user?.app_metadata?.full_name) {
+      const firstName = user.app_metadata.full_name.split(' ')[0];
+      console.log('Using full_name from app_metadata:', firstName);
+      return firstName;
+    }
+    
+    // Fall back to email
     if (user?.email) {
-      console.log('Using email:', user.email);
-      return user.email.split('@')[0];
+      const emailName = user.email.split('@')[0];
+      console.log('Using email username:', emailName);
+      return emailName.charAt(0).toUpperCase() + emailName.slice(1);
     }
+    
     console.log('Fallback to User');
     return 'User';
   };
@@ -61,33 +82,41 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
   // Check for walkthrough trigger on dashboard load
   React.useEffect(() => {
-    if (!user) return;
+    console.log('Dashboard useEffect - checking for walkthrough triggers');
+    
+    if (!user) {
+      console.log('No user, skipping walkthrough check');
+      return;
+    }
 
     const initializeDashboard = async () => {
       // Set tools run state
       const toolsRun = localStorage.getItem('seogenix_tools_run');
       if (toolsRun) {
+        console.log('Tools have been run before');
         setHasRunTools(true);
       }
 
-      // Check for immediate walkthrough trigger (from onboarding)
-      const immediateWalkthrough = localStorage.getItem('seogenix_immediate_walkthrough');
+      // Check for walkthrough trigger (from onboarding)
+      const walkthroughTrigger = localStorage.getItem('seogenix_trigger_walkthrough');
       const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
       
       console.log('Dashboard initialization:', {
-        immediateWalkthrough: !!immediateWalkthrough,
+        walkthroughTrigger: !!walkthroughTrigger,
         walkthroughCompleted: !!walkthroughCompleted,
-        userId: user.id
+        userId: user.id,
+        userEmail: user.email
       });
 
-      // If immediate walkthrough is flagged and hasn't been completed
-      if (immediateWalkthrough && !walkthroughCompleted) {
-        console.log('Triggering immediate walkthrough from onboarding');
-        localStorage.removeItem('seogenix_immediate_walkthrough');
+      // If walkthrough is triggered and hasn't been completed
+      if (walkthroughTrigger && !walkthroughCompleted) {
+        console.log('Triggering walkthrough from onboarding completion');
+        localStorage.removeItem('seogenix_trigger_walkthrough');
         
         setTimeout(() => {
+          console.log('Starting walkthrough...');
           setShowWalkthrough(true);
-        }, 800);
+        }, 1000); // Give dashboard time to render
         return;
       }
 
@@ -95,8 +124,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       try {
         const profile = await userDataService.getUserProfile(user.id);
         if (profile?.onboarding_completed_at && !walkthroughCompleted) {
-          console.log('Triggering walkthrough from database onboarding completion');
+          console.log('User has completed onboarding but not walkthrough - triggering walkthrough');
           setTimeout(() => {
+            console.log('Starting walkthrough from database check...');
             setShowWalkthrough(true);
           }, 1500);
         }
@@ -106,7 +136,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     };
 
     initializeDashboard();
-  }, [user]); // Add user as dependency to re-check when user loads
 
   // Handle tool launch from Genie
   const handleToolLaunch = async (toolId: string) => {
@@ -243,12 +272,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       {showWalkthrough && (
         <DashboardWalkthrough
           onComplete={() => {
+            console.log('Walkthrough completed - setting completion flag');
             setShowWalkthrough(false);
             localStorage.setItem('seogenix_walkthrough_completed', 'true');
+            // Clear any remaining trigger flags
+            localStorage.removeItem('seogenix_trigger_walkthrough');
           }}
           onSkip={() => {
+            console.log('Walkthrough skipped - setting completion flag');
             setShowWalkthrough(false);
             localStorage.setItem('seogenix_walkthrough_completed', 'true');
+            // Clear any remaining trigger flags
+            localStorage.removeItem('seogenix_trigger_walkthrough');
           }}
         />
       )}

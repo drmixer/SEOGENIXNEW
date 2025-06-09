@@ -29,6 +29,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
         });
         if (error) throw error;
       } else {
+        console.log('Signing up user with name:', name);
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -39,6 +40,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
           },
         });
         if (error) throw error;
+        console.log('User signed up successfully');
       }
       
       onSuccess();
