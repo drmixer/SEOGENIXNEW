@@ -1,20 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Sparkles, Loader } from 'lucide-react';
+import { X, Send, Sparkles, Loader, ExternalLink } from 'lucide-react';
 import { apiService } from '../services/api';
+import { userDataService } from '../services/userDataService';
+import { supabase } from '../lib/supabase';
 
 interface ChatbotPopupProps {
   onClose: () => void;
   type: 'landing' | 'dashboard';
   userPlan?: 'free' | 'core' | 'pro' | 'agency';
+  onToolLaunch?: (toolId: string) => void;
 }
 
 interface Message {
   type: 'user' | 'bot';
   content: string;
   timestamp: Date;
+  actionSuggestions?: Array<{
+    type: string;
+    toolId?: string;
+    label: string;
+  }>;
 }
 
-const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan }) => {
+const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, onToolLaunch }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       type: 'bot',
@@ -26,6 +34,35 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan }) 
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [userData, setUserData] = useState<any>(null);
+
+  // Load user data for personalization
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (type === 'dashboard') {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const profile = await userDataService.getUserProfile(user.id);
+            const recentActivity = await userDataService.getRecentActivity(user.id, 10);
+            const auditHistory = await userDataService.getAuditHistory(user.id, 3);
+            
+            setUserData({
+              websites: profile?.websites || [],
+              industry: profile?.industry,
+              recentActivity,
+              lastAuditScore: auditHistory[0]?.overall_score,
+              lastAuditRecommendations: auditHistory[0]?.recommendations || []
+            });
+          }
+        } catch (error) {
+          console.error('Error loading user data:', error);
+        }
+      }
+    };
+
+    loadUserData();
+  }, [type]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -40,6 +77,22 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan }) 
     setInputValue('');
     setIsLoading(true);
 
+    // Track user activity
+    if (type === 'dashboard') {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await userDataService.trackActivity({
+            user_id: user.id,
+            activity_type: 'genie_chat',
+            activity_data: { message: inputValue, context: type }
+          });
+        }
+      } catch (error) {
+        console.error('Error tracking activity:', error);
+      }
+    }
+
     try {
       // Prepare conversation history for API
       const conversationHistory = messages.map(msg => ({
@@ -51,13 +104,15 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan }) 
         inputValue,
         type,
         userPlan,
-        conversationHistory
+        conversationHistory,
+        userData
       );
 
       const botMessage: Message = {
         type: 'bot',
         content: response.response,
-        timestamp: new Date()
+        timestamp: new Date(),
+        actionSuggestions: response.actionSuggestions || []
       };
 
       setMessages(prev => [...prev, botMessage]);
@@ -87,6 +142,13 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan }) 
     }
   };
 
+  const handleActionClick = (action: any) => {
+    if (action.type === 'launchTool' && action.toolId && onToolLaunch) {
+      onToolLaunch(action.toolId);
+      onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-end p-6 z-50">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md h-96 flex flex-col">
@@ -97,7 +159,9 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan }) 
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">Genie</h3>
-              <p className="text-sm text-gray-500">AI Assistant</p>
+              <p className="text-sm text-gray-500">
+                AI Assistant {userData && type === 'dashboard' ? '(Personalized)' : ''}
+              </p>
             </div>
           </div>
           <button
@@ -110,22 +174,41 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan }) 
         
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message, index) => (
-            <div
-              key={index}
-              className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
+            <div key={index}>
               <div
-                className={`max-w-xs p-3 rounded-2xl ${
-                  message.type === 'user'
-                    ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white'
-                    : 'bg-gray-100 text-gray-900'
-                }`}
+                className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <p className="text-sm">{message.content}</p>
-                <p className="text-xs opacity-70 mt-1">
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
+                <div
+                  className={`max-w-xs p-3 rounded-2xl ${
+                    message.type === 'user'
+                      ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white'
+                      : 'bg-gray-100 text-gray-900'
+                  }`}
+                >
+                  <p className="text-sm">{message.content}</p>
+                  <p className="text-xs opacity-70 mt-1">
+                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
               </div>
+              
+              {/* Action suggestions */}
+              {message.actionSuggestions && message.actionSuggestions.length > 0 && (
+                <div className="flex justify-start mt-2">
+                  <div className="space-y-2">
+                    {message.actionSuggestions.map((action, actionIndex) => (
+                      <button
+                        key={actionIndex}
+                        onClick={() => handleActionClick(action)}
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1"
+                      >
+                        <span>{action.label}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           {isLoading && (

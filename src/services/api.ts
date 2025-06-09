@@ -110,17 +110,18 @@ export const apiService = {
     return response.json();
   },
 
-  // Genie Chatbot
+  // Genie Chatbot (Enhanced with user data)
   async chatWithGenie(
     message: string, 
     context: 'landing' | 'dashboard', 
     userPlan?: string,
-    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    userData?: any
   ) {
     const response = await fetch(`${API_BASE_URL}/genie-chatbot`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ message, context, userPlan, conversationHistory })
+      body: JSON.stringify({ message, context, userPlan, conversationHistory, userData })
     });
     
     if (!response.ok) {
@@ -227,6 +228,26 @@ export const apiService = {
     
     if (!response.ok) {
       throw new Error('Failed to perform competitive analysis');
+    }
+    
+    return response.json();
+  },
+
+  // Report Generator
+  async generateReport(
+    reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive',
+    reportData: any,
+    reportName: string,
+    format: 'pdf' | 'csv' | 'json' = 'pdf'
+  ) {
+    const response = await fetch(`${API_BASE_URL}/generate-report`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ reportType, reportData, reportName, format })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to generate report');
     }
     
     return response.json();
