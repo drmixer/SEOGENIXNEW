@@ -11,7 +11,10 @@ import {
   TrendingUp,
   Lightbulb,
   CreditCard,
-  Settings
+  Settings,
+  History,
+  Edit3,
+  Download
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -36,6 +39,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userP
     { id: 'optimizer', label: 'Content Optimizer', icon: TrendingUp, available: isDevelopment || userPlan !== 'free' },
     { id: 'prompts', label: 'Prompt Suggestions', icon: Lightbulb, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'competitive', label: 'Competitive Analysis', icon: BarChart3, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
+  ];
+
+  const newFeatures = [
+    { id: 'history', label: 'Performance History', icon: History, available: isDevelopment || userPlan !== 'free' },
+    { id: 'editor', label: 'Content Editor', icon: Edit3, available: isDevelopment || userPlan !== 'free' },
+    { id: 'reports', label: 'Reports', icon: Download, available: isDevelopment || userPlan !== 'free' },
   ];
 
   const bottomItems = [
@@ -82,6 +91,44 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userP
             );
           })}
         </nav>
+
+        {/* New Features Section */}
+        <div className="mt-8">
+          <div className="flex items-center space-x-2 mb-4">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">New Features</h3>
+            <span className="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">NEW</span>
+          </div>
+          <nav className="space-y-2">
+            {newFeatures.map((item) => {
+              const IconComponent = item.icon;
+              const isActive = activeSection === item.id;
+              const isAvailable = item.available;
+              
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => isAvailable && onSectionChange(item.id)}
+                  disabled={!isAvailable}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                    isActive 
+                      ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white' 
+                      : isAvailable
+                        ? 'text-gray-700 hover:bg-gray-100'
+                        : 'text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  <IconComponent className="w-5 h-5" />
+                  <span className="text-sm font-medium">{item.label}</span>
+                  {!isAvailable && !isDevelopment && (
+                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full ml-auto">
+                      Core
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
         
         <div className="border-t border-gray-200 mt-8 pt-4">
           <nav className="space-y-2">

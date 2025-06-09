@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2, Globe, Target, ArrowRight, Building, FileText } from 'lucide-react';
+import { userDataService } from '../services/userDataService';
+import { supabase } from '../lib/supabase';
 
 interface OnboardingModalProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -90,7 +92,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
     setCompetitors(updated);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < 3) {
       setStep(step + 1);
     } else {
@@ -104,8 +106,37 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         completedAt: new Date().toISOString()
       };
       
-      // In a real app, you'd save this to your database
-      console.log('Onboarding data:', onboardingData);
+      try {
+        // Save to database
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await userDataService.createUserProfile({
+            user_id: user.id,
+            websites: onboardingData.websites,
+            competitors: onboardingData.competitors,
+            industry: onboardingData.industry,
+            business_description: onboardingData.businessDescription,
+            plan: userPlan,
+            onboarding_completed_at: new Date().toISOString()
+          });
+
+          // Track onboarding completion
+          await userDataService.trackActivity({
+            user_id: user.id,
+            activity_type: 'onboarding_completed',
+            activity_data: { 
+              plan: userPlan,
+              websitesCount: onboardingData.websites.length,
+              competitorsCount: onboardingData.competitors.length,
+              industry: onboardingData.industry
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error saving onboarding data:', error);
+      }
+      
+      // Save to localStorage for backward compatibility
       localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
       
       // Complete onboarding first
@@ -188,7 +219,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                         <h4 className="font-medium text-gray-900">Website {index + 1}</h4>
                         {websites.length > 1 && (
                           <button
-                            onClick={() => removeWebsite(index)}
+                            onClick={() =>Website(index)}
                             className="text-red-500 hover:text-red-700 transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />

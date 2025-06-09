@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Target, Brain, MessageSquare, FileText, RefreshCw } from 'lucide-react';
 import { apiService, type AuditResult } from '../services/api';
+import { userDataService } from '../services/userDataService';
+import { supabase } from '../lib/supabase';
 
 interface VisibilityScoreProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -11,9 +13,8 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasRunAudit, setHasRunAudit] = useState(false);
+  const [weeklyChange, setWeeklyChange] = useState(0);
 
-  const weeklyChange = 8;
-  
   // Enable subscores for all users during development
   const isDevelopment = true; // Set to false for production
   const hasSubscores = isDevelopment || userPlan !== 'free';
@@ -28,6 +29,39 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
       setAuditData(result);
       setHasRunAudit(true);
       localStorage.setItem('seogenix_audit_run', 'true');
+
+      // Save audit result to history
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await userDataService.saveAuditResult({
+            user_id: user.id,
+            website_url: 'https://example.com',
+            overall_score: result.overallScore,
+            ai_understanding: result.subscores.aiUnderstanding,
+            citation_likelihood: result.subscores.citationLikelihood,
+            conversational_readiness: result.subscores.conversationalReadiness,
+            content_structure: result.subscores.contentStructure,
+            recommendations: result.recommendations,
+            issues: result.issues,
+            audit_data: result
+          });
+
+          // Track audit activity
+          await userDataService.trackActivity({
+            user_id: user.id,
+            activity_type: 'audit_run',
+            activity_data: { 
+              score: result.overallScore,
+              url: 'https://example.com',
+              type: 'sample_audit'
+            }
+          });
+        }
+      } catch (dbError) {
+        console.error('Error saving audit result:', dbError);
+      }
+
     } catch (err) {
       setError('Failed to run audit. Please try again.');
       console.error('Audit error:', err);
@@ -36,15 +70,62 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
     }
   };
 
-  // Load real data on component mount
+  // Load historical data and calculate trends
   useEffect(() => {
+    const loadHistoricalData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const auditHistory = await userDataService.getAuditHistory(user.id, 10);
+          
+          if (auditHistory.length > 0) {
+            setHasRunAudit(true);
+            
+            // Use latest audit data
+            const latest = auditHistory[0];
+            setAuditData({
+              overallScore: latest.overall_score,
+              subscores: {
+                aiUnderstanding: latest.ai_understanding,
+                citationLikelihood: latest.citation_likelihood,
+                conversationalReadiness: latest.conversational_readiness,
+                contentStructure: latest.content_structure
+              },
+              recommendations: latest.recommendations,
+              issues: latest.issues
+            });
+
+            // Calculate weekly change
+            if (auditHistory.length > 1) {
+              const weekAgo = new Date();
+              weekAgo.setDate(weekAgo.getDate() - 7);
+              
+              const weeklyAudits = auditHistory.filter(audit => 
+                new Date(audit.created_at) >= weekAgo
+              );
+              
+              if (weeklyAudits.length >= 2) {
+                const oldestThisWeek = weeklyAudits[weeklyAudits.length - 1];
+                const change = latest.overall_score - oldestThisWeek.overall_score;
+                setWeeklyChange(change);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading historical data:', error);
+      }
+    };
+
+    loadHistoricalData();
+
+    // Also check localStorage for backward compatibility
     const auditRun = localStorage.getItem('seogenix_audit_run');
-    if (auditRun) {
+    if (auditRun && !hasRunAudit) {
       setHasRunAudit(true);
-    }
-    
-    if (hasSubscores) {
-      runSampleAudit();
+      if (hasSubscores) {
+        runSampleAudit();
+      }
     }
   }, []);
 
@@ -82,8 +163,8 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">AI Visibility Score</h3>
             <div className="flex items-center space-x-2">
-              <div className={`flex items-center space-x-1 text-sm ${weeklyChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {weeklyChange > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+              <div className={`flex items-center space-x-1 text-sm ${weeklyChange > 0 ? 'text-green-600' : weeklyChange < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                {weeklyChange > 0 ? <TrendingUp className="w-4 h-4" /> : weeklyChange < 0 ? <TrendingDown className="w-4 h-4" /> : null}
                 <span>{weeklyChange > 0 ? '+' : ''}{weeklyChange}% this week</span>
               </div>
               {hasSubscores && (

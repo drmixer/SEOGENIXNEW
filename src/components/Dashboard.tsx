@@ -3,8 +3,13 @@ import DashboardHeader from './DashboardHeader';
 import Sidebar from './Sidebar';
 import VisibilityScore from './VisibilityScore';
 import ToolsGrid from './ToolsGrid';
+import HistoricalPerformance from './HistoricalPerformance';
+import ReportGenerator from './ReportGenerator';
+import ContentEditor from './ContentEditor';
 import ChatbotPopup from './ChatbotPopup';
 import DashboardWalkthrough from './DashboardWalkthrough';
+import { userDataService } from '../services/userDataService';
+import { supabase } from '../lib/supabase';
 
 interface DashboardProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -18,6 +23,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [activeSection, setActiveSection] = useState('overview');
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [hasRunTools, setHasRunTools] = useState(false);
+  const [selectedTool, setSelectedTool] = useState<string | null>(null);
 
   // Extract first name from user data
   const getFirstName = () => {
@@ -29,6 +35,25 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     }
     return 'User';
   };
+
+  // Track page visits
+  React.useEffect(() => {
+    const trackPageVisit = async () => {
+      try {
+        if (user) {
+          await userDataService.trackActivity({
+            user_id: user.id,
+            activity_type: 'page_visited',
+            activity_data: { section: activeSection }
+          });
+        }
+      } catch (error) {
+        console.error('Error tracking page visit:', error);
+      }
+    };
+
+    trackPageVisit();
+  }, [activeSection, user]);
 
   // Single effect to handle all initialization
   React.useEffect(() => {
@@ -67,9 +92,101 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     return () => window.removeEventListener('onboardingCompleted', handleOnboardingComplete);
   }, []);
 
+  // Handle tool launch from Genie
+  const handleToolLaunch = async (toolId: string) => {
+    setSelectedTool(toolId);
+    setActiveSection(toolId);
+    
+    // Track tool launch activity
+    try {
+      if (user) {
+        await userDataService.trackActivity({
+          user_id: user.id,
+          activity_type: 'tool_launched_from_genie',
+          activity_data: { toolId }
+        });
+      }
+    } catch (error) {
+      console.error('Error tracking tool launch:', error);
+    }
+  };
+
   // Enable chatbot for all users during development
   const isDevelopment = true; // Set to false for production
   const canAccessChatbot = isDevelopment || userPlan !== 'free';
+
+  const renderActiveSection = () => {
+    switch (activeSection) {
+      case 'overview':
+        return (
+          <div className="space-y-8">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                Welcome back, {getFirstName()}!
+              </h1>
+              <p className="text-gray-600">Monitor your AI visibility performance and access optimization tools.</p>
+            </div>
+            
+            {hasRunTools ? (
+              <>
+                <VisibilityScore userPlan={userPlan} />
+                <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} />
+              </>
+            ) : (
+              <div className="space-y-8">
+                {/* Getting Started Section */}
+                <div className="bg-gradient-to-r from-teal-50 to-purple-50 rounded-xl p-8 border border-teal-200">
+                  <div className="text-center">
+                    <div className="bg-gradient-to-r from-teal-500 to-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Ready to Get Started?</h2>
+                    <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
+                      Run your first AI Visibility Audit to see how well your content is optimized for AI systems like ChatGPT, Claude, and voice assistants.
+                    </p>
+                    <button
+                      onClick={() => setActiveSection('audit')}
+                      className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition-all duration-300 inline-flex items-center space-x-2"
+                    >
+                      <span>Run Your First Audit</span>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Tools Preview */}
+                <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} showPreview={true} />
+              </div>
+            )}
+          </div>
+        );
+      
+      case 'history':
+        return <HistoricalPerformance userPlan={userPlan} />;
+      
+      case 'reports':
+        return <ReportGenerator userPlan={userPlan} />;
+      
+      case 'editor':
+        return <ContentEditor userPlan={userPlan} />;
+      
+      default:
+        return (
+          <div className="bg-white rounded-xl shadow-sm p-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              {activeSection.charAt(0).toUpperCase() + activeSection.slice(1).replace('-', ' ')}
+            </h2>
+            <p className="text-gray-600">
+              This section is under development. Advanced {activeSection.replace('-', ' ')} features will be available soon.
+            </p>
+          </div>
+        );
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col overflow-hidden">
@@ -88,63 +205,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         />
         
         <main className="flex-1 p-8 overflow-y-auto">
-          {activeSection === 'overview' && (
-            <div className="space-y-8">
-              <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                  Welcome back, {getFirstName()}!
-                </h1>
-                <p className="text-gray-600">Monitor your AI visibility performance and access optimization tools.</p>
-              </div>
-              
-              {hasRunTools ? (
-                <>
-                  <VisibilityScore userPlan={userPlan} />
-                  <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} />
-                </>
-              ) : (
-                <div className="space-y-8">
-                  {/* Getting Started Section */}
-                  <div className="bg-gradient-to-r from-teal-50 to-purple-50 rounded-xl p-8 border border-teal-200">
-                    <div className="text-center">
-                      <div className="bg-gradient-to-r from-teal-500 to-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                      </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Ready to Get Started?</h2>
-                      <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
-                        Run your first AI Visibility Audit to see how well your content is optimized for AI systems like ChatGPT, Claude, and voice assistants.
-                      </p>
-                      <button
-                        onClick={() => setActiveSection('audit')}
-                        className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition-all duration-300 inline-flex items-center space-x-2"
-                      >
-                        <span>Run Your First Audit</span>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Tools Preview */}
-                  <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} showPreview={true} />
-                </div>
-              )}
-            </div>
-          )}
-          
-          {activeSection !== 'overview' && (
-            <div className="bg-white rounded-xl shadow-sm p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                {activeSection.charAt(0).toUpperCase() + activeSection.slice(1).replace('-', ' ')}
-              </h2>
-              <p className="text-gray-600">
-                This section is under development. Advanced {activeSection.replace('-', ' ')} features will be available soon.
-              </p>
-            </div>
-          )}
+          {renderActiveSection()}
         </main>
       </div>
       
@@ -180,6 +241,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           onClose={() => setShowChatbot(false)}
           type="dashboard"
           userPlan={userPlan}
+          onToolLaunch={handleToolLaunch}
         />
       )}
     </div>
