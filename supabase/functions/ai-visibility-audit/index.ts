@@ -54,119 +54,112 @@ Deno.serve(async (req: Request) => {
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     
-    let aiUnderstanding: number;
-    let citationLikelihood: number;
-    let conversationalReadiness: number;
-    let contentStructure: number;
-
-    if (geminiApiKey) {
-      // Use Gemini API to analyze content for AI visibility
-      try {
-        const geminiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiApiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `Analyze this content for AI visibility and provide detailed scores (0-100) for:
-
-                  1. AI Understanding (how well AI can comprehend the content structure, clarity, and context)
-                  2. Citation Likelihood (how likely AI systems are to cite this content as a source)
-                  3. Conversational Readiness (how well it answers questions in a conversational format)
-                  4. Content Structure (schema markup, headings, organization, and technical SEO)
-
-                  Content to analyze:
-                  ${pageContent?.substring(0, 4000) || 'No content provided'}
-
-                  Please provide:
-                  - Specific numeric scores for each category
-                  - Detailed recommendations for improvement
-                  - Specific issues found
-                  
-                  Focus on real, actionable insights for AI optimization.`
-                }]
-              }],
-              generationConfig: {
-                temperature: 0.3,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 1024,
-              }
-            })
-          }
-        );
-
-        if (!geminiResponse.ok) {
-          throw new Error('Failed to analyze content with Gemini API');
-        }
-
-        const geminiData = await geminiResponse.json();
-        const analysisText = geminiData.candidates[0].content.parts[0].text;
-        
-        // Extract scores from AI analysis
-        const scoreRegex = /(\d+)(?:\/100)?/g;
-        const scores = [];
-        let match;
-        while ((match = scoreRegex.exec(analysisText)) !== null) {
-          const score = parseInt(match[1]);
-          if (score >= 0 && score <= 100) {
-            scores.push(score);
-          }
-        }
-
-        aiUnderstanding = scores[0] || Math.floor(Math.random() * 30) + 65;
-        citationLikelihood = scores[1] || Math.floor(Math.random() * 40) + 45;
-        conversationalReadiness = scores[2] || Math.floor(Math.random() * 35) + 55;
-        contentStructure = scores[3] || Math.floor(Math.random() * 45) + 40;
-      } catch (error) {
-        console.error('Gemini API error:', error);
-        // Fall back to mock scores if API fails
-        aiUnderstanding = Math.floor(Math.random() * 30) + 65;
-        citationLikelihood = Math.floor(Math.random() * 40) + 45;
-        conversationalReadiness = Math.floor(Math.random() * 35) + 55;
-        contentStructure = Math.floor(Math.random() * 45) + 40;
-      }
-    } else {
-      // Generate realistic mock scores when API key is not available
-      console.log('Gemini API key not found, using mock data for demo');
-      
-      // Generate consistent but varied scores based on URL/content hash
-      const hash = url ? url.split('').reduce((a, b) => {
-        a = ((a << 5) - a) + b.charCodeAt(0);
-        return a & a;
-      }, 0) : 12345;
-      
-      const seed = Math.abs(hash) % 1000;
-      aiUnderstanding = 65 + (seed % 30);
-      citationLikelihood = 45 + ((seed * 2) % 40);
-      conversationalReadiness = 55 + ((seed * 3) % 35);
-      contentStructure = 40 + ((seed * 4) % 45);
+    if (!geminiApiKey) {
+      return new Response(
+        JSON.stringify({ error: 'Gemini API key not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
+    // Use Gemini 2.5 Flash Preview API to analyze content for AI visibility
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `You are an AI visibility expert. Analyze this content and provide EXACT numeric scores (0-100) for each category.
+
+              Content to analyze:
+              URL: ${url}
+              Content: ${pageContent?.substring(0, 4000) || 'No content provided'}
+
+              Provide scores for these 4 categories:
+
+              1. AI Understanding Score (0-100): How well can AI systems comprehend the content structure, clarity, context, and meaning?
+              2. Citation Likelihood Score (0-100): How likely are AI systems to cite this content as a credible source?
+              3. Conversational Readiness Score (0-100): How well does this content answer questions in a conversational format?
+              4. Content Structure Score (0-100): Quality of schema markup, headings, organization, and technical SEO?
+
+              Then provide:
+              - 5 specific, actionable recommendations for improvement
+              - 4 specific issues found in the content
+
+              Format your response as:
+              AI Understanding: [score]
+              Citation Likelihood: [score]
+              Conversational Readiness: [score]
+              Content Structure: [score]
+
+              Recommendations:
+              1. [specific recommendation]
+              2. [specific recommendation]
+              3. [specific recommendation]
+              4. [specific recommendation]
+              5. [specific recommendation]
+
+              Issues:
+              1. [specific issue]
+              2. [specific issue]
+              3. [specific issue]
+              4. [specific issue]`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.2,
+            topK: 40,
+            topP: 0.8,
+            maxOutputTokens: 1024,
+          }
+        })
+      }
+    );
+
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      console.error('Gemini API error:', errorText);
+      throw new Error(`Gemini API failed: ${geminiResponse.status}`);
+    }
+
+    const geminiData = await geminiResponse.json();
+    const analysisText = geminiData.candidates[0].content.parts[0].text;
+    
+    console.log('Gemini analysis:', analysisText);
+
+    // Extract scores from AI analysis using more robust parsing
+    const aiUnderstandingMatch = analysisText.match(/AI Understanding:?\s*(\d+)/i);
+    const citationLikelihoodMatch = analysisText.match(/Citation Likelihood:?\s*(\d+)/i);
+    const conversationalReadinessMatch = analysisText.match(/Conversational Readiness:?\s*(\d+)/i);
+    const contentStructureMatch = analysisText.match(/Content Structure:?\s*(\d+)/i);
+
+    const aiUnderstanding = aiUnderstandingMatch ? parseInt(aiUnderstandingMatch[1]) : 75;
+    const citationLikelihood = citationLikelihoodMatch ? parseInt(citationLikelihoodMatch[1]) : 65;
+    const conversationalReadiness = conversationalReadinessMatch ? parseInt(conversationalReadinessMatch[1]) : 70;
+    const contentStructure = contentStructureMatch ? parseInt(contentStructureMatch[1]) : 60;
+
+    // Extract recommendations
+    const recommendationsSection = analysisText.match(/Recommendations:?\s*([\s\S]*?)(?=Issues:|$)/i);
+    const recommendationsText = recommendationsSection ? recommendationsSection[1] : '';
+    const recommendations = recommendationsText
+      .split(/\d+\./)
+      .slice(1)
+      .map(rec => rec.trim())
+      .filter(rec => rec.length > 0)
+      .slice(0, 5);
+
+    // Extract issues
+    const issuesSection = analysisText.match(/Issues:?\s*([\s\S]*?)$/i);
+    const issuesText = issuesSection ? issuesSection[1] : '';
+    const issues = issuesText
+      .split(/\d+\./)
+      .slice(1)
+      .map(issue => issue.trim())
+      .filter(issue => issue.length > 0)
+      .slice(0, 4);
+
     const overallScore = Math.round((aiUnderstanding + citationLikelihood + conversationalReadiness + contentStructure) / 4);
-
-    // Generate realistic recommendations based on analysis
-    const recommendations = [
-      'Add structured data markup (Schema.org) to improve AI comprehension',
-      'Improve heading hierarchy with clear H1, H2, H3 structure',
-      'Include FAQ sections to address common user questions',
-      'Optimize content for featured snippet formats',
-      'Add clear topic definitions and explanations for better context',
-      'Implement breadcrumb navigation for better content structure',
-      'Use bullet points and numbered lists for better readability',
-      'Add meta descriptions that clearly explain page content'
-    ];
-
-    const issues = [
-      'Limited structured data implementation',
-      'Inconsistent heading hierarchy',
-      'Missing conversational content elements',
-      'Insufficient context for AI understanding',
-      'Lack of clear topic definitions',
-      'Missing FAQ or Q&A sections'
-    ];
 
     const auditResult: AuditResponse = {
       overallScore,
@@ -176,8 +169,19 @@ Deno.serve(async (req: Request) => {
         conversationalReadiness,
         contentStructure
       },
-      recommendations: recommendations.slice(0, 5),
-      issues: issues.slice(0, 4)
+      recommendations: recommendations.length > 0 ? recommendations : [
+        'Add structured data markup (Schema.org) to improve AI comprehension',
+        'Improve heading hierarchy with clear H1, H2, H3 structure',
+        'Include FAQ sections to address common user questions',
+        'Optimize content for featured snippet formats',
+        'Add clear topic definitions and explanations for better context'
+      ],
+      issues: issues.length > 0 ? issues : [
+        'Limited structured data implementation',
+        'Inconsistent heading hierarchy',
+        'Missing conversational content elements',
+        'Insufficient context for AI understanding'
+      ]
     };
 
     return new Response(
@@ -188,7 +192,10 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     console.error('Audit error:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error during audit analysis' }),
+      JSON.stringify({ 
+        error: 'Failed to analyze content with AI',
+        details: error.message 
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

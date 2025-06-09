@@ -15,33 +15,44 @@ Deno.serve(async (req: Request) => {
   try {
     const { message, context, userPlan, conversationHistory = [] }: ChatRequest = await req.json();
 
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    
+    if (!geminiApiKey) {
+      return new Response(
+        JSON.stringify({ error: 'Gemini API key not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Build context for Genie
     let systemPrompt = '';
     
     if (context === 'landing') {
       systemPrompt = `You are Genie, the AI assistant for SEOGENIX - an AI-powered SEO platform. 
       You help potential customers understand:
-      - SEOGENIX features and tools
-      - Pricing plans (Free, Core $29/mo, Pro $79/mo, Agency $199/mo)
-      - AI visibility concepts
+      - SEOGENIX features and tools for AI visibility optimization
+      - Pricing plans: Free (basic), Core ($29/mo), Pro ($79/mo), Agency ($199/mo)
+      - AI visibility concepts and why they matter in 2025
       - How SEOGENIX differs from traditional SEO tools
+      - The importance of optimizing for AI systems like ChatGPT, Claude, Gemini
       
-      Be helpful, knowledgeable, and encourage users to try the platform.`;
+      Be helpful, knowledgeable, and encourage users to try the platform. Keep responses concise but informative.`;
     } else {
       systemPrompt = `You are Genie, the AI assistant for SEOGENIX users. 
       User plan: ${userPlan}
       
       You help users:
-      - Understand their AI visibility audit results
-      - Navigate and use platform tools
-      - Interpret scores and recommendations
-      - Optimize their content for AI visibility
+      - Understand their AI visibility audit results and scores
+      - Navigate and use platform tools effectively
+      - Interpret recommendations and implement improvements
+      - Optimize their content for AI visibility and citations
+      - Understand competitive analysis and benchmarking
       
-      ${userPlan === 'free' ? 'This user has limited access. Gently suggest upgrading for full features.' : ''}
-      ${userPlan === 'core' ? 'This user has Core plan access. You can provide tool guidance.' : ''}
+      ${userPlan === 'free' ? 'This user has limited access. Gently suggest upgrading for full features when relevant.' : ''}
+      ${userPlan === 'core' ? 'This user has Core plan access. You can provide tool guidance and basic optimization advice.' : ''}
       ${['pro', 'agency'].includes(userPlan || '') ? 'This user has full access. Provide comprehensive support and proactive suggestions.' : ''}
       
-      Be helpful, technical when needed, and focus on actionable advice.`;
+      Be helpful, technical when needed, and focus on actionable advice. Keep responses conversational and concise.`;
     }
 
     // Prepare conversation for Gemini
@@ -50,7 +61,7 @@ Deno.serve(async (req: Request) => {
       .join('\n') + `\nuser: ${message}`;
 
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,10 +70,10 @@ Deno.serve(async (req: Request) => {
             parts: [{
               text: `${systemPrompt}
 
-              Conversation:
+              Conversation history:
               ${conversationText}
               
-              Respond as Genie in a helpful, conversational tone. Keep responses concise but informative.`
+              Respond as Genie in a helpful, conversational tone. Keep responses concise but informative (2-3 sentences max unless more detail is specifically requested).`
             }]
           }],
           generationConfig: {
@@ -75,6 +86,12 @@ Deno.serve(async (req: Request) => {
       }
     );
 
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      console.error('Gemini API error:', errorText);
+      throw new Error(`Gemini API failed: ${geminiResponse.status}`);
+    }
+
     const geminiData = await geminiResponse.json();
     const response = geminiData.candidates[0].content.parts[0].text;
 
@@ -84,7 +101,9 @@ Deno.serve(async (req: Request) => {
       proactiveSuggestions = [
         'Have you tried the Entity Coverage Analyzer for content gaps?',
         'Your Citation Tracker shows new mentions - want to review them?',
-        'Consider running a competitive analysis to benchmark your progress.'
+        'Consider running a competitive analysis to benchmark your progress.',
+        'The AI Content Generator can help create optimized FAQ sections.',
+        'Try the Prompt Match Suggestions tool for better voice search optimization.'
       ];
     }
 
@@ -101,7 +120,10 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     console.error('Genie chatbot error:', error);
     return new Response(
-      JSON.stringify({ error: 'Failed to process chat message' }),
+      JSON.stringify({ 
+        error: 'Failed to process chat message',
+        details: error.message 
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
