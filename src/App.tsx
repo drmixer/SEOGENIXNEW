@@ -70,11 +70,12 @@ function App() {
   };
   const handleAuthSuccess = () => {
     setShowAuthModal(false);
-    // If a plan was selected, show onboarding, otherwise go to dashboard
-    if (selectedPlan !== 'free') {
+    // Always show onboarding for new signups
+    if (authModalMode === 'signup') {
       setUserPlan(selectedPlan);
       setShowOnboarding(true);
     } else {
+      // For login, go directly to dashboard
       setCurrentView('dashboard');
     }
   };

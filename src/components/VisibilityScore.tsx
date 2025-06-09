@@ -10,6 +10,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
   const [auditData, setAuditData] = useState<AuditResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasRunAudit, setHasRunAudit] = useState(false);
 
   const weeklyChange = 8;
   
@@ -25,6 +26,8 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
       // Run audit on a sample URL for demonstration
       const result = await apiService.runAudit('https://example.com', 'Sample content for AI visibility analysis');
       setAuditData(result);
+      setHasRunAudit(true);
+      localStorage.setItem('seogenix_audit_run', 'true');
     } catch (err) {
       setError('Failed to run audit. Please try again.');
       console.error('Audit error:', err);
@@ -35,10 +38,14 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
 
   // Load real data on component mount
   useEffect(() => {
+    const auditRun = localStorage.getItem('seogenix_audit_run');
+    if (auditRun) {
+      setHasRunAudit(true);
+    }
+    
     if (hasSubscores) {
       runSampleAudit();
     }
-  }, [hasSubscores]);
 
   const overallScore = auditData?.overallScore || 72;
   

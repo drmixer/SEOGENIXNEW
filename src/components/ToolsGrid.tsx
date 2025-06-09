@@ -19,6 +19,8 @@ import { apiService } from '../services/api';
 
 interface ToolsGridProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
+  onToolRun?: () => void;
+  showPreview?: boolean;
 }
 
 interface ToolModalProps {
@@ -65,6 +67,12 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan }) => {
       }
       
       setResult(response);
+      
+      // Mark that user has run a tool
+      if (onToolRun) {
+        localStorage.setItem('seogenix_tools_run', 'true');
+        onToolRun();
+      }
     } catch (error) {
       console.error('Tool error:', error);
       setResult({ error: 'Failed to execute tool. Please try again.' });
@@ -374,7 +382,7 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan }) => {
   );
 };
 
-const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
+const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview = false }) => {
   const [selectedTool, setSelectedTool] = useState<any>(null);
 
   // Enable all tools for development/testing
@@ -468,7 +476,9 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-gray-900">AI Optimization Tools</h2>
-          <p className="text-gray-600">Click any available tool to get started</p>
+          <p className="text-gray-600">
+            {showPreview ? 'Preview of available tools - run your first audit to unlock full dashboard' : 'Click any available tool to get started'}
+          </p>
         </div>
         
         {isDevelopment && (
@@ -480,18 +490,19 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
         )}
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tools.map((tool, index) => {
+          {(showPreview ? tools.slice(0, 6) : tools).map((tool, index) => {
             const IconComponent = tool.icon;
             
             return (
               <div 
                 key={index}
+                data-walkthrough={tool.id === 'audit' ? 'audit-tool' : undefined}
                 className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden transition-all duration-300 ${
-                  tool.available 
+                  tool.available && !showPreview
                     ? 'hover:shadow-lg hover:border-purple-200 cursor-pointer' 
                     : 'opacity-60'
                 }`}
-                onClick={() => tool.available && setSelectedTool(tool)}
+                onClick={() => tool.available && !showPreview && setSelectedTool(tool)}
               >
                 <div className={`h-2 bg-gradient-to-r ${tool.color}`}></div>
                 
@@ -510,10 +521,17 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">{tool.name}</h3>
                   <p className="text-gray-600 text-sm leading-relaxed mb-4">{tool.description}</p>
                   
-                  {tool.available ? (
+                  {tool.available && !showPreview ? (
                     <button className="w-full bg-gray-50 hover:bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-sm font-medium transition-colors">
                       Launch Tool
                     </button>
+                  ) : showPreview ? (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500 mb-2">Available after first audit</p>
+                      <div className="bg-gray-100 text-gray-500 py-2 px-4 rounded-lg text-xs">
+                        Preview Mode
+                      </div>
+                    </div>
                   ) : (
                     <div className="text-center">
                       <p className="text-xs text-gray-500 mb-2">
@@ -529,6 +547,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
             );
           })}
         </div>
+        
+        {showPreview && (
+          <div className="text-center mt-8">
+            <p className="text-gray-500 text-sm">
+              And {tools.length - 6} more tools available after running your first audit...
+            </p>
+          </div>
+        )}
       </div>
 
       {selectedTool && (

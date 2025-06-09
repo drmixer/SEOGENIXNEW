@@ -44,7 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userP
   ];
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col">
+    <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col" data-walkthrough="sidebar">
       <div className="p-6 flex-1 overflow-y-auto min-h-0">
         {isDevelopment && (
           <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
