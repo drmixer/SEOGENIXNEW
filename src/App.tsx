@@ -3,14 +3,17 @@ import { supabase } from './lib/supabase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
+import OnboardingModal from './components/OnboardingModal';
 
 function App() {
-  const [currentView, setCurrentView] = useState<'landing' | 'dashboard'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'pricing'>('landing');
   const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
 
   useEffect(() => {
     // Get initial session
@@ -49,14 +52,43 @@ function App() {
     setShowAuthModal(true);
   };
 
+  const handleShowPricing = () => {
+    setCurrentView('pricing');
+  };
+
+  const handlePlanSelect = (plan: 'free' | 'core' | 'pro' | 'agency') => {
+    setSelectedPlan(plan);
+    if (user) {
+      // User is logged in, start onboarding
+      setUserPlan(plan);
+      setShowOnboarding(true);
+    } else {
+      // User not logged in, show signup first
+      setAuthModalMode('signup');
+      setShowAuthModal(true);
+    }
+  };
   const handleAuthSuccess = () => {
     setShowAuthModal(false);
+    // If a plan was selected, show onboarding, otherwise go to dashboard
+    if (selectedPlan !== 'free') {
+      setUserPlan(selectedPlan);
+      setShowOnboarding(true);
+    } else {
+      setCurrentView('dashboard');
+    }
+  };
+
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
     setCurrentView('dashboard');
   };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setCurrentView('landing');
+    setSelectedPlan('free');
+    setUserPlan('free');
   };
 
   if (loading) {
@@ -72,17 +104,16 @@ function App() {
 
   return (
     <div className="min-h-screen bg-white">
-      {currentView === 'landing' ? (
+      {currentView === 'landing' || currentView === 'pricing' ? (
         <LandingPage 
           onNavigateToDashboard={handleNavigateToDashboard}
-          onPlanSelect={(plan) => {
-            setUserPlan(plan);
-            handleNavigateToDashboard();
-          }}
+          onPlanSelect={handlePlanSelect}
           user={user}
-          onShowSignup={handleShowSignup}
+          onShowSignup={handleShowPricing}
           onShowLogin={handleShowLogin}
           onSignOut={handleSignOut}
+          initialView={currentView}
+          onNavigateToLanding={() => setCurrentView('landing')}
         />
       ) : (
         <Dashboard 
@@ -98,6 +129,14 @@ function App() {
           onClose={() => setShowAuthModal(false)}
           onSuccess={handleAuthSuccess}
           initialMode={authModalMode}
+        />
+      )}
+
+      {showOnboarding && (
+        <OnboardingModal
+          userPlan={userPlan}
+          onComplete={handleOnboardingComplete}
+          onClose={() => setShowOnboarding(false)}
         />
       )}
     </div>

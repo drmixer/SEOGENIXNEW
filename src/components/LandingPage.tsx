@@ -15,6 +15,8 @@ interface LandingPageProps {
   onShowSignup: () => void;
   onShowLogin: () => void;
   onSignOut: () => void;
+  initialView?: 'landing' | 'pricing';
+  onNavigateToLanding: () => void;
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({ 
@@ -23,9 +25,28 @@ const LandingPage: React.FC<LandingPageProps> = ({
   user, 
   onShowSignup,
   onShowLogin,
-  onSignOut 
+  onSignOut,
+  initialView = 'landing',
+  onNavigateToLanding
 }) => {
   const [showChatbot, setShowChatbot] = useState(false);
+  const [currentSection, setCurrentSection] = useState(initialView);
+
+  useEffect(() => {
+    setCurrentSection(initialView);
+  }, [initialView]);
+
+  useEffect(() => {
+    if (initialView === 'pricing') {
+      // Scroll to pricing section
+      setTimeout(() => {
+        const pricingElement = document.getElementById('pricing');
+        if (pricingElement) {
+          pricingElement.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    }
+  }, [initialView]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -35,17 +56,26 @@ const LandingPage: React.FC<LandingPageProps> = ({
         onShowSignup={onShowSignup}
         onShowLogin={onShowLogin}
         onSignOut={onSignOut}
+        onNavigateToLanding={onNavigateToLanding}
       />
-      <Hero 
-        onNavigateToDashboard={onNavigateToDashboard}
-        user={user}
-        onShowSignup={onShowSignup}
-      />
-      <Features />
-      <HowItWorks />
+      {currentSection === 'landing' && (
+        <>
+          <Hero 
+            onNavigateToDashboard={onNavigateToDashboard}
+            user={user}
+            onShowSignup={onShowSignup}
+          />
+          <Features />
+          <HowItWorks />
+        </>
+      )}
       <Pricing onPlanSelect={onPlanSelect} />
-      <FAQ />
-      <Footer />
+      {currentSection === 'landing' && (
+        <>
+          <FAQ />
+          <Footer />
+        </>
+      )}
       
       {/* Floating chatbot button */}
       <button

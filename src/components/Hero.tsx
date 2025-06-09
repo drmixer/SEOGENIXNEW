@@ -49,7 +49,7 @@ const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard, user, onShowSignup }
                   onClick={onShowSignup}
                   className="bg-gradient-to-r from-teal-500 to-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-2"
                 >
-                  <span>Start for Free</span>
+                  <span>Get Started</span>
                   <ArrowRight className="w-5 h-5" />
                 </button>
                 <a 

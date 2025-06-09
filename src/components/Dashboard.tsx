@@ -21,7 +21,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const canAccessChatbot = isDevelopment || userPlan !== 'free';
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <DashboardHeader 
         userPlan={userPlan}
         onNavigateToLanding={onNavigateToLanding}
@@ -29,14 +29,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         onSignOut={onSignOut}
       />
       
-      <div className="flex">
+      <div className="flex flex-1 overflow-hidden">
         <Sidebar 
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           userPlan={userPlan}
         />
         
-        <main className="flex-1 p-8">
+        <main className="flex-1 p-8 overflow-y-auto">
           {activeSection === 'overview' && (
             <div className="space-y-8">
               <div className="mb-8">

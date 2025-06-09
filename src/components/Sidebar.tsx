@@ -44,8 +44,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userP
   ];
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 h-screen sticky top-16">
-      <div className="p-6">
+    <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col h-full">
+      <div className="p-6 flex-1 overflow-y-auto">
         {isDevelopment && (
           <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-xs text-yellow-800">Development Mode: All features enabled</p>
