@@ -21,18 +21,21 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userPlan }) => {
+  // Enable all features for development/testing
+  const isDevelopment = true; // Set to false for production
+
   const menuItems = [
     { id: 'overview', label: 'Overview', icon: BarChart3, available: true },
-    { id: 'audit', label: 'AI Visibility Audit', icon: FileText, available: userPlan !== 'free' },
-    { id: 'schema', label: 'Schema Generator', icon: Shield, available: userPlan !== 'free' },
-    { id: 'citations', label: 'Citation Tracker', icon: Search, available: userPlan !== 'free' },
-    { id: 'voice', label: 'Voice Assistant Tester', icon: Mic, available: userPlan !== 'free' },
-    { id: 'summaries', label: 'LLM Site Summaries', icon: Globe, available: userPlan !== 'free' },
-    { id: 'entities', label: 'Entity Coverage', icon: Users, available: ['pro', 'agency'].includes(userPlan) },
-    { id: 'generator', label: 'AI Content Generator', icon: Zap, available: ['pro', 'agency'].includes(userPlan) },
-    { id: 'optimizer', label: 'Content Optimizer', icon: TrendingUp, available: userPlan !== 'free' },
-    { id: 'prompts', label: 'Prompt Suggestions', icon: Lightbulb, available: ['pro', 'agency'].includes(userPlan) },
-    { id: 'competitive', label: 'Competitive Analysis', icon: BarChart3, available: ['pro', 'agency'].includes(userPlan) },
+    { id: 'audit', label: 'AI Visibility Audit', icon: FileText, available: isDevelopment || userPlan !== 'free' },
+    { id: 'schema', label: 'Schema Generator', icon: Shield, available: isDevelopment || userPlan !== 'free' },
+    { id: 'citations', label: 'Citation Tracker', icon: Search, available: isDevelopment || userPlan !== 'free' },
+    { id: 'voice', label: 'Voice Assistant Tester', icon: Mic, available: isDevelopment || userPlan !== 'free' },
+    { id: 'summaries', label: 'LLM Site Summaries', icon: Globe, available: isDevelopment || userPlan !== 'free' },
+    { id: 'entities', label: 'Entity Coverage', icon: Users, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
+    { id: 'generator', label: 'AI Content Generator', icon: Zap, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
+    { id: 'optimizer', label: 'Content Optimizer', icon: TrendingUp, available: isDevelopment || userPlan !== 'free' },
+    { id: 'prompts', label: 'Prompt Suggestions', icon: Lightbulb, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
+    { id: 'competitive', label: 'Competitive Analysis', icon: BarChart3, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
   ];
 
   const bottomItems = [
@@ -43,6 +46,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userP
   return (
     <aside className="w-64 bg-white border-r border-gray-200 h-screen sticky top-16">
       <div className="p-6">
+        {isDevelopment && (
+          <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-xs text-yellow-800">Development Mode: All features enabled</p>
+          </div>
+        )}
+        
         <nav className="space-y-2">
           {menuItems.map((item) => {
             const IconComponent = item.icon;
@@ -64,7 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userP
               >
                 <IconComponent className="w-5 h-5" />
                 <span className="text-sm font-medium">{item.label}</span>
-                {!isAvailable && (
+                {!isAvailable && !isDevelopment && (
                   <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full ml-auto">
                     Pro
                   </span>

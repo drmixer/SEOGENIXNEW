@@ -12,7 +12,10 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
   const [error, setError] = useState<string | null>(null);
 
   const weeklyChange = 8;
-  const hasSubscores = userPlan !== 'free';
+  
+  // Enable subscores for all users during development
+  const isDevelopment = true; // Set to false for production
+  const hasSubscores = isDevelopment || userPlan !== 'free';
 
   const runSampleAudit = async () => {
     setIsLoading(true);
@@ -30,7 +33,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
     }
   };
 
-  // Load sample data on component mount
+  // Load real data on component mount
   useEffect(() => {
     if (hasSubscores) {
       runSampleAudit();
@@ -129,7 +132,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
           
           <p className="text-center text-gray-600 text-sm">
             {auditData ? 
-              'Live audit results from your content analysis' : 
+              'Live audit results from real API analysis' : 
               'Your content is performing well for AI visibility with room for improvement in structure.'
             }
           </p>
@@ -145,7 +148,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-6">
             AI Visibility Breakdown
-            {!hasSubscores && (
+            {!hasSubscores && !isDevelopment && (
               <span className="text-sm text-gray-500 ml-2">(Upgrade to Core for detailed breakdown)</span>
             )}
           </h3>

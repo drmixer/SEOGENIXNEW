@@ -14,7 +14,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding }) 
   const [showChatbot, setShowChatbot] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
 
-  const canAccessChatbot = userPlan !== 'free';
+  // Enable chatbot for all users during development
+  const isDevelopment = true; // Set to false for production
+  const canAccessChatbot = isDevelopment || userPlan !== 'free';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -72,6 +74,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding }) 
         <ChatbotPopup 
           onClose={() => setShowChatbot(false)}
           type="dashboard"
+          userPlan={userPlan}
         />
       )}
     </div>

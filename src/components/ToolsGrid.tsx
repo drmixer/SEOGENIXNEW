@@ -12,7 +12,8 @@ import {
   BarChart3,
   Lock,
   ExternalLink,
-  Loader
+  Loader,
+  X
 } from 'lucide-react';
 import { apiService } from '../services/api';
 
@@ -376,13 +377,16 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan }) => {
 const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
   const [selectedTool, setSelectedTool] = useState<any>(null);
 
+  // Enable all tools for development/testing
+  const isDevelopment = true; // Set to false for production
+
   const tools = [
     {
       id: 'audit',
       name: 'AI Visibility Audit',
       description: 'Full report analyzing content structure for AI visibility',
       icon: FileText,
-      available: userPlan !== 'free',
+      available: isDevelopment || userPlan !== 'free',
       color: 'from-blue-500 to-blue-600'
     },
     {
@@ -390,7 +394,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       name: 'Schema Generator', 
       description: 'Generate Schema.org markup for better AI comprehension',
       icon: Shield,
-      available: userPlan !== 'free',
+      available: isDevelopment || userPlan !== 'free',
       color: 'from-green-500 to-green-600'
     },
     {
@@ -398,7 +402,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       name: 'Citation Tracker',
       description: 'Monitor mentions from LLMs, Google, and other platforms',
       icon: Search,
-      available: userPlan !== 'free',
+      available: isDevelopment || userPlan !== 'free',
       color: 'from-purple-500 to-purple-600'
     },
     {
@@ -406,7 +410,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       name: 'Voice Assistant Tester',
       description: 'Simulate queries via Siri, Alexa, and Google Assistant',
       icon: Mic,
-      available: userPlan !== 'free',
+      available: isDevelopment || userPlan !== 'free',
       color: 'from-indigo-500 to-indigo-600'
     },
     {
@@ -414,7 +418,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       name: 'LLM Site Summaries',
       description: 'Generate summaries for language model understanding',
       icon: Globe,
-      available: userPlan !== 'free',
+      available: isDevelopment || userPlan !== 'free',
       color: 'from-teal-500 to-teal-600'
     },
     {
@@ -422,7 +426,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       name: 'AI Content Optimizer',
       description: 'Score and rewrite content for maximum AI visibility',
       icon: TrendingUp,
-      available: userPlan !== 'free',
+      available: isDevelopment || userPlan !== 'free',
       color: 'from-orange-500 to-orange-600'
     },
     {
@@ -430,7 +434,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       name: 'Entity Coverage Analyzer',
       description: 'Identify missing people, places, and topics',
       icon: Users,
-      available: ['pro', 'agency'].includes(userPlan),
+      available: isDevelopment || ['pro', 'agency'].includes(userPlan),
       color: 'from-pink-500 to-pink-600'
     },
     {
@@ -438,7 +442,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       name: 'AI Content Generator',
       description: 'Create optimized FAQs, snippets, and meta tags',
       icon: Zap,
-      available: ['pro', 'agency'].includes(userPlan),
+      available: isDevelopment || ['pro', 'agency'].includes(userPlan),
       color: 'from-yellow-500 to-yellow-600'
     },
     {
@@ -446,7 +450,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       name: 'Prompt Match Suggestions',
       description: 'Generate prompts aligned with user AI queries',
       icon: Lightbulb,
-      available: ['pro', 'agency'].includes(userPlan),
+      available: isDevelopment || ['pro', 'agency'].includes(userPlan),
       color: 'from-cyan-500 to-cyan-600'
     },
     {
@@ -454,7 +458,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
       name: 'Competitive Analysis',
       description: 'Compare visibility scores against competitors',
       icon: BarChart3,
-      available: ['pro', 'agency'].includes(userPlan),
+      available: isDevelopment || ['pro', 'agency'].includes(userPlan),
       color: 'from-red-500 to-red-600'
     }
   ];
@@ -466,6 +470,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
           <h2 className="text-2xl font-bold text-gray-900">AI Optimization Tools</h2>
           <p className="text-gray-600">Click any available tool to get started</p>
         </div>
+        
+        {isDevelopment && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p className="text-yellow-800 text-sm">
+              <strong>Development Mode:</strong> All tools are enabled for testing with real API data.
+            </p>
+          </div>
+        )}
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tools.map((tool, index) => {
@@ -488,7 +500,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan }) => {
                     <div className={`p-3 rounded-lg bg-gradient-to-r ${tool.color}`}>
                       <IconComponent className="w-6 h-6 text-white" />
                     </div>
-                    {!tool.available && (
+                    {!tool.available && !isDevelopment && (
                       <div className="bg-gray-100 p-1 rounded-full">
                         <Lock className="w-4 h-4 text-gray-400" />
                       </div>
