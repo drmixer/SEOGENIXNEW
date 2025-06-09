@@ -1,16 +1,50 @@
-import React from 'react';
-import { TrendingUp, TrendingDown, Target, Brain, MessageSquare, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, TrendingDown, Target, Brain, MessageSquare, FileText, RefreshCw } from 'lucide-react';
+import { apiService, type AuditResult } from '../services/api';
 
 interface VisibilityScoreProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
 }
 
 const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
-  const overallScore = 72;
+  const [auditData, setAuditData] = useState<AuditResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const weeklyChange = 8;
   const hasSubscores = userPlan !== 'free';
 
-  const subscores = [
+  const runSampleAudit = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Run audit on a sample URL for demonstration
+      const result = await apiService.runAudit('https://example.com', 'Sample content for AI visibility analysis');
+      setAuditData(result);
+    } catch (err) {
+      setError('Failed to run audit. Please try again.');
+      console.error('Audit error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load sample data on component mount
+  useEffect(() => {
+    if (hasSubscores) {
+      runSampleAudit();
+    }
+  }, [hasSubscores]);
+
+  const overallScore = auditData?.overallScore || 72;
+  
+  const subscores = auditData ? [
+    { name: 'AI Understanding', score: auditData.subscores.aiUnderstanding, icon: Brain, color: 'text-teal-600' },
+    { name: 'Citation Likelihood', score: auditData.subscores.citationLikelihood, icon: Target, color: 'text-purple-600' },
+    { name: 'Conversational Readiness', score: auditData.subscores.conversationalReadiness, icon: MessageSquare, color: 'text-indigo-600' },
+    { name: 'Content Structure', score: auditData.subscores.contentStructure, icon: FileText, color: 'text-blue-600' }
+  ] : [
     { name: 'AI Understanding', score: 85, icon: Brain, color: 'text-teal-600' },
     { name: 'Citation Likelihood', score: 68, icon: Target, color: 'text-purple-600' },
     { name: 'Conversational Readiness', score: 74, icon: MessageSquare, color: 'text-indigo-600' },
@@ -36,9 +70,21 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">AI Visibility Score</h3>
-            <div className={`flex items-center space-x-1 text-sm ${weeklyChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {weeklyChange > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              <span>{weeklyChange > 0 ? '+' : ''}{weeklyChange}% this week</span>
+            <div className="flex items-center space-x-2">
+              <div className={`flex items-center space-x-1 text-sm ${weeklyChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {weeklyChange > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                <span>{weeklyChange > 0 ? '+' : ''}{weeklyChange}% this week</span>
+              </div>
+              {hasSubscores && (
+                <button
+                  onClick={runSampleAudit}
+                  disabled={isLoading}
+                  className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Refresh audit"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
+              )}
             </div>
           </div>
           
@@ -82,8 +128,15 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
           </div>
           
           <p className="text-center text-gray-600 text-sm">
-            Your content is performing well for AI visibility with room for improvement in structure.
+            {auditData ? 
+              'Live audit results from your content analysis' : 
+              'Your content is performing well for AI visibility with room for improvement in structure.'
+            }
           </p>
+          
+          {error && (
+            <p className="text-center text-red-500 text-sm mt-2">{error}</p>
+          )}
         </div>
       </div>
       
@@ -126,13 +179,24 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
             <div className="text-center py-8">
               <div className="bg-gray-50 rounded-lg p-6">
                 <div className="text-gray-400 mb-2">
-                  <BarChart3 className="w-12 h-12 mx-auto" />
+                  <Target className="w-12 h-12 mx-auto" />
                 </div>
                 <p className="text-gray-600 mb-4">Detailed breakdown available with Core plan and above</p>
                 <button className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:shadow-lg transition-all duration-300">
                   Upgrade to Core
                 </button>
               </div>
+            </div>
+          )}
+          
+          {auditData && hasSubscores && (
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+              <h4 className="font-medium text-blue-900 mb-2">Key Recommendations:</h4>
+              <ul className="text-sm text-blue-800 space-y-1">
+                {auditData.recommendations.slice(0, 3).map((rec, index) => (
+                  <li key={index}>• {rec}</li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

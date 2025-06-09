@@ -1,56 +1,90 @@
-import React, { useState } from 'react';
-import { X, Send, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Send, Sparkles, Loader } from 'lucide-react';
+import { apiService } from '../services/api';
 
 interface ChatbotPopupProps {
   onClose: () => void;
   type: 'landing' | 'dashboard';
+  userPlan?: 'free' | 'core' | 'pro' | 'agency';
 }
 
-const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type }) => {
-  const [messages, setMessages] = useState([
+interface Message {
+  type: 'user' | 'bot';
+  content: string;
+  timestamp: Date;
+}
+
+const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan }) => {
+  const [messages, setMessages] = useState<Message[]>([
     {
       type: 'bot',
       content: type === 'landing' 
         ? "Hi! I'm Genie, your AI assistant. I can help you understand SEOGENIX features, pricing plans, and how AI visibility works. What would you like to know?"
-        : "Hi! I'm Genie, your AI guide. I can help explain your audit results, suggest optimizations, and answer questions about your AI visibility performance. How can I assist you today?"
+        : "Hi! I'm Genie, your AI guide. I can help explain your audit results, suggest optimizations, and answer questions about your AI visibility performance. How can I assist you today?",
+      timestamp: new Date()
     }
   ]);
   const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return;
+  const handleSend = async () => {
+    if (!inputValue.trim() || isLoading) return;
 
-    setMessages(prev => [...prev, { type: 'user', content: inputValue }]);
-    
-    // Simulate AI response
-    setTimeout(() => {
-      let response = '';
-      const lower = inputValue.toLowerCase();
-      
-      if (type === 'landing') {
-        if (lower.includes('pricing') || lower.includes('plan')) {
-          response = "We have 4 plans: Free (try basic tools), Core ($29/mo - full audits), Pro ($79/mo - advanced optimization with full chatbot), and Agency ($199/mo - team access). Annual billing saves 25%. Which plan interests you?";
-        } else if (lower.includes('ai visibility')) {
-          response = "AI visibility is how well your content is structured for AI systems like ChatGPT and voice assistants. It's measured 0-100 with subscores for AI Understanding, Citation Likelihood, and Content Structure Quality. Want to learn about specific tools?";
-        } else if (lower.includes('difference') || lower.includes('compare')) {
-          response = "SEOGENIX is built for the AI era, not just traditional search engines. We optimize for LLMs, track AI citations, test voice assistants, and provide tools specifically for AI-driven discovery. Traditional SEO tools don't address these new challenges.";
-        } else {
-          response = "I can help with questions about our pricing plans, AI visibility features, how SEOGENIX works, or specific tools. What would you like to explore?";
-        }
-      } else {
-        if (lower.includes('score') || lower.includes('visibility')) {
-          response = "Your AI Visibility Score shows how well AI systems understand your content. Check the subscores for specific areas to improve: AI Understanding, Citation Likelihood, Conversational Readiness, and Content Structure Quality.";
-        } else if (lower.includes('improve') || lower.includes('optimize')) {
-          response = "Based on your audit, I recommend starting with Schema Generator for better structure, then use AI Content Optimizer for key pages. The Citation Tracker will help monitor your progress. Need help with a specific tool?";
-        } else {
-          response = "I can help explain your audit results, suggest improvements, or guide you through any of our tools. What specific area would you like to work on?";
-        }
-      }
-      
-      setMessages(prev => [...prev, { type: 'bot', content: response }]);
-    }, 1000);
-    
+    const userMessage: Message = {
+      type: 'user',
+      content: inputValue,
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
     setInputValue('');
+    setIsLoading(true);
+
+    try {
+      // Prepare conversation history for API
+      const conversationHistory = messages.map(msg => ({
+        role: msg.type === 'user' ? 'user' as const : 'assistant' as const,
+        content: msg.content
+      }));
+
+      const response = await apiService.chatWithGenie(
+        inputValue,
+        type,
+        userPlan,
+        conversationHistory
+      );
+
+      const botMessage: Message = {
+        type: 'bot',
+        content: response.response,
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, botMessage]);
+
+      // Add proactive suggestions if any
+      if (response.proactiveSuggestions && response.proactiveSuggestions.length > 0) {
+        setTimeout(() => {
+          const suggestionMessage: Message = {
+            type: 'bot',
+            content: `💡 Suggestion: ${response.proactiveSuggestions[0]}`,
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, suggestionMessage]);
+        }, 2000);
+      }
+
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorMessage: Message = {
+        type: 'bot',
+        content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment.",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -88,9 +122,19 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type }) => {
                 }`}
               >
                 <p className="text-sm">{message.content}</p>
+                <p className="text-xs opacity-70 mt-1">
+                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
               </div>
             </div>
           ))}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-gray-100 text-gray-900 p-3 rounded-2xl">
+                <Loader className="w-4 h-4 animate-spin" />
+              </div>
+            </div>
+          )}
         </div>
         
         <div className="p-4 border-t border-gray-200">
@@ -101,11 +145,13 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type }) => {
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Ask me anything..."
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={isLoading}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             />
             <button
               onClick={handleSend}
-              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white p-2 rounded-lg hover:shadow-lg transition-all duration-300"
+              disabled={isLoading || !inputValue.trim()}
+              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white p-2 rounded-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50"
             >
               <Send className="w-4 h-4" />
             </button>
