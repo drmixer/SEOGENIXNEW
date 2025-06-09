@@ -83,11 +83,7 @@ function App() {
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
     setCurrentView('dashboard');
-    
-    // Small delay to ensure dashboard is rendered before triggering walkthrough
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('onboardingCompleted'));
-    }, 100);
+    console.log('Onboarding completed in App.tsx');
   };
 
   const handleSignOut = async () => {

@@ -30,58 +30,41 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     return 'User';
   };
 
-  // Check if user has completed onboarding and should see walkthrough
+  // Single effect to handle all initialization
   React.useEffect(() => {
     const onboardingData = localStorage.getItem('seogenix_onboarding');
     const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
     const toolsRun = localStorage.getItem('seogenix_tools_run');
     
-    // Show walkthrough if onboarding was just completed and walkthrough hasn't been shown
-    if (onboardingData && !walkthroughCompleted) {
-      // Add a small delay to ensure the dashboard is fully rendered
-      setTimeout(() => {
-        setShowWalkthrough(true);
-      }, 500);
-    }
-    
+    // Set tools run state
     if (toolsRun) {
       setHasRunTools(true);
     }
+    
+    // Show walkthrough if onboarding was completed and walkthrough hasn't been shown
+    if (onboardingData && !walkthroughCompleted) {
+      console.log('Triggering walkthrough - onboarding completed, walkthrough not shown');
+      setTimeout(() => {
+        setShowWalkthrough(true);
+      }, 1000);
+    }
   }, []);
 
-  // Also check for onboarding completion when user changes (for immediate trigger)
-  React.useEffect(() => {
-    if (user) {
-      const onboardingData = localStorage.getItem('seogenix_onboarding');
-      const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
-      
-      if (onboardingData && !walkthroughCompleted) {
-        setTimeout(() => {
-          setShowWalkthrough(true);
-        }, 1000); // Longer delay when user first loads
-      }
-    }
-  }, [user]);
-
-  // Listen for onboarding completion event
+  // Listen for onboarding completion event (for immediate trigger after onboarding)
   React.useEffect(() => {
     const handleOnboardingComplete = () => {
+      console.log('Onboarding completed event received');
       const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
       if (!walkthroughCompleted) {
-      setShowWalkthrough(true);
-    }
+        console.log('Starting walkthrough immediately');
+        setTimeout(() => {
+          setShowWalkthrough(true);
+        }, 500);
+      }
     };
 
     window.addEventListener('onboardingCompleted', handleOnboardingComplete);
     return () => window.removeEventListener('onboardingCompleted', handleOnboardingComplete);
-  }, []);
-
-  React.useEffect(() => {
-    const toolsRun = localStorage.getItem('seogenix_tools_run');
-    
-    if (toolsRun) {
-      setHasRunTools(true);
-    }
   }, []);
 
   // Enable chatbot for all users during development
