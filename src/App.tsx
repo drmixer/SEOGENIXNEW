@@ -83,7 +83,12 @@ function App() {
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
     setCurrentView('dashboard');
-    console.log('Onboarding completed in App.tsx');
+    
+    // Dispatch custom event to trigger walkthrough
+    window.dispatchEvent(new CustomEvent('onboardingCompleted'));
+    
+    // Set flag for walkthrough trigger
+    localStorage.setItem('seogenix_trigger_walkthrough', 'true');
   };
 
   const handleSignOut = async () => {

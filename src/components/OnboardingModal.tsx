@@ -216,7 +216,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                         <h4 className="font-medium text-gray-900">Website {index + 1}</h4>
                         {websites.length > 1 && (
                           <button
-                            onClick={() =>Website(index)}
+                            onClick={() => removeWebsite(index)}
                             className="text-red-500 hover:text-red-700 transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />

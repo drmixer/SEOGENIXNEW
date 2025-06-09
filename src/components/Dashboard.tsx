@@ -82,7 +82,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       
       // Show walkthrough if onboarding was completed (either localStorage or database) and walkthrough hasn't been shown
       if ((onboardingData || hasCompletedOnboarding || shouldTriggerWalkthrough) && !walkthroughCompleted) {
-        console.log('Triggering walkthrough - onboarding completed, walkthrough not shown');
         
         // Clear the trigger flag
         if (shouldTriggerWalkthrough) {
@@ -101,10 +100,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Listen for onboarding completion event (for immediate trigger after onboarding)
   React.useEffect(() => {
     const handleOnboardingComplete = () => {
-      console.log('Onboarding completed event received');
       const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
       if (!walkthroughCompleted) {
-        console.log('Starting walkthrough immediately');
         setTimeout(() => {
           setShowWalkthrough(true);
         }, 500);
