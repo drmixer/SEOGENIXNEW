@@ -120,6 +120,8 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
       setCurrentStep(currentStep + 1);
     } else {
       onComplete();
+      // Also clear any trigger flags
+      localStorage.removeItem('seogenix_trigger_walkthrough');
     }
   };
 
