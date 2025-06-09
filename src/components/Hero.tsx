@@ -47,16 +47,6 @@ const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard }) => {
               See Plans
             </a>
           </div>
-          
-          <div className="mt-12 flex justify-center">
-            <div className="bg-white p-2 rounded-xl shadow-2xl">
-              <img 
-                src="https://images.pexels.com/photos/265087/pexels-photo-265087.jpeg?auto=compress&cs=tinysrgb&w=800" 
-                alt="SEOGENIX Dashboard Preview" 
-                className="rounded-lg w-full max-w-4xl h-auto"
-              />
-            </div>
-          </div>
         </div>
       </div>
     </section>
