@@ -3,9 +3,11 @@ import { ArrowRight, Sparkles } from 'lucide-react';
 
 interface HeroProps {
   onNavigateToDashboard: () => void;
+  user?: any;
+  onShowAuth: () => void;
 }
 
-const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard }) => {
+const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard, user, onShowAuth }) => {
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-gray-50 to-white py-20 lg:py-32">
       <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-purple-600/5"></div>
@@ -33,19 +35,31 @@ const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard }) => {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button 
-              onClick={onNavigateToDashboard}
-              className="bg-gradient-to-r from-teal-500 to-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-2"
-            >
-              <span>Start for Free</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
-            <a 
-              href="#pricing"
-              className="border-2 border-purple-600 text-purple-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-purple-600 hover:text-white transition-all duration-300"
-            >
-              See Plans
-            </a>
+            {user ? (
+              <button 
+                onClick={onNavigateToDashboard}
+                className="bg-gradient-to-r from-teal-500 to-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-2"
+              >
+                <span>Go to Dashboard</span>
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            ) : (
+              <>
+                <button 
+                  onClick={onShowAuth}
+                  className="bg-gradient-to-r from-teal-500 to-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-2"
+                >
+                  <span>Start for Free</span>
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+                <a 
+                  href="#pricing"
+                  className="border-2 border-purple-600 text-purple-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-purple-600 hover:text-white transition-all duration-300"
+                >
+                  See Plans
+                </a>
+              </>
+            )}
           </div>
         </div>
       </div>

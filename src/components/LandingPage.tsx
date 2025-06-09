@@ -11,15 +11,33 @@ import ChatbotPopup from './ChatbotPopup';
 interface LandingPageProps {
   onNavigateToDashboard: () => void;
   onPlanSelect: (plan: 'free' | 'core' | 'pro' | 'agency') => void;
+  user?: any;
+  onShowAuth: () => void;
+  onSignOut: () => void;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToDashboard, onPlanSelect }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ 
+  onNavigateToDashboard, 
+  onPlanSelect, 
+  user, 
+  onShowAuth, 
+  onSignOut 
+}) => {
   const [showChatbot, setShowChatbot] = useState(false);
 
   return (
     <div className="min-h-screen bg-white">
-      <Header onNavigateToDashboard={onNavigateToDashboard} />
-      <Hero onNavigateToDashboard={onNavigateToDashboard} />
+      <Header 
+        onNavigateToDashboard={onNavigateToDashboard}
+        user={user}
+        onShowAuth={onShowAuth}
+        onSignOut={onSignOut}
+      />
+      <Hero 
+        onNavigateToDashboard={onNavigateToDashboard}
+        user={user}
+        onShowAuth={onShowAuth}
+      />
       <Features />
       <HowItWorks />
       <Pricing onPlanSelect={onPlanSelect} />

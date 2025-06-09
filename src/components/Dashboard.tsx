@@ -8,9 +8,11 @@ import ChatbotPopup from './ChatbotPopup';
 interface DashboardProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
   onNavigateToLanding: () => void;
+  user: any;
+  onSignOut: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding }) => {
+const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut }) => {
   const [showChatbot, setShowChatbot] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
 
@@ -23,6 +25,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding }) 
       <DashboardHeader 
         userPlan={userPlan}
         onNavigateToLanding={onNavigateToLanding}
+        user={user}
+        onSignOut={onSignOut}
       />
       
       <div className="flex">
@@ -36,7 +40,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding }) 
           {activeSection === 'overview' && (
             <div className="space-y-8">
               <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard Overview</h1>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  Welcome back, {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}!
+                </h1>
                 <p className="text-gray-600">Monitor your AI visibility performance and access optimization tools.</p>
               </div>
               
