@@ -19,15 +19,65 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [hasRunTools, setHasRunTools] = useState(false);
 
+  // Extract first name from user data
+  const getFirstName = () => {
+    if (user?.user_metadata?.full_name) {
+      return user.user_metadata.full_name.split(' ')[0];
+    }
+    if (user?.email) {
+      return user.email.split('@')[0];
+    }
+    return 'User';
+  };
+
   // Check if user has completed onboarding and should see walkthrough
   React.useEffect(() => {
     const onboardingData = localStorage.getItem('seogenix_onboarding');
     const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
     const toolsRun = localStorage.getItem('seogenix_tools_run');
     
+    // Show walkthrough if onboarding was just completed and walkthrough hasn't been shown
     if (onboardingData && !walkthroughCompleted) {
+      // Add a small delay to ensure the dashboard is fully rendered
+      setTimeout(() => {
+        setShowWalkthrough(true);
+      }, 500);
+    }
+    
+    if (toolsRun) {
+      setHasRunTools(true);
+    }
+  }, []);
+
+  // Also check for onboarding completion when user changes (for immediate trigger)
+  React.useEffect(() => {
+    if (user) {
+      const onboardingData = localStorage.getItem('seogenix_onboarding');
+      const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
+      
+      if (onboardingData && !walkthroughCompleted) {
+        setTimeout(() => {
+          setShowWalkthrough(true);
+        }, 1000); // Longer delay when user first loads
+      }
+    }
+  }, [user]);
+
+  // Listen for onboarding completion event
+  React.useEffect(() => {
+    const handleOnboardingComplete = () => {
+      const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
+      if (!walkthroughCompleted) {
       setShowWalkthrough(true);
     }
+    };
+
+    window.addEventListener('onboardingCompleted', handleOnboardingComplete);
+    return () => window.removeEventListener('onboardingCompleted', handleOnboardingComplete);
+  }, []);
+
+  React.useEffect(() => {
+    const toolsRun = localStorage.getItem('seogenix_tools_run');
     
     if (toolsRun) {
       setHasRunTools(true);
@@ -59,7 +109,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             <div className="space-y-8">
               <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                  Welcome back, {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}!
+                  Welcome back, {getFirstName()}!
                 </h1>
                 <p className="text-gray-600">Monitor your AI visibility performance and access optimization tools.</p>
               </div>

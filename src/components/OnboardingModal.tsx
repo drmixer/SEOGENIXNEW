@@ -108,6 +108,9 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
       console.log('Onboarding data:', onboardingData);
       localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
       
+      // Dispatch custom event to trigger walkthrough
+      window.dispatchEvent(new CustomEvent('onboardingCompleted'));
+      
       onComplete();
     }
   };
