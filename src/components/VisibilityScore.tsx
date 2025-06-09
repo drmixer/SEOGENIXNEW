@@ -46,6 +46,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
     if (hasSubscores) {
       runSampleAudit();
     }
+  }, []);
 
   const overallScore = auditData?.overallScore || 72;
   
