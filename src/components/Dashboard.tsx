@@ -27,12 +27,16 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
   // Extract first name from user data
   const getFirstName = () => {
+    console.log('Getting first name for user:', user);
     if (user?.user_metadata?.full_name) {
+      console.log('Using full_name:', user.user_metadata.full_name);
       return user.user_metadata.full_name.split(' ')[0];
     }
     if (user?.email) {
+      console.log('Using email:', user.email);
       return user.email.split('@')[0];
     }
+    console.log('Fallback to User');
     return 'User';
   };
 
@@ -66,24 +70,24 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         setHasRunTools(true);
       }
 
-      // Check walkthrough conditions
+      // Check for immediate walkthrough trigger (from onboarding)
+      const immediateWalkthrough = localStorage.getItem('seogenix_immediate_walkthrough');
       const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
-      const shouldTriggerWalkthrough = localStorage.getItem('seogenix_trigger_walkthrough');
       
       console.log('Dashboard initialization:', {
+        immediateWalkthrough: !!immediateWalkthrough,
         walkthroughCompleted: !!walkthroughCompleted,
-        shouldTriggerWalkthrough: !!shouldTriggerWalkthrough,
         userId: user.id
       });
 
-      // If walkthrough should be triggered and hasn't been completed
-      if (shouldTriggerWalkthrough && !walkthroughCompleted) {
-        console.log('Triggering walkthrough from localStorage flag');
-        localStorage.removeItem('seogenix_trigger_walkthrough');
+      // If immediate walkthrough is flagged and hasn't been completed
+      if (immediateWalkthrough && !walkthroughCompleted) {
+        console.log('Triggering immediate walkthrough from onboarding');
+        localStorage.removeItem('seogenix_immediate_walkthrough');
         
         setTimeout(() => {
           setShowWalkthrough(true);
-        }, 1500);
+        }, 800);
         return;
       }
 
@@ -103,25 +107,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
     initializeDashboard();
   }, [user]); // Add user as dependency to re-check when user loads
-
-  // Listen for onboarding completion event (for immediate trigger after onboarding)
-  React.useEffect(() => {
-    const handleOnboardingComplete = () => {
-      console.log('Onboarding completed event received');
-      const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
-      if (!walkthroughCompleted) {
-        console.log('Starting walkthrough immediately after onboarding');
-        // Clear any existing trigger flag since we're handling it now
-        localStorage.removeItem('seogenix_trigger_walkthrough');
-        setTimeout(() => {
-          setShowWalkthrough(true);
-        }, 500);
-      }
-    };
-
-    window.addEventListener('onboardingCompleted', handleOnboardingComplete);
-    return () => window.removeEventListener('onboardingCompleted', handleOnboardingComplete);
-  }, []);
 
   // Handle tool launch from Genie
   const handleToolLaunch = async (toolId: string) => {
