@@ -136,6 +136,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     };
 
     initializeDashboard();
+  }, [user]);
 
   // Handle tool launch from Genie
   const handleToolLaunch = async (toolId: string) => {
@@ -155,6 +156,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       console.error('Error tracking tool launch:', error);
     }
   };
+
   // Manual walkthrough trigger function
   const triggerWalkthrough = () => {
     setShowWalkthrough(true);
