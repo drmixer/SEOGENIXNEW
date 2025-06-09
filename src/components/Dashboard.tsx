@@ -28,6 +28,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Extract first name from user data
   const getFirstName = () => {
     console.log('Getting first name for user:', user);
+    console.log('User metadata:', user?.user_metadata);
+    console.log('Raw user metadata:', user?.raw_user_meta_data);
     
     // Check user_metadata first
     if (user?.user_metadata?.full_name) {
@@ -43,10 +45,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       return firstName;
     }
     
-    // Check app_metadata
-    if (user?.app_metadata?.full_name) {
-      const firstName = user.app_metadata.full_name.split(' ')[0];
-      console.log('Using full_name from app_metadata:', firstName);
+    // Check identities for name
+    if (user?.identities?.[0]?.identity_data?.full_name) {
+      const firstName = user.identities[0].identity_data.full_name.split(' ')[0];
+      console.log('Using full_name from identities:', firstName);
       return firstName;
     }
     
@@ -98,20 +100,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       }
 
       // Check for walkthrough trigger (from onboarding)
-      const walkthroughTrigger = localStorage.getItem('seogenix_trigger_walkthrough');
+      const immediateWalkthrough = localStorage.getItem('seogenix_immediate_walkthrough');
       const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
       
       console.log('Dashboard initialization:', {
-        walkthroughTrigger: !!walkthroughTrigger,
+        immediateWalkthrough: !!immediateWalkthrough,
         walkthroughCompleted: !!walkthroughCompleted,
         userId: user.id,
         userEmail: user.email
       });
 
-      // If walkthrough is triggered and hasn't been completed
-      if (walkthroughTrigger && !walkthroughCompleted) {
+      // If immediate walkthrough is flagged and hasn't been completed
+      if (immediateWalkthrough && !walkthroughCompleted) {
         console.log('Triggering walkthrough from onboarding completion');
-        localStorage.removeItem('seogenix_trigger_walkthrough');
+        localStorage.removeItem('seogenix_immediate_walkthrough');
         
         setTimeout(() => {
           console.log('Starting walkthrough...');
@@ -277,15 +279,15 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             console.log('Walkthrough completed - setting completion flag');
             setShowWalkthrough(false);
             localStorage.setItem('seogenix_walkthrough_completed', 'true');
-            // Clear any remaining trigger flags
-            localStorage.removeItem('seogenix_trigger_walkthrough');
+            // Clear any remaining immediate walkthrough flags
+            localStorage.removeItem('seogenix_immediate_walkthrough');
           }}
           onSkip={() => {
             console.log('Walkthrough skipped - setting completion flag');
             setShowWalkthrough(false);
             localStorage.setItem('seogenix_walkthrough_completed', 'true');
-            // Clear any remaining trigger flags
-            localStorage.removeItem('seogenix_trigger_walkthrough');
+            // Clear any remaining immediate walkthrough flags
+            localStorage.removeItem('seogenix_immediate_walkthrough');
           }}
         />
       )}

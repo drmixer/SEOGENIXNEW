@@ -139,10 +139,10 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
       // Save to localStorage for backward compatibility
       localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
       
-      // Set walkthrough trigger flag
-      localStorage.setItem('seogenix_trigger_walkthrough', 'true');
+      // Set immediate walkthrough trigger flag (matches Dashboard expectation)
+      localStorage.setItem('seogenix_immediate_walkthrough', 'true');
       
-      console.log('Onboarding completed - setting walkthrough trigger flag');
+      console.log('Onboarding completed - setting immediate walkthrough flag');
       
       // Complete onboarding
       onComplete();
