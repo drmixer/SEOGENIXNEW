@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, ArrowRight, Target, FileText, BarChart3, MessageSquare } from 'lucide-react';
 
 interface DashboardWalkthroughProps {
@@ -8,6 +8,8 @@ interface DashboardWalkthroughProps {
 
 const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete, onSkip }) => {
   const [currentStep, setCurrentStep] = useState(0);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' });
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   const steps = [
     {
@@ -42,6 +44,77 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
 
   const currentStepData = steps[currentStep];
 
+  const calculateTooltipPosition = () => {
+    if (!currentStepData.target || currentStepData.position === 'center') {
+      return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
+    }
+    
+    const element = document.querySelector(currentStepData.target);
+    if (!element || !tooltipRef.current) {
+      return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
+    }
+    
+    const rect = element.getBoundingClientRect();
+    const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const tooltipWidth = 400; // Fixed width for consistency
+    const tooltipHeight = tooltipRect.height || 250; // Use actual height or fallback
+    
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const padding = 20;
+    
+    let top = rect.top + rect.height / 2 - tooltipHeight / 2;
+    let left = rect.right + padding;
+    let transform = 'none';
+    
+    // Adjust based on preferred position
+    if (currentStepData.position === 'left') {
+      left = rect.left - tooltipWidth - padding;
+    } else if (currentStepData.position === 'top') {
+      top = rect.top - tooltipHeight - padding;
+      left = rect.left + rect.width / 2 - tooltipWidth / 2;
+    } else if (currentStepData.position === 'bottom') {
+      top = rect.bottom + padding;
+      left = rect.left + rect.width / 2 - tooltipWidth / 2;
+    }
+    
+    // Ensure tooltip stays within viewport bounds
+    if (left < padding) {
+      left = padding;
+    } else if (left + tooltipWidth > viewportWidth - padding) {
+      left = viewportWidth - tooltipWidth - padding;
+    }
+    
+    if (top < padding) {
+      top = padding;
+    } else if (top + tooltipHeight > viewportHeight - padding) {
+      top = viewportHeight - tooltipHeight - padding;
+    }
+    
+    // If still doesn't fit, center it
+    if (left < padding || left + tooltipWidth > viewportWidth - padding || 
+        top < padding || top + tooltipHeight > viewportHeight - padding) {
+      return { 
+        top: '50%', 
+        left: '50%', 
+        transform: 'translate(-50%, -50%)',
+        maxHeight: `${viewportHeight - 100}px`,
+        overflow: 'auto'
+      };
+    }
+    
+    return { 
+      top: `${Math.max(padding, top)}px`, 
+      left: `${Math.max(padding, left)}px`,
+      transform: 'none'
+    };
+  };
+
+  const updateTooltipPosition = () => {
+    const newPosition = calculateTooltipPosition();
+    setTooltipPosition(newPosition);
+  };
+
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
@@ -56,40 +129,22 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
     }
   };
 
-  // Position the tooltip based on target element
-  const getTooltipPosition = () => {
-    if (!currentStepData.target) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
-    
-    const element = document.querySelector(currentStepData.target);
-    if (!element) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
-    
-    const rect = element.getBoundingClientRect();
-    const tooltipWidth = 400;
-    const tooltipHeight = 200;
-    
-    let top = rect.top + rect.height / 2;
-    let left = rect.right + 20;
-    
-    if (currentStepData.position === 'left') {
-      left = rect.left - tooltipWidth - 20;
-    } else if (currentStepData.position === 'center') {
-      left = rect.left + rect.width / 2 - tooltipWidth / 2;
-      top = rect.bottom + 20;
-    }
-    
-    // Ensure tooltip stays within viewport
-    if (left + tooltipWidth > window.innerWidth) {
-      left = window.innerWidth - tooltipWidth - 20;
-    }
-    if (left < 20) {
-      left = 20;
-    }
-    if (top + tooltipHeight > window.innerHeight) {
-      top = rect.top - tooltipHeight - 20;
-    }
-    
-    return { top: `${top}px`, left: `${left}px` };
-  };
+  // Update position when step changes or window resizes
+  useEffect(() => {
+    const updatePosition = () => {
+      // Small delay to ensure DOM is updated
+      setTimeout(updateTooltipPosition, 50);
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition);
+    };
+  }, [currentStep]);
 
   // Add highlight to target element
   useEffect(() => {
@@ -105,6 +160,12 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
       const element = document.querySelector(currentStepData.target);
       if (element) {
         element.classList.add('walkthrough-highlight');
+        // Scroll element into view if needed
+        element.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'center'
+        });
       }
     }
 
@@ -118,31 +179,29 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
       
       {/* Tooltip */}
       <div 
-        className="fixed z-50 bg-white rounded-xl shadow-2xl border border-gray-200 p-6 max-w-sm"
-        style={currentStepData.position === 'center' ? 
-          { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' } : 
-          getTooltipPosition()
-        }
+        ref={tooltipRef}
+        className="fixed z-[60] bg-white rounded-xl shadow-2xl border border-gray-200 p-6 w-96 max-w-[calc(100vw-40px)]"
+        style={tooltipPosition}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-3">
-            <div className="bg-gradient-to-r from-teal-500 to-purple-600 p-2 rounded-lg">
+            <div className="bg-gradient-to-r from-teal-500 to-purple-600 p-2 rounded-lg flex-shrink-0">
               <currentStepData.icon className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">{currentStepData.title}</h3>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-gray-900 truncate">{currentStepData.title}</h3>
               <p className="text-sm text-gray-500">Step {currentStep + 1} of {steps.length}</p>
             </div>
           </div>
           <button
             onClick={onSkip}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 ml-2"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
         
-        <p className="text-gray-600 mb-6 leading-relaxed">
+        <p className="text-gray-600 mb-6 leading-relaxed text-sm">
           {currentStepData.description}
         </p>
         
@@ -162,14 +221,14 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
             {currentStep > 0 && (
               <button
                 onClick={handlePrevious}
-                className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
               >
                 Previous
               </button>
             )}
             <button
               onClick={handleNext}
-              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 flex items-center space-x-2"
+              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 flex items-center space-x-2 text-sm"
             >
               <span>{currentStep === steps.length - 1 ? 'Get Started' : 'Next'}</span>
               <ArrowRight className="w-4 h-4" />
@@ -193,9 +252,9 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
       <style jsx>{`
         .walkthrough-highlight {
           position: relative;
-          z-index: 51;
-          box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.3), 0 0 20px rgba(139, 92, 246, 0.2);
-          border-radius: 8px;
+          z-index: 51 !important;
+          box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.3), 0 0 20px rgba(139, 92, 246, 0.2) !important;
+          border-radius: 8px !important;
         }
       `}</style>
     </>
