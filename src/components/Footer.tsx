@@ -7,13 +7,12 @@ const Footer = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="col-span-1 md:col-span-2">
-            <div className="flex items-center space-x-4 mb-4">
+            <div className="flex items-center mb-6">
               <img 
                 src="https://i.imgur.com/Zpdxdyj.png" 
                 alt="SEOGENIX" 
                 className="h-16 w-auto"
               />
-              <span className="text-3xl font-bold">SEOGENIX</span>
             </div>
             <p className="text-gray-400 mb-6 max-w-md">
               The world's first comprehensive AI visibility platform. Optimize your content 

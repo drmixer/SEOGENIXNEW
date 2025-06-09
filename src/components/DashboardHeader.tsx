@@ -29,13 +29,12 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userPlan, onNavigateT
             
             <div className="h-6 w-px bg-gray-300"></div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center">
               <img 
                 src="https://i.imgur.com/Zpdxdyj.png" 
                 alt="SEOGENIX" 
                 className="h-12 w-auto"
               />
-              <span className="text-2xl font-bold text-gray-900">SEOGENIX</span>
             </div>
           </div>
           
