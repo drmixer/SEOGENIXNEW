@@ -139,14 +139,11 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
       // Save to localStorage for backward compatibility
       localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
       
-      // Complete onboarding first
-      onComplete();
+      // Set a flag to trigger walkthrough on next dashboard load
+      localStorage.setItem('seogenix_trigger_walkthrough', 'true');
       
-      // Then dispatch event after a small delay to ensure dashboard is rendered
-      setTimeout(() => {
-        console.log('Dispatching onboardingCompleted event');
-        window.dispatchEvent(new CustomEvent('onboardingCompleted'));
-      }, 100);
+      // Complete onboarding
+      onComplete();
     }
   };
 

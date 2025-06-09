@@ -57,23 +57,46 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
   // Single effect to handle all initialization
   React.useEffect(() => {
-    const onboardingData = localStorage.getItem('seogenix_onboarding');
-    const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
-    const toolsRun = localStorage.getItem('seogenix_tools_run');
+    const checkWalkthroughTrigger = async () => {
+      const onboardingData = localStorage.getItem('seogenix_onboarding');
+      const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
+      const toolsRun = localStorage.getItem('seogenix_tools_run');
+      
+      // Set tools run state
+      if (toolsRun) {
+        setHasRunTools(true);
+      }
+      
+      // Check if user has completed onboarding in database
+      let hasCompletedOnboarding = false;
+      const shouldTriggerWalkthrough = localStorage.getItem('seogenix_trigger_walkthrough');
+      
+      try {
+        if (user) {
+          const profile = await userDataService.getUserProfile(user.id);
+          hasCompletedOnboarding = !!profile?.onboarding_completed_at;
+        }
+      } catch (error) {
+        console.error('Error checking onboarding status:', error);
+      }
+      
+      // Show walkthrough if onboarding was completed (either localStorage or database) and walkthrough hasn't been shown
+      if ((onboardingData || hasCompletedOnboarding || shouldTriggerWalkthrough) && !walkthroughCompleted) {
+        console.log('Triggering walkthrough - onboarding completed, walkthrough not shown');
+        
+        // Clear the trigger flag
+        if (shouldTriggerWalkthrough) {
+          localStorage.removeItem('seogenix_trigger_walkthrough');
+        }
+        
+        setTimeout(() => {
+          setShowWalkthrough(true);
+        }, 1500);
+      }
+    };
     
-    // Set tools run state
-    if (toolsRun) {
-      setHasRunTools(true);
-    }
-    
-    // Show walkthrough if onboarding was completed and walkthrough hasn't been shown
-    if (onboardingData && !walkthroughCompleted) {
-      console.log('Triggering walkthrough - onboarding completed, walkthrough not shown');
-      setTimeout(() => {
-        setShowWalkthrough(true);
-      }, 1000);
-    }
-  }, []);
+    checkWalkthroughTrigger();
+  }, [user]); // Add user as dependency to re-check when user loads
 
   // Listen for onboarding completion event (for immediate trigger after onboarding)
   React.useEffect(() => {
