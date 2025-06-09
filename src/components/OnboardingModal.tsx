@@ -142,20 +142,21 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
 
         <div className="flex-1 flex flex-col min-h-0">
           <div className="p-6 pb-0">
-          {/* Progress indicator */}
-          <div className="flex items-center mb-8">
-            {[1, 2, 3].map((stepNumber) => (
-              <React.Fragment key={stepNumber}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  step >= stepNumber ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {stepNumber}
-                </div>
-                {stepNumber < totalSteps && (
-                  <div className={`flex-1 h-1 mx-4 ${step > stepNumber ? 'bg-purple-600' : 'bg-gray-200'}`}></div>
-                )}
-              </React.Fragment>
-            ))}
+            {/* Progress indicator */}
+            <div className="flex items-center mb-8">
+              {[1, 2, 3].map((stepNumber) => (
+                <React.Fragment key={stepNumber}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    step >= stepNumber ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {stepNumber}
+                  </div>
+                  {stepNumber < totalSteps && (
+                    <div className={`flex-1 h-1 mx-4 ${step > stepNumber ? 'bg-purple-600' : 'bg-gray-200'}`}></div>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto px-6">
