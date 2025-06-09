@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Globe, Target, ArrowRight } from 'lucide-react';
+import { X, Plus, Trash2, Globe, Target, ArrowRight, Building, FileText } from 'lucide-react';
 
 interface OnboardingModalProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -21,6 +21,8 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
   const [step, setStep] = useState(1);
   const [websites, setWebsites] = useState<Website[]>([{ url: '', name: '' }]);
   const [competitors, setCompetitors] = useState<Competitor[]>([{ url: '', name: '' }]);
+  const [industry, setIndustry] = useState('');
+  const [businessDescription, setBusinessDescription] = useState('');
 
   // Plan limits
   const planLimits = {
@@ -31,6 +33,24 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
   };
 
   const currentLimits = planLimits[userPlan];
+
+  const industries = [
+    'Technology & Software',
+    'E-commerce & Retail',
+    'Healthcare & Medical',
+    'Finance & Banking',
+    'Education & Training',
+    'Marketing & Advertising',
+    'Real Estate',
+    'Food & Beverage',
+    'Travel & Tourism',
+    'Manufacturing',
+    'Professional Services',
+    'Non-profit',
+    'Entertainment & Media',
+    'Automotive',
+    'Other'
+  ];
 
   const addWebsite = () => {
     if (websites.length < currentLimits.websites) {
@@ -71,14 +91,17 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
   };
 
   const handleNext = () => {
-    if (step === 1) {
-      setStep(2);
+    if (step < 3) {
+      setStep(step + 1);
     } else {
       // Save data and complete onboarding
       const onboardingData = {
         websites: websites.filter(w => w.url.trim() !== ''),
         competitors: competitors.filter(c => c.url.trim() !== ''),
-        plan: userPlan
+        industry,
+        businessDescription,
+        plan: userPlan,
+        completedAt: new Date().toISOString()
       };
       
       // In a real app, you'd save this to your database
@@ -92,10 +115,14 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
   const canProceed = () => {
     if (step === 1) {
       return websites.some(w => w.url.trim() !== '' && w.name.trim() !== '');
+    } else if (step === 2) {
+      return industry.trim() !== '';
     } else {
       return competitors.some(c => c.url.trim() !== '' && c.name.trim() !== '');
     }
   };
+
+  const totalSteps = 3;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -116,158 +143,207 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         <div className="p-6">
           {/* Progress indicator */}
           <div className="flex items-center mb-8">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-              step >= 1 ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
-            }`}>
-              1
-            </div>
-            <div className={`flex-1 h-1 mx-4 ${step >= 2 ? 'bg-purple-600' : 'bg-gray-200'}`}></div>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-              step >= 2 ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
-            }`}>
-              2
-            </div>
+            {[1, 2, 3].map((stepNumber) => (
+              <React.Fragment key={stepNumber}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                  step >= stepNumber ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
+                }`}>
+                  {stepNumber}
+                </div>
+                {stepNumber < totalSteps && (
+                  <div className={`flex-1 h-1 mx-4 ${step > stepNumber ? 'bg-purple-600' : 'bg-gray-200'}`}></div>
+                )}
+              </React.Fragment>
+            ))}
           </div>
 
-          {step === 1 && (
-            <div className="space-y-6">
-              <div className="text-center mb-6">
-                <Globe className="w-12 h-12 text-purple-600 mx-auto mb-3" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Add Your Websites</h3>
-                <p className="text-gray-600">
-                  Tell us which websites you want to optimize for AI visibility.
-                  <br />
-                  <span className="text-sm text-purple-600">
-                    {userPlan} plan: Up to {currentLimits.websites} website{currentLimits.websites > 1 ? 's' : ''}
-                  </span>
-                </p>
-              </div>
+          <div className="overflow-y-auto max-h-96">
+            {step === 1 && (
+              <div className="space-y-6">
+                <div className="text-center mb-6">
+                  <Globe className="w-12 h-12 text-purple-600 mx-auto mb-3" />
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Add Your Websites</h3>
+                  <p className="text-gray-600">
+                    Tell us which websites you want to optimize for AI visibility.
+                    <br />
+                    <span className="text-sm text-purple-600">
+                      {userPlan} plan: Up to {currentLimits.websites} website{currentLimits.websites > 1 ? 's' : ''}
+                    </span>
+                  </p>
+                </div>
 
-              <div className="space-y-4 max-h-60 overflow-y-auto">
-                {websites.map((website, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-medium text-gray-900">Website {index + 1}</h4>
-                      {websites.length > 1 && (
-                        <button
-                          onClick={() => removeWebsite(index)}
-                          className="text-red-500 hover:text-red-700 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Website URL
-                        </label>
-                        <input
-                          type="url"
-                          value={website.url}
-                          onChange={(e) => updateWebsite(index, 'url', e.target.value)}
-                          placeholder="https://example.com"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        />
+                <div className="space-y-4">
+                  {websites.map((website, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium text-gray-900">Website {index + 1}</h4>
+                        {websites.length > 1 && (
+                          <button
+                            onClick={() => removeWebsite(index)}
+                            className="text-red-500 hover:text-red-700 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Website Name
-                        </label>
-                        <input
-                          type="text"
-                          value={website.name}
-                          onChange={(e) => updateWebsite(index, 'name', e.target.value)}
-                          placeholder="My Website"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Website URL
+                          </label>
+                          <input
+                            type="url"
+                            value={website.url}
+                            onChange={(e) => updateWebsite(index, 'url', e.target.value)}
+                            placeholder="https://example.com"
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Website Name
+                          </label>
+                          <input
+                            type="text"
+                            value={website.name}
+                            onChange={(e) => updateWebsite(index, 'name', e.target.value)}
+                            placeholder="My Website"
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          />
+                        </div>
                       </div>
                     </div>
+                  ))}
+                </div>
+
+                {websites.length < currentLimits.websites && (
+                  <button
+                    onClick={addWebsite}
+                    className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-600 hover:border-purple-500 hover:text-purple-600 transition-colors flex items-center justify-center space-x-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span>Add Another Website</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="space-y-6">
+                <div className="text-center mb-6">
+                  <Building className="w-12 h-12 text-purple-600 mx-auto mb-3" />
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Tell Us About Your Business</h3>
+                  <p className="text-gray-600">
+                    This helps us provide better AI visibility recommendations tailored to your industry.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Industry <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={industry}
+                      onChange={(e) => setIndustry(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="">Select your industry</option>
+                      {industries.map((ind) => (
+                        <option key={ind} value={ind}>{ind}</option>
+                      ))}
+                    </select>
                   </div>
-                ))}
-              </div>
 
-              {websites.length < currentLimits.websites && (
-                <button
-                  onClick={addWebsite}
-                  className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-600 hover:border-purple-500 hover:text-purple-600 transition-colors flex items-center justify-center space-x-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  <span>Add Another Website</span>
-                </button>
-              )}
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-6">
-              <div className="text-center mb-6">
-                <Target className="w-12 h-12 text-purple-600 mx-auto mb-3" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Add Your Competitors</h3>
-                <p className="text-gray-600">
-                  Add competitor websites to track and compare AI visibility performance.
-                  <br />
-                  <span className="text-sm text-purple-600">
-                    {userPlan} plan: Up to {currentLimits.competitors} competitor{currentLimits.competitors > 1 ? 's' : ''}
-                  </span>
-                </p>
-              </div>
-
-              <div className="space-y-4 max-h-60 overflow-y-auto">
-                {competitors.map((competitor, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-medium text-gray-900">Competitor {index + 1}</h4>
-                      {competitors.length > 1 && (
-                        <button
-                          onClick={() => removeCompetitor(index)}
-                          className="text-red-500 hover:text-red-700 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Competitor URL
-                        </label>
-                        <input
-                          type="url"
-                          value={competitor.url}
-                          onChange={(e) => updateCompetitor(index, 'url', e.target.value)}
-                          placeholder="https://competitor.com"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Competitor Name
-                        </label>
-                        <input
-                          type="text"
-                          value={competitor.name}
-                          onChange={(e) => updateCompetitor(index, 'name', e.target.value)}
-                          placeholder="Competitor Name"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Business Description <span className="text-gray-500">(Optional)</span>
+                    </label>
+                    <textarea
+                      value={businessDescription}
+                      onChange={(e) => setBusinessDescription(e.target.value)}
+                      placeholder="Briefly describe what your business does, your target audience, and key services/products..."
+                      rows={4}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      This helps our AI provide more relevant optimization suggestions.
+                    </p>
                   </div>
-                ))}
+                </div>
               </div>
+            )}
 
-              {competitors.length < currentLimits.competitors && (
-                <button
-                  onClick={addCompetitor}
-                  className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-600 hover:border-purple-500 hover:text-purple-600 transition-colors flex items-center justify-center space-x-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  <span>Add Another Competitor</span>
-                </button>
-              )}
-            </div>
-          )}
+            {step === 3 && (
+              <div className="space-y-6">
+                <div className="text-center mb-6">
+                  <Target className="w-12 h-12 text-purple-600 mx-auto mb-3" />
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Add Your Competitors</h3>
+                  <p className="text-gray-600">
+                    Add competitor websites to track and compare AI visibility performance.
+                    <br />
+                    <span className="text-sm text-purple-600">
+                      {userPlan} plan: Up to {currentLimits.competitors} competitor{currentLimits.competitors > 1 ? 's' : ''}
+                    </span>
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  {competitors.map((competitor, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium text-gray-900">Competitor {index + 1}</h4>
+                        {competitors.length > 1 && (
+                          <button
+                            onClick={() => removeCompetitor(index)}
+                            className="text-red-500 hover:text-red-700 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Competitor URL
+                          </label>
+                          <input
+                            type="url"
+                            value={competitor.url}
+                            onChange={(e) => updateCompetitor(index, 'url', e.target.value)}
+                            placeholder="https://competitor.com"
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Competitor Name
+                          </label>
+                          <input
+                            type="text"
+                            value={competitor.name}
+                            onChange={(e) => updateCompetitor(index, 'name', e.target.value)}
+                            placeholder="Competitor Name"
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {competitors.length < currentLimits.competitors && (
+                  <button
+                    onClick={addCompetitor}
+                    className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-600 hover:border-purple-500 hover:text-purple-600 transition-colors flex items-center justify-center space-x-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span>Add Another Competitor</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
             {step > 1 && (
@@ -286,7 +362,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
               disabled={!canProceed()}
               className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
             >
-              <span>{step === 2 ? 'Complete Setup' : 'Next'}</span>
+              <span>{step === 3 ? 'Complete Setup' : 'Next'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
