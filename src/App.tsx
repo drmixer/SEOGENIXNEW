@@ -84,12 +84,12 @@ function App() {
     setShowOnboarding(false);
     setCurrentView('dashboard');
     
-    console.log('Onboarding completed in App.tsx, dispatching event');
+    console.log('Onboarding completed in App.tsx - dispatching event and setting trigger flag');
     
     // Dispatch custom event to trigger walkthrough
     window.dispatchEvent(new CustomEvent('onboardingCompleted'));
     
-    // Set flag for walkthrough trigger
+    // Ensure the trigger flag is set
     localStorage.setItem('seogenix_trigger_walkthrough', 'true');
   };
 

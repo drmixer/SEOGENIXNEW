@@ -55,58 +55,53 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     trackPageVisit();
   }, [activeSection, user]);
 
-  // Single effect to handle all initialization
+  // Check for walkthrough trigger on dashboard load
   React.useEffect(() => {
-    const checkWalkthroughTrigger = async () => {
-      const onboardingData = localStorage.getItem('seogenix_onboarding');
-      const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
-      const toolsRun = localStorage.getItem('seogenix_tools_run');
-      
+    if (!user) return;
+
+    const initializeDashboard = async () => {
       // Set tools run state
+      const toolsRun = localStorage.getItem('seogenix_tools_run');
       if (toolsRun) {
         setHasRunTools(true);
       }
-      
-      // Check if user has completed onboarding in database
-      let hasCompletedOnboarding = false;
+
+      // Check walkthrough conditions
+      const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
       const shouldTriggerWalkthrough = localStorage.getItem('seogenix_trigger_walkthrough');
       
-      try {
-        if (user) {
-          const profile = await userDataService.getUserProfile(user.id);
-          hasCompletedOnboarding = !!profile?.onboarding_completed_at;
-          
-          console.log('Walkthrough check:', {
-            onboardingData: !!onboardingData,
-            hasCompletedOnboarding,
-            shouldTriggerWalkthrough: !!shouldTriggerWalkthrough,
-            walkthroughCompleted: !!walkthroughCompleted,
-            profile: profile
-          });
-        }
-      } catch (error) {
-        console.error('Error checking onboarding status:', error);
-      }
-      
-      // Show walkthrough if onboarding was completed (either localStorage or database) and walkthrough hasn't been shown
-      if ((onboardingData || hasCompletedOnboarding || shouldTriggerWalkthrough) && !walkthroughCompleted) {
-        console.log('Triggering walkthrough - conditions met');
-        
-        // Clear the trigger flag
-        if (shouldTriggerWalkthrough) {
-          localStorage.removeItem('seogenix_trigger_walkthrough');
-        }
+      console.log('Dashboard initialization:', {
+        walkthroughCompleted: !!walkthroughCompleted,
+        shouldTriggerWalkthrough: !!shouldTriggerWalkthrough,
+        userId: user.id
+      });
+
+      // If walkthrough should be triggered and hasn't been completed
+      if (shouldTriggerWalkthrough && !walkthroughCompleted) {
+        console.log('Triggering walkthrough from localStorage flag');
+        localStorage.removeItem('seogenix_trigger_walkthrough');
         
         setTimeout(() => {
-          console.log('Setting showWalkthrough to true');
           setShowWalkthrough(true);
         }, 1500);
-      } else {
-        console.log('Walkthrough not triggered - conditions not met');
+        return;
+      }
+
+      // Check database for onboarding completion
+      try {
+        const profile = await userDataService.getUserProfile(user.id);
+        if (profile?.onboarding_completed_at && !walkthroughCompleted) {
+          console.log('Triggering walkthrough from database onboarding completion');
+          setTimeout(() => {
+            setShowWalkthrough(true);
+          }, 1500);
+        }
+      } catch (error) {
+        console.error('Error checking user profile:', error);
       }
     };
-    
-    checkWalkthroughTrigger();
+
+    initializeDashboard();
   }, [user]); // Add user as dependency to re-check when user loads
 
   // Listen for onboarding completion event (for immediate trigger after onboarding)
@@ -144,6 +139,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       console.error('Error tracking tool launch:', error);
     }
   };
+  // Manual walkthrough trigger function
+  const triggerWalkthrough = () => {
+    setShowWalkthrough(true);
+  };
 
   // Enable chatbot for all users during development
   const isDevelopment = true; // Set to false for production
@@ -155,10 +154,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         return (
           <div className="space-y-8">
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Welcome back, {getFirstName()}!
-              </h1>
-              <p className="text-gray-600">Monitor your AI visibility performance and access optimization tools.</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                    Welcome back, {getFirstName()}!
+                  </h1>
+                  <p className="text-gray-600">Monitor your AI visibility performance and access optimization tools.</p>
+                </div>
+                <button
+                  onClick={triggerWalkthrough}
+                  className="text-sm text-purple-600 hover:text-purple-700 underline"
+                >
+                  Take Tour
+                </button>
+              </div>
             </div>
             
             {hasRunTools ? (
