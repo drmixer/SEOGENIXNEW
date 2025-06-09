@@ -111,6 +111,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
       if (!walkthroughCompleted) {
         console.log('Starting walkthrough immediately after onboarding');
+        // Clear any existing trigger flag since we're handling it now
+        localStorage.removeItem('seogenix_trigger_walkthrough');
         setTimeout(() => {
           setShowWalkthrough(true);
         }, 500);

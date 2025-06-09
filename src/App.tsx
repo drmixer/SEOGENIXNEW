@@ -86,11 +86,14 @@ function App() {
     
     console.log('Onboarding completed in App.tsx - dispatching event and setting trigger flag');
     
-    // Dispatch custom event to trigger walkthrough
-    window.dispatchEvent(new CustomEvent('onboardingCompleted'));
-    
     // Ensure the trigger flag is set
     localStorage.setItem('seogenix_trigger_walkthrough', 'true');
+    
+    // Dispatch custom event to trigger walkthrough AFTER setting the flag
+    setTimeout(() => {
+      console.log('Dispatching onboardingCompleted event');
+      window.dispatchEvent(new CustomEvent('onboardingCompleted'));
+    }, 100);
   };
 
   const handleSignOut = async () => {
