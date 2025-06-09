@@ -126,7 +126,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Welcome to SEOGENIX!</h2>
@@ -140,7 +140,8 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="p-6 pb-0">
           {/* Progress indicator */}
           <div className="flex items-center mb-8">
             {[1, 2, 3].map((stepNumber) => (
@@ -157,7 +158,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
             ))}
           </div>
 
-          <div className="overflow-y-auto max-h-96">
+          <div className="flex-1 overflow-y-auto px-6">
             {step === 1 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
@@ -345,7 +346,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
             )}
           </div>
 
-          <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
+          <div className="flex items-center justify-between p-6 pt-4 border-t border-gray-200 bg-gray-50">
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
