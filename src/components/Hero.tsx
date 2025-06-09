@@ -4,10 +4,10 @@ import { ArrowRight, Sparkles } from 'lucide-react';
 interface HeroProps {
   onNavigateToDashboard: () => void;
   user?: any;
-  onShowAuth: () => void;
+  onShowSignup: () => void;
 }
 
-const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard, user, onShowAuth }) => {
+const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard, user, onShowSignup }) => {
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-gray-50 to-white py-20 lg:py-32">
       <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-purple-600/5"></div>
@@ -46,7 +46,7 @@ const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard, user, onShowAuth }) 
             ) : (
               <>
                 <button 
-                  onClick={onShowAuth}
+                  onClick={onShowSignup}
                   className="bg-gradient-to-r from-teal-500 to-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-2"
                 >
                   <span>Start for Free</span>

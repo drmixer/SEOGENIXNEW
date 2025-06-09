@@ -4,11 +4,12 @@ import { LogIn, LogOut, User } from 'lucide-react';
 interface HeaderProps {
   onNavigateToDashboard: () => void;
   user?: any;
-  onShowAuth: () => void;
+  onShowSignup: () => void;
+  onShowLogin: () => void;
   onSignOut: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onNavigateToDashboard, user, onShowAuth, onSignOut }) => {
+const Header: React.FC<HeaderProps> = ({ onNavigateToDashboard, user, onShowSignup, onShowLogin, onSignOut }) => {
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -51,14 +52,14 @@ const Header: React.FC<HeaderProps> = ({ onNavigateToDashboard, user, onShowAuth
             ) : (
               <div className="flex items-center space-x-4">
                 <button
-                  onClick={onShowAuth}
+                  onClick={onShowLogin}
                   className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
                 >
                   <LogIn className="w-4 h-4" />
                   <span>Sign In</span>
                 </button>
                 <button 
-                  onClick={onNavigateToDashboard}
+                  onClick={onShowSignup}
                   className="bg-gradient-to-r from-teal-500 to-blue-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transition-all duration-300"
                 >
                   Get Started

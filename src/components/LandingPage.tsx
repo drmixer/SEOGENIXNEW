@@ -12,7 +12,8 @@ interface LandingPageProps {
   onNavigateToDashboard: () => void;
   onPlanSelect: (plan: 'free' | 'core' | 'pro' | 'agency') => void;
   user?: any;
-  onShowAuth: () => void;
+  onShowSignup: () => void;
+  onShowLogin: () => void;
   onSignOut: () => void;
 }
 
@@ -20,7 +21,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
   onNavigateToDashboard, 
   onPlanSelect, 
   user, 
-  onShowAuth, 
+  onShowSignup,
+  onShowLogin,
   onSignOut 
 }) => {
   const [showChatbot, setShowChatbot] = useState(false);
@@ -30,13 +32,14 @@ const LandingPage: React.FC<LandingPageProps> = ({
       <Header 
         onNavigateToDashboard={onNavigateToDashboard}
         user={user}
-        onShowAuth={onShowAuth}
+        onShowSignup={onShowSignup}
+        onShowLogin={onShowLogin}
         onSignOut={onSignOut}
       />
       <Hero 
         onNavigateToDashboard={onNavigateToDashboard}
         user={user}
-        onShowAuth={onShowAuth}
+        onShowSignup={onShowSignup}
       />
       <Features />
       <HowItWorks />

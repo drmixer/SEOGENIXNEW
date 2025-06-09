@@ -10,6 +10,7 @@ function App() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
 
   useEffect(() => {
     // Get initial session
@@ -33,8 +34,19 @@ function App() {
     if (user) {
       setCurrentView('dashboard');
     } else {
+      setAuthModalMode('login');
       setShowAuthModal(true);
     }
+  };
+
+  const handleShowSignup = () => {
+    setAuthModalMode('signup');
+    setShowAuthModal(true);
+  };
+
+  const handleShowLogin = () => {
+    setAuthModalMode('login');
+    setShowAuthModal(true);
   };
 
   const handleAuthSuccess = () => {
@@ -68,7 +80,8 @@ function App() {
             handleNavigateToDashboard();
           }}
           user={user}
-          onShowAuth={() => setShowAuthModal(true)}
+          onShowSignup={handleShowSignup}
+          onShowLogin={handleShowLogin}
           onSignOut={handleSignOut}
         />
       ) : (
@@ -84,6 +97,7 @@ function App() {
         <AuthModal
           onClose={() => setShowAuthModal(false)}
           onSuccess={handleAuthSuccess}
+          initialMode={authModalMode}
         />
       )}
     </div>
