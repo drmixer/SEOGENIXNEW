@@ -128,5 +128,107 @@ export const apiService = {
     }
     
     return response.json();
+  },
+
+  // LLM Site Summaries
+  async generateLLMSummary(url: string, summaryType: 'overview' | 'technical' | 'business' | 'audience', content?: string) {
+    const response = await fetch(`${API_BASE_URL}/llm-site-summaries`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url, summaryType, content })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to generate LLM summary');
+    }
+    
+    return response.json();
+  },
+
+  // Entity Coverage Analyzer
+  async analyzeEntityCoverage(url: string, content?: string, industry?: string, competitors?: string[]) {
+    const response = await fetch(`${API_BASE_URL}/entity-coverage-analyzer`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url, content, industry, competitors })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to analyze entity coverage');
+    }
+    
+    return response.json();
+  },
+
+  // AI Content Generator
+  async generateAIContent(
+    contentType: 'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions',
+    topic: string,
+    targetKeywords: string[],
+    tone?: 'professional' | 'casual' | 'technical' | 'friendly',
+    industry?: string,
+    targetAudience?: string,
+    contentLength?: 'short' | 'medium' | 'long'
+  ) {
+    const response = await fetch(`${API_BASE_URL}/ai-content-generator`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ 
+        contentType, 
+        topic, 
+        targetKeywords, 
+        tone, 
+        industry, 
+        targetAudience, 
+        contentLength 
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to generate AI content');
+    }
+    
+    return response.json();
+  },
+
+  // Prompt Match Suggestions
+  async generatePromptSuggestions(
+    topic: string,
+    industry?: string,
+    targetAudience?: string,
+    contentType?: 'article' | 'product' | 'service' | 'faq' | 'guide',
+    userIntent?: 'informational' | 'transactional' | 'navigational' | 'commercial'
+  ) {
+    const response = await fetch(`${API_BASE_URL}/prompt-match-suggestions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ topic, industry, targetAudience, contentType, userIntent })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to generate prompt suggestions');
+    }
+    
+    return response.json();
+  },
+
+  // Competitive Analysis
+  async performCompetitiveAnalysis(
+    primaryUrl: string,
+    competitorUrls: string[],
+    industry?: string,
+    analysisType?: 'basic' | 'detailed' | 'comprehensive'
+  ) {
+    const response = await fetch(`${API_BASE_URL}/competitive-analysis`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ primaryUrl, competitorUrls, industry, analysisType })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to perform competitive analysis');
+    }
+    
+    return response.json();
   }
 };
