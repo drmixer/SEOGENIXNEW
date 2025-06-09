@@ -43,7 +43,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
       
       onSuccess();
     } catch (error: any) {
-      setError(error.message);
+      // Handle specific Supabase email rate limit error
+      if (error.message?.includes('email rate limit exceeded') || 
+          error.code === 'over_email_send_rate_limit') {
+        setError('Too many signup attempts. Please wait a few minutes before trying again.');
+      } else {
+        setError(error.message || 'An unexpected error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
