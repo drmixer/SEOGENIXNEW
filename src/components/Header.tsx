@@ -71,3 +71,5 @@ const Header: React.FC<HeaderProps> = ({ onNavigateToDashboard, user, onShowAuth
     </header>
   );
 };
+
+export default Header
