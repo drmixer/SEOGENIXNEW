@@ -19,16 +19,27 @@ function App() {
     // Get initial session
     const initializeAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log('Initial session:', session);
+        console.log('Initializing authentication...');
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (session?.user) {
-          console.log('Setting user from initial session:', session.user);
-          setUser(session.user);
+        if (error) {
+          console.error('Error getting initial session:', error);
+        } else {
+          console.log('Initial session:', session);
+          
+          if (session?.user) {
+            console.log('Setting user from initial session:', session.user);
+            console.log('User metadata:', session.user.user_metadata);
+            console.log('User raw metadata:', session.user.raw_user_meta_data);
+            setUser(session.user);
+          } else {
+            console.log('No initial session found');
+          }
         }
       } catch (error) {
-        console.error('Error getting initial session:', error);
+        console.error('Error in initializeAuth:', error);
       } finally {
+        console.log('Setting loading to false');
         setLoading(false);
       }
     };
@@ -39,10 +50,12 @@ function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user);
+      console.log('Auth state changed:', event, 'Session:', session?.user ? 'User present' : 'No user');
       
       if (session?.user) {
         console.log('Setting user from auth change:', session.user);
+        console.log('User metadata from auth change:', session.user.user_metadata);
+        console.log('User raw metadata from auth change:', session.user.raw_user_meta_data);
         setUser(session.user);
       } else {
         console.log('Clearing user from auth change');
@@ -92,29 +105,43 @@ function App() {
   };
   
   const handleAuthSuccess = async () => {
+    console.log('Auth success handler called');
     setShowAuthModal(false);
     
     // Wait a moment for the auth state to update
     setTimeout(async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Checking session after auth success...');
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session after auth:', error);
+          return;
+        }
+        
         if (session?.user) {
           console.log('Auth success - user available:', session.user);
+          console.log('User metadata after auth:', session.user.user_metadata);
+          console.log('User raw metadata after auth:', session.user.raw_user_meta_data);
           setUser(session.user);
           
           // Always show onboarding for new signups
           if (authModalMode === 'signup') {
+            console.log('Showing onboarding for new signup');
             setUserPlan(selectedPlan);
             setShowOnboarding(true);
           } else {
             // For login, go directly to dashboard
+            console.log('Going to dashboard for login');
             setCurrentView('dashboard');
           }
+        } else {
+          console.log('No user found after auth success');
         }
       } catch (error) {
-        console.error('Error getting session after auth:', error);
+        console.error('Error in auth success handler:', error);
       }
-    }, 500);
+    }, 1000); // Increased delay to 1 second
   };
 
   const handleOnboardingComplete = () => {
@@ -130,6 +157,7 @@ function App() {
   };
 
   const handleSignOut = async () => {
+    console.log('Signing out user');
     await supabase.auth.signOut();
     setUser(null);
     setCurrentView('landing');
