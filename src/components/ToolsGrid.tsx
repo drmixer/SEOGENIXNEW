@@ -13,7 +13,8 @@ import {
   Lock,
   ExternalLink,
   Loader,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react';
 import { apiService } from '../services/api';
 
@@ -39,11 +40,15 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [formData, setFormData] = useState<any>({
-    url: selectedWebsite || '',
+    url: selectedWebsite || (userProfile?.websites?.[0]?.url || ''),
     // Pre-populate with user data where applicable
     industry: userProfile?.industry || '',
     competitors: userProfile?.competitors?.map((c: any) => c.url).join(', ') || ''
   });
+
+  // Get available websites from user profile
+  const availableWebsites = userProfile?.websites || [];
+  const availableCompetitors = userProfile?.competitors || [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,8 +58,8 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
     try {
       let response;
       
-      // Use selected website as default if no URL provided
-      const urlToUse = formData.url || selectedWebsite || 'https://example.com';
+      // Use selected website from dropdown
+      const urlToUse = formData.url || availableWebsites[0]?.url || 'https://example.com';
       
       switch (tool.id) {
         case 'audit':
@@ -146,24 +151,47 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
     }
   };
 
+  const renderWebsiteSelector = () => {
+    if (availableWebsites.length === 0) {
+      return (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-yellow-800 text-sm">
+            No websites found in your profile. Please complete onboarding to add your websites.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
+        <div className="relative">
+          <select
+            value={formData.url}
+            onChange={(e) => setFormData({...formData, url: e.target.value})}
+            className="w-full appearance-none border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          >
+            {availableWebsites.map((website: any, index: number) => (
+              <option key={index} value={website.url}>
+                {website.name} ({website.url})
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          Select from your registered websites
+        </p>
+      </div>
+    );
+  };
+
   const renderForm = () => {
     switch (tool.id) {
       case 'audit':
         return (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
-              <input
-                type="url"
-                value={formData.url}
-                onChange={(e) => setFormData({...formData, url: e.target.value})}
-                placeholder={selectedWebsite || "https://example.com"}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-              {selectedWebsite && (
-                <p className="text-xs text-gray-500 mt-1">Using your selected website: {selectedWebsite}</p>
-              )}
-            </div>
+            {renderWebsiteSelector()}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Content (optional)</label>
               <textarea
@@ -180,16 +208,7 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
       case 'schema':
         return (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
-              <input
-                type="url"
-                value={formData.url}
-                onChange={(e) => setFormData({...formData, url: e.target.value})}
-                placeholder={selectedWebsite || "https://example.com"}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-            </div>
+            {renderWebsiteSelector()}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Content Type</label>
               <select
@@ -211,16 +230,7 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
       case 'citations':
         return (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
-              <input
-                type="text"
-                value={formData.domain || (selectedWebsite ? selectedWebsite.replace(/^https?:\/\//, '').replace(/\/.*$/, '') : '')}
-                onChange={(e) => setFormData({...formData, domain: e.target.value})}
-                placeholder="example.com"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-            </div>
+            {renderWebsiteSelector()}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Keywords (comma-separated)</label>
               <input
@@ -279,16 +289,7 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
       case 'summaries':
         return (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
-              <input
-                type="url"
-                value={formData.url}
-                onChange={(e) => setFormData({...formData, url: e.target.value})}
-                placeholder={selectedWebsite || "https://example.com"}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-            </div>
+            {renderWebsiteSelector()}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Summary Type</label>
               <select
@@ -318,16 +319,7 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
       case 'entities':
         return (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
-              <input
-                type="url"
-                value={formData.url}
-                onChange={(e) => setFormData({...formData, url: e.target.value})}
-                placeholder={selectedWebsite || "https://example.com"}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-            </div>
+            {renderWebsiteSelector()}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
               <input
@@ -488,14 +480,21 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Your Website URL</label>
-              <input
-                type="url"
-                value={formData.primaryUrl || formData.url}
-                onChange={(e) => setFormData({...formData, primaryUrl: e.target.value, url: e.target.value})}
-                placeholder={selectedWebsite || "https://yoursite.com"}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Your Website</label>
+              <div className="relative">
+                <select
+                  value={formData.url}
+                  onChange={(e) => setFormData({...formData, url: e.target.value, primaryUrl: e.target.value})}
+                  className="w-full appearance-none border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  {availableWebsites.map((website: any, index: number) => (
+                    <option key={index} value={website.url}>
+                      {website.name} ({website.url})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Competitor URLs</label>
@@ -821,38 +820,50 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
           <p className="text-gray-600 mb-6">{tool.description}</p>
           
-          {selectedWebsite && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-blue-800 text-sm">
-                <strong>Selected Website:</strong> {selectedWebsite}
+          {availableWebsites.length === 0 && ['audit', 'schema', 'summaries', 'entities', 'competitive'].includes(tool.id) ? (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+              <div className="text-yellow-600 mb-2">
+                <Globe className="w-8 h-8 mx-auto" />
+              </div>
+              <h4 className="font-medium text-yellow-900 mb-2">No Websites Configured</h4>
+              <p className="text-yellow-800 text-sm mb-4">
+                You need to complete onboarding and add your websites before using this tool.
               </p>
+              <button
+                onClick={onClose}
+                className="bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-yellow-700 transition-colors"
+              >
+                Complete Onboarding First
+              </button>
             </div>
-          )}
-          
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {renderForm()}
-            
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-teal-500 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2"
-            >
-              {isLoading ? (
-                <>
-                  <Loader className="w-4 h-4 animate-spin" />
-                  <span>Processing...</span>
-                </>
-              ) : (
-                <span>Run {tool.name}</span>
+          ) : (
+            <>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {renderForm()}
+                
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-gradient-to-r from-teal-500 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <span>Run {tool.name}</span>
+                  )}
+                </button>
+              </form>
+              
+              {result && (
+                <div className="mt-6">
+                  <h4 className="font-medium text-gray-900 mb-3">Results:</h4>
+                  {renderResult()}
+                </div>
               )}
-            </button>
-          </form>
-          
-          {result && (
-            <div className="mt-6">
-              <h4 className="font-medium text-gray-900 mb-3">Results:</h4>
-              {renderResult()}
-            </div>
+            </>
           )}
         </div>
       </div>
