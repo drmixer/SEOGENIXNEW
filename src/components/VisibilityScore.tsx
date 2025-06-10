@@ -6,9 +6,10 @@ import { supabase } from '../lib/supabase';
 
 interface VisibilityScoreProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
+  selectedWebsite?: string;
 }
 
-const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
+const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWebsite }) => {
   const [auditData, setAuditData] = useState<AuditResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +25,9 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
     setError(null);
     
     try {
-      // Run audit on a sample URL for demonstration
-      const result = await apiService.runAudit('https://example.com', 'Sample content for AI visibility analysis');
+      // Use selected website or fallback to example
+      const urlToAudit = selectedWebsite || 'https://example.com';
+      const result = await apiService.runAudit(urlToAudit, 'Sample content for AI visibility analysis');
       setAuditData(result);
       setHasRunAudit(true);
       localStorage.setItem('seogenix_audit_run', 'true');
@@ -36,7 +38,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
         if (user) {
           await userDataService.saveAuditResult({
             user_id: user.id,
-            website_url: 'https://example.com',
+            website_url: urlToAudit,
             overall_score: result.overallScore,
             ai_understanding: result.subscores.aiUnderstanding,
             citation_likelihood: result.subscores.citationLikelihood,
@@ -53,7 +55,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
             activity_type: 'audit_run',
             activity_data: { 
               score: result.overallScore,
-              url: 'https://example.com',
+              url: urlToAudit,
               type: 'sample_audit'
             }
           });
@@ -76,7 +78,15 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const auditHistory = await userDataService.getAuditHistory(user.id, 10);
+          let auditHistory;
+          
+          if (selectedWebsite) {
+            // Get audits for specific website
+            auditHistory = await userDataService.getAuditHistoryForWebsite(user.id, selectedWebsite);
+          } else {
+            // Get all audits
+            auditHistory = await userDataService.getAuditHistory(user.id, 10);
+          }
           
           if (auditHistory.length > 0) {
             setHasRunAudit(true);
@@ -127,7 +137,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
         runSampleAudit();
       }
     }
-  }, []);
+  }, [selectedWebsite]);
 
   const overallScore = auditData?.overallScore || 72;
   
@@ -161,7 +171,14 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan }) => {
       <div className="lg:col-span-1">
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">AI Visibility Score</h3>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">AI Visibility Score</h3>
+              {selectedWebsite && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {new URL(selectedWebsite).hostname}
+                </p>
+              )}
+            </div>
             <div className="flex items-center space-x-2">
               <div className={`flex items-center space-x-1 text-sm ${weeklyChange > 0 ? 'text-green-600' : weeklyChange < 0 ? 'text-red-600' : 'text-gray-600'}`}>
                 {weeklyChange > 0 ? <TrendingUp className="w-4 h-4" /> : weeklyChange < 0 ? <TrendingDown className="w-4 h-4" /> : null}

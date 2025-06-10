@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DashboardHeader from './DashboardHeader';
 import Sidebar from './Sidebar';
 import VisibilityScore from './VisibilityScore';
@@ -8,6 +8,7 @@ import ReportGenerator from './ReportGenerator';
 import ContentEditor from './ContentEditor';
 import ChatbotPopup from './ChatbotPopup';
 import DashboardWalkthrough from './DashboardWalkthrough';
+import SiteSelector from './SiteSelector';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 
@@ -24,6 +25,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [hasRunTools, setHasRunTools] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [selectedWebsite, setSelectedWebsite] = useState<string>('');
+  const [loading, setLoading] = useState(true);
 
   // Extract first name from user data
   const getFirstName = () => {
@@ -85,8 +89,62 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     return 'User';
   };
 
+  // Load user profile and set up dashboard
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        console.log('Loading user profile for:', user.id);
+        const profile = await userDataService.getUserProfile(user.id);
+        console.log('Loaded profile:', profile);
+        
+        if (profile) {
+          setUserProfile(profile);
+          
+          // Set default selected website if user has websites
+          if (profile.websites && profile.websites.length > 0) {
+            setSelectedWebsite(profile.websites[0].url);
+          }
+          
+          // Check if onboarding was completed and walkthrough should trigger
+          if (profile.onboarding_completed_at) {
+            const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
+            const immediateWalkthrough = localStorage.getItem('seogenix_immediate_walkthrough');
+            
+            console.log('Profile has onboarding completed:', {
+              onboarding_completed_at: profile.onboarding_completed_at,
+              walkthroughCompleted: !!walkthroughCompleted,
+              immediateWalkthrough: !!immediateWalkthrough
+            });
+            
+            // Trigger walkthrough if not completed and onboarding was done
+            if (!walkthroughCompleted || immediateWalkthrough) {
+              console.log('Triggering walkthrough from profile check');
+              localStorage.removeItem('seogenix_immediate_walkthrough');
+              setTimeout(() => {
+                setShowWalkthrough(true);
+              }, 1500);
+            }
+          }
+        } else {
+          console.log('No profile found for user');
+        }
+      } catch (error) {
+        console.error('Error loading user profile:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUserProfile();
+  }, [user]);
+
   // Track page visits
-  React.useEffect(() => {
+  useEffect(() => {
     const trackPageVisit = async () => {
       try {
         if (user) {
@@ -105,7 +163,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   }, [activeSection, user]);
 
   // Check for walkthrough trigger on dashboard load
-  React.useEffect(() => {
+  useEffect(() => {
     console.log('Dashboard useEffect - checking for walkthrough triggers');
     
     if (!user) {
@@ -121,7 +179,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         setHasRunTools(true);
       }
 
-      // Check for walkthrough trigger (from onboarding)
+      // Check for immediate walkthrough trigger (from onboarding)
       const immediateWalkthrough = localStorage.getItem('seogenix_immediate_walkthrough');
       const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
       
@@ -143,22 +201,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           setShowWalkthrough(true);
         }, 2000);
         return;
-      }
-
-      // Only check database if no immediate flag and walkthrough not completed
-      if (!walkthroughCompleted) {
-        try {
-          const profile = await userDataService.getUserProfile(user.id);
-          if (profile?.onboarding_completed_at) {
-            console.log('User has completed onboarding but not walkthrough - triggering walkthrough');
-            setTimeout(() => {
-              console.log('Starting walkthrough from database check...');
-              setShowWalkthrough(true);
-            }, 2000);
-          }
-        } catch (error) {
-          console.error('Error checking user profile:', error);
-        }
       }
     };
 
@@ -193,6 +235,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const isDevelopment = true; // Set to false for production
   const canAccessChatbot = isDevelopment || userPlan !== 'free';
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   const renderActiveSection = () => {
     switch (activeSection) {
       case 'overview':
@@ -206,19 +259,37 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   </h1>
                   <p className="text-gray-600">Monitor your AI visibility performance and access optimization tools.</p>
                 </div>
-                <button
-                  onClick={triggerWalkthrough}
-                  className="text-sm text-purple-600 hover:text-purple-700 underline"
-                >
-                  Take Tour
-                </button>
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={triggerWalkthrough}
+                    className="text-sm text-purple-600 hover:text-purple-700 underline"
+                  >
+                    Take Tour
+                  </button>
+                </div>
               </div>
             </div>
+
+            {/* Site Selector */}
+            {userProfile && userProfile.websites && userProfile.websites.length > 0 && (
+              <SiteSelector
+                websites={userProfile.websites}
+                competitors={userProfile.competitors || []}
+                selectedWebsite={selectedWebsite}
+                onWebsiteChange={setSelectedWebsite}
+                userPlan={userPlan}
+              />
+            )}
             
             {hasRunTools ? (
               <>
-                <VisibilityScore userPlan={userPlan} />
-                <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} />
+                <VisibilityScore userPlan={userPlan} selectedWebsite={selectedWebsite} />
+                <ToolsGrid 
+                  userPlan={userPlan} 
+                  onToolRun={() => setHasRunTools(true)} 
+                  selectedWebsite={selectedWebsite}
+                  userProfile={userProfile}
+                />
               </>
             ) : (
               <div className="space-y-8">
@@ -247,14 +318,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                 </div>
                 
                 {/* Tools Preview */}
-                <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} showPreview={true} />
+                <ToolsGrid 
+                  userPlan={userPlan} 
+                  onToolRun={() => setHasRunTools(true)} 
+                  showPreview={true}
+                  selectedWebsite={selectedWebsite}
+                  userProfile={userProfile}
+                />
               </div>
             )}
           </div>
         );
       
       case 'history':
-        return <HistoricalPerformance userPlan={userPlan} />;
+        return <HistoricalPerformance userPlan={userPlan} selectedWebsite={selectedWebsite} />;
       
       case 'reports':
         return <ReportGenerator userPlan={userPlan} />;
@@ -263,37 +340,103 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         return <ContentEditor userPlan={userPlan} />;
       
       case 'audit':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="audit" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="audit"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       case 'schema':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="schema" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="schema"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       case 'citations':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="citations" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="citations"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       case 'voice':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="voice" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="voice"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       case 'summaries':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="summaries" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="summaries"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       case 'optimizer':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="optimizer" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="optimizer"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       case 'entities':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="entities" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="entities"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       case 'generator':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="generator" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="generator"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       case 'prompts':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="prompts" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="prompts"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       case 'competitive':
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="competitive" />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="competitive"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
       
       default:
-        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool={activeSection} />;
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool={activeSection}
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+        />;
     }
   };
 

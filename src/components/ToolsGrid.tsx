@@ -22,6 +22,8 @@ interface ToolsGridProps {
   onToolRun?: () => void;
   showPreview?: boolean;
   selectedTool?: string;
+  selectedWebsite?: string;
+  userProfile?: any;
 }
 
 interface ToolModalProps {
@@ -29,12 +31,19 @@ interface ToolModalProps {
   onClose: () => void;
   userPlan: string;
   onToolRun?: () => void;
+  selectedWebsite?: string;
+  userProfile?: any;
 }
 
-const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRun }) => {
+const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRun, selectedWebsite, userProfile }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [formData, setFormData] = useState<any>({});
+  const [formData, setFormData] = useState<any>({
+    url: selectedWebsite || '',
+    // Pre-populate with user data where applicable
+    industry: userProfile?.industry || '',
+    competitors: userProfile?.competitors?.map((c: any) => c.url).join(', ') || ''
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,15 +53,19 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
     try {
       let response;
       
+      // Use selected website as default if no URL provided
+      const urlToUse = formData.url || selectedWebsite || 'https://example.com';
+      
       switch (tool.id) {
         case 'audit':
-          response = await apiService.runAudit(formData.url || 'https://example.com', formData.content);
+          response = await apiService.runAudit(urlToUse, formData.content);
           break;
         case 'schema':
-          response = await apiService.generateSchema(formData.url || 'https://example.com', formData.contentType || 'article');
+          response = await apiService.generateSchema(urlToUse, formData.contentType || 'article');
           break;
         case 'citations':
-          response = await apiService.trackCitations(formData.domain || 'example.com', formData.keywords?.split(',') || ['AI', 'SEO']);
+          const domain = urlToUse.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+          response = await apiService.trackCitations(domain, formData.keywords?.split(',') || ['AI', 'SEO']);
           break;
         case 'voice':
           response = await apiService.testVoiceAssistants(formData.query || 'What is AI SEO?', ['siri', 'alexa', 'google']);
@@ -66,17 +79,18 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
           break;
         case 'summaries':
           response = await apiService.generateLLMSummary(
-            formData.url || 'https://example.com',
+            urlToUse,
             formData.summaryType || 'overview',
             formData.content
           );
           break;
         case 'entities':
           response = await apiService.analyzeEntityCoverage(
-            formData.url || 'https://example.com',
+            urlToUse,
             formData.content,
-            formData.industry,
-            formData.competitors?.split(',').map(c => c.trim()).filter(c => c)
+            formData.industry || userProfile?.industry,
+            formData.competitors?.split(',').map((c: string) => c.trim()).filter((c: string) => c) || 
+            userProfile?.competitors?.map((c: any) => c.url) || []
           );
           break;
         case 'generator':
@@ -85,7 +99,7 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
             formData.topic || 'AI SEO',
             formData.keywords?.split(',') || ['AI', 'SEO'],
             formData.tone,
-            formData.industry,
+            formData.industry || userProfile?.industry,
             formData.targetAudience,
             formData.contentLength
           );
@@ -93,17 +107,20 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
         case 'prompts':
           response = await apiService.generatePromptSuggestions(
             formData.topic || 'AI SEO',
-            formData.industry,
+            formData.industry || userProfile?.industry,
             formData.targetAudience,
             formData.contentType,
             formData.userIntent
           );
           break;
         case 'competitive':
+          const competitorUrls = formData.competitorUrls?.split(',').map((url: string) => url.trim()).filter((url: string) => url) || 
+                                userProfile?.competitors?.map((c: any) => c.url) || 
+                                ['https://competitor1.com'];
           response = await apiService.performCompetitiveAnalysis(
-            formData.primaryUrl || 'https://example.com',
-            formData.competitorUrls?.split(',').map(url => url.trim()).filter(url => url) || ['https://competitor1.com'],
-            formData.industry,
+            urlToUse,
+            competitorUrls,
+            formData.industry || userProfile?.industry,
             formData.analysisType
           );
           break;
@@ -138,11 +155,14 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
               <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
               <input
                 type="url"
-                value={formData.url || ''}
+                value={formData.url}
                 onChange={(e) => setFormData({...formData, url: e.target.value})}
-                placeholder="https://example.com"
+                placeholder={selectedWebsite || "https://example.com"}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
+              {selectedWebsite && (
+                <p className="text-xs text-gray-500 mt-1">Using your selected website: {selectedWebsite}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Content (optional)</label>
@@ -164,9 +184,9 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
               <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
               <input
                 type="url"
-                value={formData.url || ''}
+                value={formData.url}
                 onChange={(e) => setFormData({...formData, url: e.target.value})}
-                placeholder="https://example.com"
+                placeholder={selectedWebsite || "https://example.com"}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
@@ -195,7 +215,7 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
               <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
               <input
                 type="text"
-                value={formData.domain || ''}
+                value={formData.domain || (selectedWebsite ? selectedWebsite.replace(/^https?:\/\//, '').replace(/\/.*$/, '') : '')}
                 onChange={(e) => setFormData({...formData, domain: e.target.value})}
                 placeholder="example.com"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -263,9 +283,9 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
               <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
               <input
                 type="url"
-                value={formData.url || ''}
+                value={formData.url}
                 onChange={(e) => setFormData({...formData, url: e.target.value})}
-                placeholder="https://example.com"
+                placeholder={selectedWebsite || "https://example.com"}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
@@ -302,31 +322,39 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
               <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
               <input
                 type="url"
-                value={formData.url || ''}
+                value={formData.url}
                 onChange={(e) => setFormData({...formData, url: e.target.value})}
-                placeholder="https://example.com"
+                placeholder={selectedWebsite || "https://example.com"}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Industry (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
               <input
                 type="text"
-                value={formData.industry || ''}
+                value={formData.industry}
                 onChange={(e) => setFormData({...formData, industry: e.target.value})}
                 placeholder="Technology, Healthcare, Finance..."
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
+              {userProfile?.industry && (
+                <p className="text-xs text-gray-500 mt-1">From your profile: {userProfile.industry}</p>
+              )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Competitors (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Competitors</label>
               <input
                 type="text"
-                value={formData.competitors || ''}
+                value={formData.competitors}
                 onChange={(e) => setFormData({...formData, competitors: e.target.value})}
                 placeholder="competitor1.com, competitor2.com"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
+              {userProfile?.competitors?.length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  From your profile: {userProfile.competitors.map((c: any) => c.name).join(', ')}
+                </p>
+              )}
             </div>
           </div>
         );
@@ -395,6 +423,9 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
                 </select>
               </div>
             </div>
+            {userProfile?.industry && (
+              <p className="text-xs text-gray-500">Industry from profile: {userProfile.industry}</p>
+            )}
           </div>
         );
       
@@ -412,10 +443,10 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Industry (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
               <input
                 type="text"
-                value={formData.industry || ''}
+                value={formData.industry}
                 onChange={(e) => setFormData({...formData, industry: e.target.value})}
                 placeholder="Technology, Healthcare, Finance..."
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -460,28 +491,33 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
               <label className="block text-sm font-medium text-gray-700 mb-1">Your Website URL</label>
               <input
                 type="url"
-                value={formData.primaryUrl || ''}
-                onChange={(e) => setFormData({...formData, primaryUrl: e.target.value})}
-                placeholder="https://yoursite.com"
+                value={formData.primaryUrl || formData.url}
+                onChange={(e) => setFormData({...formData, primaryUrl: e.target.value, url: e.target.value})}
+                placeholder={selectedWebsite || "https://yoursite.com"}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Competitor URLs</label>
               <textarea
-                value={formData.competitorUrls || ''}
+                value={formData.competitorUrls || formData.competitors}
                 onChange={(e) => setFormData({...formData, competitorUrls: e.target.value})}
                 placeholder="https://competitor1.com, https://competitor2.com"
                 rows={3}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
+              {userProfile?.competitors?.length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  From your profile: {userProfile.competitors.map((c: any) => c.url).join(', ')}
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Industry (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
                 <input
                   type="text"
-                  value={formData.industry || ''}
+                  value={formData.industry}
                   onChange={(e) => setFormData({...formData, industry: e.target.value})}
                   placeholder="Technology, Healthcare..."
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -785,6 +821,14 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
           <p className="text-gray-600 mb-6">{tool.description}</p>
           
+          {selectedWebsite && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-blue-800 text-sm">
+                <strong>Selected Website:</strong> {selectedWebsite}
+              </p>
+            </div>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-6">
             {renderForm()}
             
@@ -816,7 +860,7 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
   );
 };
 
-const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview = false, selectedTool: selectedToolProp }) => {
+const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview = false, selectedTool: selectedToolProp, selectedWebsite, userProfile }) => {
   const [selectedTool, setSelectedTool] = useState<any>(null);
 
   // Auto-open tool if selectedTool prop is provided
@@ -932,6 +976,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview 
             </p>
           </div>
         )}
+
+        {selectedWebsite && !showPreview && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-blue-800 text-sm">
+              <strong>Active Website:</strong> {selectedWebsite} - All tools will use this website by default.
+            </p>
+          </div>
+        )}
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {(showPreview ? tools.slice(0, 6) : tools).map((tool, index) => {
@@ -1007,6 +1059,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview 
           onClose={() => setSelectedTool(null)}
           userPlan={userPlan}
           onToolRun={onToolRun}
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
         />
       )}
     </>
