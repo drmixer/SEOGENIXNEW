@@ -108,6 +108,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           // Set default selected website if user has websites
           if (profile.websites && profile.websites.length > 0) {
             setSelectedWebsite(profile.websites[0].url);
+            console.log('Set selected website to:', profile.websites[0].url);
           }
           
           // Check if onboarding was completed and walkthrough should trigger
@@ -131,7 +132,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             }
           }
         } else {
-          console.log('No profile found for user');
+          console.log('No profile found for user - this is expected for new users');
         }
       } catch (error) {
         console.error('Error loading user profile:', error);
@@ -270,7 +271,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
               </div>
             </div>
 
-            {/* Site Selector */}
+            {/* Site Selector - Show if user has completed onboarding */}
             {userProfile && userProfile.websites && userProfile.websites.length > 0 && (
               <SiteSelector
                 websites={userProfile.websites}
