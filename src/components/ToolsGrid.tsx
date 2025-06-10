@@ -25,6 +25,7 @@ interface ToolsGridProps {
   selectedTool?: string;
   selectedWebsite?: string;
   userProfile?: any;
+  onToolComplete?: (toolName: string, success: boolean, message?: string) => void;
 }
 
 interface ToolModalProps {
@@ -34,9 +35,18 @@ interface ToolModalProps {
   onToolRun?: () => void;
   selectedWebsite?: string;
   userProfile?: any;
+  onToolComplete?: (toolName: string, success: boolean, message?: string) => void;
 }
 
-const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRun, selectedWebsite, userProfile }) => {
+const ToolModal: React.FC<ToolModalProps> = ({ 
+  tool, 
+  onClose, 
+  userPlan, 
+  onToolRun, 
+  selectedWebsite, 
+  userProfile,
+  onToolComplete 
+}) => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [formData, setFormData] = useState<any>({
@@ -140,12 +150,23 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
         localStorage.setItem('seogenix_tools_run', 'true');
         onToolRun();
       }
+
+      // Notify parent of successful completion
+      if (onToolComplete) {
+        onToolComplete(tool.name, true, 'Tool executed successfully');
+      }
     } catch (error) {
       console.error('Tool error:', error);
-      setResult({ 
+      const errorResult = { 
         error: `Failed to execute ${tool.name}. Please check your internet connection and try again.`,
         details: error.message 
-      });
+      };
+      setResult(errorResult);
+
+      // Notify parent of failed completion
+      if (onToolComplete) {
+        onToolComplete(tool.name, false, errorResult.error);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -806,7 +827,7 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h3 className="text-xl font-semibold text-gray-900">{tool.name}</h3>
           <button
@@ -817,27 +838,28 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
           </button>
         </div>
         
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-          <p className="text-gray-600 mb-6">{tool.description}</p>
-          
-          {availableWebsites.length === 0 && ['audit', 'schema', 'summaries', 'entities', 'competitive'].includes(tool.id) ? (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-              <div className="text-yellow-600 mb-2">
-                <Globe className="w-8 h-8 mx-auto" />
+        <div className="flex h-[calc(90vh-80px)]">
+          {/* Form Section */}
+          <div className="w-1/2 p-6 border-r border-gray-200 overflow-y-auto">
+            <p className="text-gray-600 mb-6">{tool.description}</p>
+            
+            {availableWebsites.length === 0 && ['audit', 'schema', 'summaries', 'entities', 'competitive'].includes(tool.id) ? (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+                <div className="text-yellow-600 mb-2">
+                  <Globe className="w-8 h-8 mx-auto" />
+                </div>
+                <h4 className="font-medium text-yellow-900 mb-2">No Websites Configured</h4>
+                <p className="text-yellow-800 text-sm mb-4">
+                  You need to complete onboarding and add your websites before using this tool.
+                </p>
+                <button
+                  onClick={onClose}
+                  className="bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-yellow-700 transition-colors"
+                >
+                  Complete Onboarding First
+                </button>
               </div>
-              <h4 className="font-medium text-yellow-900 mb-2">No Websites Configured</h4>
-              <p className="text-yellow-800 text-sm mb-4">
-                You need to complete onboarding and add your websites before using this tool.
-              </p>
-              <button
-                onClick={onClose}
-                className="bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-yellow-700 transition-colors"
-              >
-                Complete Onboarding First
-              </button>
-            </div>
-          ) : (
-            <>
+            ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
                 {renderForm()}
                 
@@ -856,22 +878,52 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRu
                   )}
                 </button>
               </form>
-              
-              {result && (
-                <div className="mt-6">
-                  <h4 className="font-medium text-gray-900 mb-3">Results:</h4>
-                  {renderResult()}
+            )}
+          </div>
+
+          {/* Results Section */}
+          <div className="w-1/2 p-6 overflow-y-auto bg-gray-50">
+            {result ? (
+              <div>
+                <h4 className="font-medium text-gray-900 mb-4 flex items-center space-x-2">
+                  <span>Results</span>
+                  {!result.error && (
+                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                      Success
+                    </span>
+                  )}
+                </h4>
+                {renderResult()}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-center">
+                <div>
+                  <div className="text-gray-400 mb-4">
+                    <FileText className="w-16 h-16 mx-auto" />
+                  </div>
+                  <h4 className="text-lg font-medium text-gray-900 mb-2">Ready to Run</h4>
+                  <p className="text-gray-600">
+                    Fill out the form and click "Run {tool.name}" to see your results here.
+                  </p>
                 </div>
-              )}
-            </>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview = false, selectedTool: selectedToolProp, selectedWebsite, userProfile }) => {
+const ToolsGrid: React.FC<ToolsGridProps> = ({ 
+  userPlan, 
+  onToolRun, 
+  showPreview = false, 
+  selectedTool: selectedToolProp, 
+  selectedWebsite, 
+  userProfile,
+  onToolComplete 
+}) => {
   const [selectedTool, setSelectedTool] = useState<any>(null);
 
   // Auto-open tool if selectedTool prop is provided
@@ -1072,6 +1124,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview 
           onToolRun={onToolRun}
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={onToolComplete}
         />
       )}
     </>

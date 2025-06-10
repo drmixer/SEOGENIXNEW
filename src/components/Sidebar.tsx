@@ -21,9 +21,17 @@ interface SidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
   userPlan: 'free' | 'core' | 'pro' | 'agency';
+  onSettingsClick?: () => void;
+  onBillingClick?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userPlan }) => {
+const Sidebar: React.FC<SidebarProps> = ({ 
+  activeSection, 
+  onSectionChange, 
+  userPlan, 
+  onSettingsClick, 
+  onBillingClick 
+}) => {
   // Enable all features for development/testing
   const isDevelopment = true; // Set to false for production
 
@@ -48,9 +56,27 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userP
   ];
 
   const bottomItems = [
-    { id: 'billing', label: 'Billing', icon: CreditCard },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { 
+      id: 'billing', 
+      label: 'Billing', 
+      icon: CreditCard,
+      onClick: onBillingClick
+    },
+    { 
+      id: 'settings', 
+      label: 'Settings', 
+      icon: Settings,
+      onClick: onSettingsClick
+    },
   ];
+
+  const handleItemClick = (item: any) => {
+    if (item.onClick) {
+      item.onClick();
+    } else {
+      onSectionChange(item.id);
+    }
+  };
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col" data-walkthrough="sidebar">
@@ -139,7 +165,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userP
               return (
                 <button
                   key={item.id}
-                  onClick={() => onSectionChange(item.id)}
+                  onClick={() => handleItemClick(item)}
                   className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
                     isActive 
                       ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white' 

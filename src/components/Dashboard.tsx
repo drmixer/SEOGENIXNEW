@@ -9,8 +9,12 @@ import ContentEditor from './ContentEditor';
 import ChatbotPopup from './ChatbotPopup';
 import DashboardWalkthrough from './DashboardWalkthrough';
 import SiteSelector from './SiteSelector';
+import SettingsModal from './SettingsModal';
+import BillingModal from './BillingModal';
+import ToastContainer from './ToastContainer';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
+import { useToast } from '../hooks/useToast';
 
 interface DashboardProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -28,6 +32,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [userProfile, setUserProfile] = useState<any>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showBilling, setShowBilling] = useState(false);
+  const { toasts, addToast, removeToast } = useToast();
 
   // Extract first name from user data
   const getFirstName = () => {
@@ -234,6 +241,42 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     }
   };
 
+  // Handle tool completion with toast notification
+  const handleToolComplete = (toolName: string, success: boolean, message?: string) => {
+    if (success) {
+      addToast({
+        type: 'success',
+        title: `${toolName} Completed`,
+        message: message || 'Tool executed successfully',
+        duration: 4000
+      });
+    } else {
+      addToast({
+        type: 'error',
+        title: `${toolName} Failed`,
+        message: message || 'Tool execution failed',
+        duration: 6000
+      });
+    }
+  };
+
+  // Handle settings modal actions
+  const handleSettingsClick = () => {
+    if (activeSection === 'settings') {
+      setShowSettings(true);
+    } else {
+      setActiveSection('settings');
+    }
+  };
+
+  const handleBillingClick = () => {
+    if (activeSection === 'billing') {
+      setShowBilling(true);
+    } else {
+      setActiveSection('billing');
+    }
+  };
+
   // Manual walkthrough trigger function
   const triggerWalkthrough = () => {
     setShowWalkthrough(true);
@@ -309,6 +352,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   onToolRun={() => setHasRunTools(true)} 
                   selectedWebsite={selectedWebsite}
                   userProfile={userProfile}
+                  onToolComplete={handleToolComplete}
                 />
               </>
             ) : (
@@ -344,6 +388,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   showPreview={true}
                   selectedWebsite={selectedWebsite}
                   userProfile={userProfile}
+                  onToolComplete={handleToolComplete}
                 />
               </div>
             )}
@@ -359,6 +404,34 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       case 'editor':
         return <ContentEditor userPlan={userPlan} />;
       
+      case 'settings':
+        return (
+          <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100 text-center">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Settings</h3>
+            <p className="text-gray-600 mb-6">Manage your account settings, websites, and preferences.</p>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300"
+            >
+              Open Settings
+            </button>
+          </div>
+        );
+      
+      case 'billing':
+        return (
+          <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100 text-center">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Billing & Subscription</h3>
+            <p className="text-gray-600 mb-6">Manage your subscription, view usage, and billing history.</p>
+            <button
+              onClick={() => setShowBilling(true)}
+              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300"
+            >
+              Open Billing
+            </button>
+          </div>
+        );
+      
       case 'audit':
         return <ToolsGrid 
           userPlan={userPlan} 
@@ -366,6 +439,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="audit"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       case 'schema':
@@ -375,6 +449,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="schema"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       case 'citations':
@@ -384,6 +459,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="citations"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       case 'voice':
@@ -393,6 +469,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="voice"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       case 'summaries':
@@ -402,6 +479,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="summaries"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       case 'optimizer':
@@ -411,6 +489,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="optimizer"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       case 'entities':
@@ -420,6 +499,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="entities"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       case 'generator':
@@ -429,6 +509,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="generator"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       case 'prompts':
@@ -438,6 +519,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="prompts"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       case 'competitive':
@@ -447,6 +529,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool="competitive"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
       
       default:
@@ -456,6 +539,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedTool={activeSection}
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
+          onToolComplete={handleToolComplete}
         />;
     }
   };
@@ -474,6 +558,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           userPlan={userPlan}
+          onSettingsClick={handleSettingsClick}
+          onBillingClick={handleBillingClick}
         />
         
         <main className="flex-1 p-8 overflow-y-auto">
@@ -500,6 +586,40 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           }}
         />
       )}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          user={user}
+          userProfile={userProfile}
+          onProfileUpdate={(profile) => {
+            setUserProfile(profile);
+            addToast({
+              type: 'success',
+              title: 'Settings Updated',
+              message: 'Your profile has been updated successfully',
+              duration: 3000
+            });
+          }}
+        />
+      )}
+
+      {/* Billing Modal */}
+      {showBilling && (
+        <BillingModal
+          onClose={() => setShowBilling(false)}
+          userPlan={userPlan}
+          onPlanChange={(plan) => {
+            addToast({
+              type: 'info',
+              title: 'Plan Change Requested',
+              message: `Plan change to ${plan} would be processed by payment system`,
+              duration: 4000
+            });
+          }}
+        />
+      )}
       
       {/* Floating chatbot button */}
       {canAccessChatbot && (
@@ -522,6 +642,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           onToolLaunch={handleToolLaunch}
         />
       )}
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onRemoveToast={removeToast} />
     </div>
   );
 };
