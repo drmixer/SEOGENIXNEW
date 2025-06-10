@@ -20,6 +20,17 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
   const isDevelopment = true; // Set to false for production
   const hasSubscores = isDevelopment || userPlan !== 'free';
 
+  // Helper function to safely extract hostname from URL
+  const getHostname = (url: string): string => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      // Fallback: try to extract domain using regex
+      const match = url.match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/);
+      return match ? match[1] : url;
+    }
+  };
+
   const runSampleAudit = async () => {
     setIsLoading(true);
     setError(null);
@@ -175,7 +186,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
               <h3 className="text-lg font-semibold text-gray-900">AI Visibility Score</h3>
               {selectedWebsite && (
                 <p className="text-xs text-gray-500 mt-1">
-                  {new URL(selectedWebsite).hostname}
+                  {getHostname(selectedWebsite)}
                 </p>
               )}
             </div>
