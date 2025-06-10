@@ -262,17 +262,38 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       case 'editor':
         return <ContentEditor userPlan={userPlan} />;
       
+      case 'audit':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="audit" />;
+      
+      case 'schema':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="schema" />;
+      
+      case 'citations':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="citations" />;
+      
+      case 'voice':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="voice" />;
+      
+      case 'summaries':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="summaries" />;
+      
+      case 'optimizer':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="optimizer" />;
+      
+      case 'entities':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="entities" />;
+      
+      case 'generator':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="generator" />;
+      
+      case 'prompts':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="prompts" />;
+      
+      case 'competitive':
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool="competitive" />;
+      
       default:
-        return (
-          <div className="bg-white rounded-xl shadow-sm p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              {activeSection.charAt(0).toUpperCase() + activeSection.slice(1).replace('-', ' ')}
-            </h2>
-            <p className="text-gray-600">
-              This section is under development. Advanced {activeSection.replace('-', ' ')} features will be available soon.
-            </p>
-          </div>
-        );
+        return <ToolsGrid userPlan={userPlan} onToolRun={() => setHasRunTools(true)} selectedTool={activeSection} />;
     }
   };
 

@@ -5,6 +5,26 @@ const headers = {
   'Content-Type': 'application/json',
 };
 
+// Add error handling wrapper
+const apiCall = async (url: string, options: RequestInit) => {
+  try {
+    console.log(`Making API call to: ${url}`);
+    const response = await fetch(url, options);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`API Error (${response.status}):`, errorText);
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`API response from ${url}:`, data);
+    return data;
+  } catch (error) {
+    console.error(`API call failed for ${url}:`, error);
+    throw error;
+  }
+};
 export interface AuditResult {
   overallScore: number;
   subscores: {
@@ -37,77 +57,47 @@ export interface VoiceTestResult {
 export const apiService = {
   // AI Visibility Audit
   async runAudit(url: string, content?: string): Promise<AuditResult> {
-    const response = await fetch(`${API_BASE_URL}/ai-visibility-audit`, {
+    return await apiCall(`${API_BASE_URL}/ai-visibility-audit`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, content })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to run audit');
-    }
-    
-    return response.json();
   },
 
   // Schema Generator
   async generateSchema(url: string, contentType: string, content?: string) {
-    const response = await fetch(`${API_BASE_URL}/schema-generator`, {
+    return await apiCall(`${API_BASE_URL}/schema-generator`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, contentType, content })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to generate schema');
-    }
-    
-    return response.json();
   },
 
   // Citation Tracker
   async trackCitations(domain: string, keywords: string[]) {
-    const response = await fetch(`${API_BASE_URL}/citation-tracker`, {
+    return await apiCall(`${API_BASE_URL}/citation-tracker`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ domain, keywords })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to track citations');
-    }
-    
-    return response.json();
   },
 
   // Content Optimizer
   async optimizeContent(content: string, targetKeywords: string[], contentType: string) {
-    const response = await fetch(`${API_BASE_URL}/content-optimizer`, {
+    return await apiCall(`${API_BASE_URL}/content-optimizer`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ content, targetKeywords, contentType })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to optimize content');
-    }
-    
-    return response.json();
   },
 
   // Voice Assistant Tester
   async testVoiceAssistants(query: string, assistants: string[]): Promise<{ results: VoiceTestResult[] }> {
-    const response = await fetch(`${API_BASE_URL}/voice-assistant-tester`, {
+    return await apiCall(`${API_BASE_URL}/voice-assistant-tester`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ query, assistants })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to test voice assistants');
-    }
-    
-    return response.json();
   },
 
   // Genie Chatbot (Enhanced with user data)
@@ -118,47 +108,29 @@ export const apiService = {
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     userData?: any
   ) {
-    const response = await fetch(`${API_BASE_URL}/genie-chatbot`, {
+    return await apiCall(`${API_BASE_URL}/genie-chatbot`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ message, context, userPlan, conversationHistory, userData })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to chat with Genie');
-    }
-    
-    return response.json();
   },
 
   // LLM Site Summaries
   async generateLLMSummary(url: string, summaryType: 'overview' | 'technical' | 'business' | 'audience', content?: string) {
-    const response = await fetch(`${API_BASE_URL}/llm-site-summaries`, {
+    return await apiCall(`${API_BASE_URL}/llm-site-summaries`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, summaryType, content })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to generate LLM summary');
-    }
-    
-    return response.json();
   },
 
   // Entity Coverage Analyzer
   async analyzeEntityCoverage(url: string, content?: string, industry?: string, competitors?: string[]) {
-    const response = await fetch(`${API_BASE_URL}/entity-coverage-analyzer`, {
+    return await apiCall(`${API_BASE_URL}/entity-coverage-analyzer`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, content, industry, competitors })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to analyze entity coverage');
-    }
-    
-    return response.json();
   },
 
   // AI Content Generator
@@ -171,7 +143,7 @@ export const apiService = {
     targetAudience?: string,
     contentLength?: 'short' | 'medium' | 'long'
   ) {
-    const response = await fetch(`${API_BASE_URL}/ai-content-generator`, {
+    return await apiCall(`${API_BASE_URL}/ai-content-generator`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ 
@@ -184,12 +156,6 @@ export const apiService = {
         contentLength 
       })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to generate AI content');
-    }
-    
-    return response.json();
   },
 
   // Prompt Match Suggestions
@@ -200,17 +166,11 @@ export const apiService = {
     contentType?: 'article' | 'product' | 'service' | 'faq' | 'guide',
     userIntent?: 'informational' | 'transactional' | 'navigational' | 'commercial'
   ) {
-    const response = await fetch(`${API_BASE_URL}/prompt-match-suggestions`, {
+    return await apiCall(`${API_BASE_URL}/prompt-match-suggestions`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ topic, industry, targetAudience, contentType, userIntent })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to generate prompt suggestions');
-    }
-    
-    return response.json();
   },
 
   // Competitive Analysis
@@ -220,17 +180,11 @@ export const apiService = {
     industry?: string,
     analysisType?: 'basic' | 'detailed' | 'comprehensive'
   ) {
-    const response = await fetch(`${API_BASE_URL}/competitive-analysis`, {
+    return await apiCall(`${API_BASE_URL}/competitive-analysis`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ primaryUrl, competitorUrls, industry, analysisType })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to perform competitive analysis');
-    }
-    
-    return response.json();
   },
 
   // Report Generator
@@ -240,16 +194,10 @@ export const apiService = {
     reportName: string,
     format: 'pdf' | 'csv' | 'json' = 'pdf'
   ) {
-    const response = await fetch(`${API_BASE_URL}/generate-report`, {
+    return await apiCall(`${API_BASE_URL}/generate-report`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ reportType, reportData, reportName, format })
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to generate report');
-    }
-    
-    return response.json();
   }
 };

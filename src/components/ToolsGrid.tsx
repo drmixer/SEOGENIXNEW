@@ -21,15 +21,17 @@ interface ToolsGridProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
   onToolRun?: () => void;
   showPreview?: boolean;
+  selectedTool?: string;
 }
 
 interface ToolModalProps {
   tool: any;
   onClose: () => void;
   userPlan: string;
+  onToolRun?: () => void;
 }
 
-const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan }) => {
+const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan, onToolRun }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
@@ -118,7 +120,10 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan }) => {
       }
     } catch (error) {
       console.error('Tool error:', error);
-      setResult({ error: 'Failed to execute tool. Please try again.' });
+      setResult({ 
+        error: `Failed to execute ${tool.name}. Please check your internet connection and try again.`,
+        details: error.message 
+      });
     } finally {
       setIsLoading(false);
     }
@@ -811,8 +816,18 @@ const ToolModal: React.FC<ToolModalProps> = ({ tool, onClose, userPlan }) => {
   );
 };
 
-const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview = false }) => {
+const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview = false, selectedTool: selectedToolProp }) => {
   const [selectedTool, setSelectedTool] = useState<any>(null);
+
+  // Auto-open tool if selectedTool prop is provided
+  React.useEffect(() => {
+    if (selectedToolProp && !showPreview) {
+      const tool = tools.find(t => t.id === selectedToolProp);
+      if (tool && tool.available) {
+        setSelectedTool(tool);
+      }
+    }
+  }, [selectedToolProp, showPreview]);
 
   // Enable all tools for development/testing
   const isDevelopment = true; // Set to false for production
@@ -823,7 +838,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview 
       name: 'AI Visibility Audit',
       description: 'Full report analyzing content structure for AI visibility',
       icon: FileText,
-      available: isDevelopment || userPlan !== 'free',
+      available: true, // Always available
       color: 'from-blue-500 to-blue-600'
     },
     {
@@ -952,7 +967,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview 
                   
                   {tool.available && !showPreview ? (
                     <button className="w-full bg-gray-50 hover:bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-sm font-medium transition-colors">
-                      Launch Tool
+                      {tool.id === 'audit' ? 'Run Audit' : 'Launch Tool'}
                     </button>
                   ) : showPreview ? (
                     <div className="text-center">
@@ -991,6 +1006,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({ userPlan, onToolRun, showPreview 
           tool={selectedTool}
           onClose={() => setSelectedTool(null)}
           userPlan={userPlan}
+          onToolRun={onToolRun}
         />
       )}
     </>
