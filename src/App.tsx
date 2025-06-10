@@ -17,16 +17,38 @@ function App() {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Initial session:', session);
+        
+        if (session?.user) {
+          console.log('Setting user from initial session:', session.user);
+          setUser(session.user);
+        }
+      } catch (error) {
+        console.error('Error getting initial session:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user);
+      
+      if (session?.user) {
+        console.log('Setting user from auth change:', session.user);
+        setUser(session.user);
+      } else {
+        console.log('Clearing user from auth change');
+        setUser(null);
+      }
+      
       setLoading(false);
     });
 
@@ -68,16 +90,31 @@ function App() {
       setShowAuthModal(true);
     }
   };
-  const handleAuthSuccess = () => {
+  
+  const handleAuthSuccess = async () => {
     setShowAuthModal(false);
-    // Always show onboarding for new signups
-    if (authModalMode === 'signup') {
-      setUserPlan(selectedPlan);
-      setShowOnboarding(true);
-    } else {
-      // For login, go directly to dashboard
-      setCurrentView('dashboard');
-    }
+    
+    // Wait a moment for the auth state to update
+    setTimeout(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          console.log('Auth success - user available:', session.user);
+          setUser(session.user);
+          
+          // Always show onboarding for new signups
+          if (authModalMode === 'signup') {
+            setUserPlan(selectedPlan);
+            setShowOnboarding(true);
+          } else {
+            // For login, go directly to dashboard
+            setCurrentView('dashboard');
+          }
+        }
+      } catch (error) {
+        console.error('Error getting session after auth:', error);
+      }
+    }, 500);
   };
 
   const handleOnboardingComplete = () => {
@@ -94,6 +131,7 @@ function App() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    setUser(null);
     setCurrentView('landing');
     setSelectedPlan('free');
     setUserPlan('free');

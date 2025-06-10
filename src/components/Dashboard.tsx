@@ -34,6 +34,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     console.log('Getting first name for user:', user);
     console.log('Full user object:', JSON.stringify(user, null, 2));
     
+    if (!user) {
+      console.log('No user object available');
+      return 'User';
+    }
+    
     // Try multiple possible locations for the name
     if (user?.user_metadata?.full_name) {
       const firstName = user.user_metadata.full_name.split(' ')[0];
@@ -93,6 +98,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   useEffect(() => {
     const loadUserProfile = async () => {
       if (!user) {
+        console.log('No user available, skipping profile load');
         setLoading(false);
         return;
       }
@@ -127,6 +133,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
               console.log('Triggering walkthrough from profile check');
               localStorage.removeItem('seogenix_immediate_walkthrough');
               setTimeout(() => {
+                console.log('Starting immediate walkthrough...');
                 setShowWalkthrough(true);
               }, 1500);
             }
@@ -235,6 +242,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Enable chatbot for all users during development
   const isDevelopment = true; // Set to false for production
   const canAccessChatbot = isDevelopment || userPlan !== 'free';
+
+  // Don't render dashboard until we have user data
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading user data...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
