@@ -22,11 +22,10 @@ const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard, user, onShowSignup }
           </div>
           
           <h1 className="text-5xl lg:text-7xl font-bold text-gray-900 mb-6">
-            Smart SEO.{' '}
             <span className="bg-gradient-to-r from-teal-500 to-purple-600 bg-clip-text text-transparent">
-              AI Visibility.
+              AI Visibility
             </span>{' '}
-            Elevated.
+            Starts Here
           </h1>
           
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">

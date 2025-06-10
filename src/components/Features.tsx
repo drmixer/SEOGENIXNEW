@@ -81,10 +81,21 @@ const Features = () => {
   return (
     <section id="features" className="py-20 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* New headline section */}
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Comprehensive AI SEO Tools
+          <h2 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
+            Built for Bots.{' '}
+            <span className="text-gray-600">Loved by Humans.</span>
           </h2>
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            Our platform bridges the gap between AI systems and human creativity, delivering tools that machines understand and marketers love to use.
+          </p>
+        </div>
+
+        <div className="text-center mb-16">
+          <h3 className="text-4xl font-bold text-gray-900 mb-4">
+            Comprehensive AI SEO Tools
+          </h3>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
             Everything you need to optimize your content for the AI-driven future of search and discovery.
           </p>
