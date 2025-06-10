@@ -23,14 +23,26 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
 
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
+        console.log('Attempting login for:', email);
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
+        
         if (error) throw error;
+        
+        console.log('Login successful:', data);
+        console.log('User data:', data.user);
+        console.log('User metadata:', data.user?.user_metadata);
+        
+        // Wait a moment for the auth state to propagate
+        setTimeout(() => {
+          onSuccess();
+        }, 500);
+        
       } else {
-        console.log('Signing up user with name:', name);
-        const { error } = await supabase.auth.signUp({
+        console.log('Attempting signup for:', email, 'with name:', name);
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -39,16 +51,45 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
             },
           },
         });
+        
         if (error) throw error;
-        console.log('User signed up successfully');
+        
+        console.log('Signup successful:', data);
+        console.log('User data:', data.user);
+        console.log('User metadata:', data.user?.user_metadata);
+        
+        // For signup, we need to wait for the session to be established
+        // Check if user is immediately available (auto-confirm enabled)
+        if (data.user && data.session) {
+          console.log('User immediately available with session');
+          setTimeout(() => {
+            onSuccess();
+          }, 1000);
+        } else {
+          console.log('User created but needs confirmation or session establishment');
+          // Wait a bit longer for session to be established
+          setTimeout(async () => {
+            const { data: sessionData } = await supabase.auth.getSession();
+            console.log('Session check after signup:', sessionData);
+            if (sessionData.session) {
+              onSuccess();
+            } else {
+              setError('Account created but session not established. Please try logging in.');
+            }
+          }, 2000);
+        }
       }
       
-      onSuccess();
     } catch (error: any) {
+      console.error('Auth error:', error);
       // Handle specific Supabase email rate limit error
       if (error.message?.includes('email rate limit exceeded') || 
           error.code === 'over_email_send_rate_limit') {
         setError('Too many signup attempts. Please wait a few minutes before trying again.');
+      } else if (error.message?.includes('Invalid login credentials')) {
+        setError('Invalid email or password. Please check your credentials and try again.');
+      } else if (error.message?.includes('Email not confirmed')) {
+        setError('Please check your email and click the confirmation link before signing in.');
       } else {
         setError(error.message || 'An unexpected error occurred. Please try again.');
       }

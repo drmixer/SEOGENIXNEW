@@ -52,13 +52,15 @@ function App() {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, 'Session:', session?.user ? 'User present' : 'No user');
       
-      if (session?.user) {
-        console.log('Setting user from auth change:', session.user);
-        console.log('User metadata from auth change:', session.user.user_metadata);
-        console.log('User raw metadata from auth change:', session.user.raw_user_meta_data);
-        setUser(session.user);
-      } else {
-        console.log('Clearing user from auth change');
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user) {
+          console.log('Setting user from auth change:', session.user);
+          console.log('User metadata from auth change:', session.user.user_metadata);
+          console.log('User raw metadata from auth change:', session.user.raw_user_meta_data);
+          setUser(session.user);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        console.log('User signed out, clearing user state');
         setUser(null);
       }
       
@@ -108,40 +110,56 @@ function App() {
     console.log('Auth success handler called');
     setShowAuthModal(false);
     
-    // Wait a moment for the auth state to update
-    setTimeout(async () => {
-      try {
-        console.log('Checking session after auth success...');
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Error getting session after auth:', error);
-          return;
-        }
-        
-        if (session?.user) {
-          console.log('Auth success - user available:', session.user);
-          console.log('User metadata after auth:', session.user.user_metadata);
-          console.log('User raw metadata after auth:', session.user.raw_user_meta_data);
-          setUser(session.user);
+    // Wait for the auth state to update and user to be available
+    let attempts = 0;
+    const maxAttempts = 10;
+    
+    const waitForUser = async (): Promise<void> => {
+      return new Promise((resolve) => {
+        const checkUser = async () => {
+          attempts++;
+          console.log(`Checking for user (attempt ${attempts}/${maxAttempts})`);
           
-          // Always show onboarding for new signups
-          if (authModalMode === 'signup') {
-            console.log('Showing onboarding for new signup');
-            setUserPlan(selectedPlan);
-            setShowOnboarding(true);
-          } else {
-            // For login, go directly to dashboard
-            console.log('Going to dashboard for login');
-            setCurrentView('dashboard');
+          try {
+            const { data: { session }, error } = await supabase.auth.getSession();
+            
+            if (error) {
+              console.error('Error getting session:', error);
+            } else if (session?.user) {
+              console.log('User found in session:', session.user);
+              console.log('User metadata:', session.user.user_metadata);
+              setUser(session.user);
+              resolve();
+              return;
+            }
+          } catch (error) {
+            console.error('Error checking session:', error);
           }
-        } else {
-          console.log('No user found after auth success');
-        }
-      } catch (error) {
-        console.error('Error in auth success handler:', error);
-      }
-    }, 1000); // Increased delay to 1 second
+          
+          if (attempts < maxAttempts) {
+            setTimeout(checkUser, 500);
+          } else {
+            console.log('Max attempts reached, proceeding anyway');
+            resolve();
+          }
+        };
+        
+        checkUser();
+      });
+    };
+    
+    await waitForUser();
+    
+    // Now proceed with the flow
+    if (authModalMode === 'signup') {
+      console.log('Showing onboarding for new signup');
+      setUserPlan(selectedPlan);
+      setShowOnboarding(true);
+    } else {
+      // For login, go directly to dashboard
+      console.log('Going to dashboard for login');
+      setCurrentView('dashboard');
+    }
   };
 
   const handleOnboardingComplete = () => {
