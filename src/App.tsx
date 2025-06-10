@@ -82,12 +82,14 @@ function App() {
 
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
+    
+    console.log('Onboarding completed in App.tsx - setting walkthrough trigger and navigating to dashboard');
+    
+    // Set the walkthrough trigger flag BEFORE navigating to dashboard
+    localStorage.setItem('seogenix_immediate_walkthrough', 'true');
+    
+    // Navigate to dashboard
     setCurrentView('dashboard');
-    
-    console.log('Onboarding completed in App.tsx - navigating to dashboard');
-    
-    // The walkthrough will be triggered by the Dashboard component
-    // when it detects the trigger flag
   };
 
   const handleSignOut = async () => {

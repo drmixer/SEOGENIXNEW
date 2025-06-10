@@ -28,27 +28,49 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Extract first name from user data
   const getFirstName = () => {
     console.log('Getting first name for user:', user);
-    console.log('User metadata:', user?.user_metadata);
-    console.log('Raw user metadata:', user?.raw_user_meta_data);
+    console.log('Full user object:', JSON.stringify(user, null, 2));
     
-    // Check user_metadata first
+    // Try multiple possible locations for the name
     if (user?.user_metadata?.full_name) {
       const firstName = user.user_metadata.full_name.split(' ')[0];
       console.log('Using full_name from user_metadata:', firstName);
       return firstName;
     }
     
-    // Check raw_user_meta_data as backup
+    if (user?.user_metadata?.name) {
+      const firstName = user.user_metadata.name.split(' ')[0];
+      console.log('Using name from user_metadata:', firstName);
+      return firstName;
+    }
+    
     if (user?.raw_user_meta_data?.full_name) {
       const firstName = user.raw_user_meta_data.full_name.split(' ')[0];
       console.log('Using full_name from raw_user_meta_data:', firstName);
       return firstName;
     }
     
-    // Check identities for name
+    if (user?.raw_user_meta_data?.name) {
+      const firstName = user.raw_user_meta_data.name.split(' ')[0];
+      console.log('Using name from raw_user_meta_data:', firstName);
+      return firstName;
+    }
+    
+    // Check app_metadata
+    if (user?.app_metadata?.full_name) {
+      const firstName = user.app_metadata.full_name.split(' ')[0];
+      console.log('Using full_name from app_metadata:', firstName);
+      return firstName;
+    }
+    
     if (user?.identities?.[0]?.identity_data?.full_name) {
       const firstName = user.identities[0].identity_data.full_name.split(' ')[0];
       console.log('Using full_name from identities:', firstName);
+      return firstName;
+    }
+    
+    if (user?.identities?.[0]?.identity_data?.name) {
+      const firstName = user.identities[0].identity_data.name.split(' ')[0];
+      console.log('Using name from identities:', firstName);
       return firstName;
     }
     
@@ -110,30 +132,33 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         userEmail: user.email
       });
 
-      // If immediate walkthrough is flagged and hasn't been completed
-      if (immediateWalkthrough && !walkthroughCompleted) {
-        console.log('Triggering walkthrough from onboarding completion');
+      // Always check for immediate walkthrough first
+      if (immediateWalkthrough) {
+        console.log('Found immediate walkthrough flag - triggering walkthrough');
         localStorage.removeItem('seogenix_immediate_walkthrough');
         
+        // Use a longer delay to ensure dashboard is fully rendered
         setTimeout(() => {
-          console.log('Starting walkthrough...');
+          console.log('Starting immediate walkthrough...');
           setShowWalkthrough(true);
-        }, 1000); // Give dashboard time to render
+        }, 2000);
         return;
       }
 
-      // Check database for onboarding completion
-      try {
-        const profile = await userDataService.getUserProfile(user.id);
-        if (profile?.onboarding_completed_at && !walkthroughCompleted) {
-          console.log('User has completed onboarding but not walkthrough - triggering walkthrough');
-          setTimeout(() => {
-            console.log('Starting walkthrough from database check...');
-            setShowWalkthrough(true);
-          }, 1500);
+      // Only check database if no immediate flag and walkthrough not completed
+      if (!walkthroughCompleted) {
+        try {
+          const profile = await userDataService.getUserProfile(user.id);
+          if (profile?.onboarding_completed_at) {
+            console.log('User has completed onboarding but not walkthrough - triggering walkthrough');
+            setTimeout(() => {
+              console.log('Starting walkthrough from database check...');
+              setShowWalkthrough(true);
+            }, 2000);
+          }
+        } catch (error) {
+          console.error('Error checking user profile:', error);
         }
-      } catch (error) {
-        console.error('Error checking user profile:', error);
       }
     };
 
