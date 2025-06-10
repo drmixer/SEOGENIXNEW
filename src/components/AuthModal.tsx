@@ -33,12 +33,15 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
         
         console.log('Login successful:', data);
         console.log('User data:', data.user);
-        console.log('User metadata:', data.user?.user_metadata);
+        console.log('Session data:', data.session);
         
-        // Wait a moment for the auth state to propagate
-        setTimeout(() => {
+        // For login, session should be immediately available
+        if (data.session && data.user) {
+          console.log('Login session established, proceeding...');
           onSuccess();
-        }, 500);
+        } else {
+          throw new Error('Login successful but no session established');
+        }
         
       } else {
         console.log('Attempting signup for:', email, 'with name:', name);
@@ -54,35 +57,29 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
         
         if (error) throw error;
         
-        console.log('Signup successful:', data);
+        console.log('Signup response:', data);
         console.log('User data:', data.user);
-        console.log('User metadata:', data.user?.user_metadata);
+        console.log('Session data:', data.session);
         
-        // For signup, we need to wait for the session to be established
-        // Check if user is immediately available (auto-confirm enabled)
-        if (data.user && data.session) {
-          console.log('User immediately available with session');
-          setTimeout(() => {
-            onSuccess();
-          }, 1000);
+        // Check if email confirmation is required
+        if (data.user && !data.session) {
+          // Email confirmation required
+          setError('Please check your email and click the confirmation link to complete your account setup, then try logging in.');
+          setIsLogin(true); // Switch to login mode
+          return;
+        } else if (data.user && data.session) {
+          // Auto-confirm is enabled, session is immediately available
+          console.log('Signup with immediate session, proceeding...');
+          onSuccess();
         } else {
-          console.log('User created but needs confirmation or session establishment');
-          // Wait a bit longer for session to be established
-          setTimeout(async () => {
-            const { data: sessionData } = await supabase.auth.getSession();
-            console.log('Session check after signup:', sessionData);
-            if (sessionData.session) {
-              onSuccess();
-            } else {
-              setError('Account created but session not established. Please try logging in.');
-            }
-          }, 2000);
+          throw new Error('Signup failed - no user created');
         }
       }
       
     } catch (error: any) {
       console.error('Auth error:', error);
-      // Handle specific Supabase email rate limit error
+      
+      // Handle specific error cases
       if (error.message?.includes('email rate limit exceeded') || 
           error.code === 'over_email_send_rate_limit') {
         setError('Too many signup attempts. Please wait a few minutes before trying again.');
@@ -90,6 +87,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
         setError('Invalid email or password. Please check your credentials and try again.');
       } else if (error.message?.includes('Email not confirmed')) {
         setError('Please check your email and click the confirmation link before signing in.');
+      } else if (error.message?.includes('User already registered')) {
+        setError('An account with this email already exists. Please try logging in instead.');
+        setIsLogin(true);
       } else {
         setError(error.message || 'An unexpected error occurred. Please try again.');
       }
