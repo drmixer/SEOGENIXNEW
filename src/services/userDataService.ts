@@ -105,19 +105,21 @@ export const userDataService = {
         .from('user_profiles')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1);
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          console.log('No profile found for user:', userId);
-          return null;
-        }
         console.error('Error fetching user profile:', error);
         throw error;
       }
 
-      console.log('Successfully fetched user profile:', data);
-      return data;
+      if (!data || data.length === 0) {
+        console.log('No profile found for user:', userId);
+        return null;
+      }
+
+      console.log('Successfully fetched user profile:', data[0]);
+      return data[0];
     } catch (error) {
       console.error('Error in getUserProfile:', error);
       return null;
