@@ -15,7 +15,7 @@ function App() {
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Get initial session
@@ -26,12 +26,13 @@ function App() {
         
         if (error) {
           console.error('Error getting initial session:', error);
-          setAuthError(`Session error: ${error.message}`);
         } else {
           console.log('Initial session:', session);
           
           if (session?.user) {
             console.log('Setting user from initial session:', session.user);
+            console.log('User metadata:', session.user.user_metadata);
+            console.log('User raw metadata:', session.user.raw_user_meta_data);
             setUser(session.user);
             
             // Fetch user profile to get plan
@@ -39,20 +40,45 @@ function App() {
               const { data: profiles, error: profileError } = await supabase
                 .from('user_profiles')
                 .select('*')
-                .eq('user_id', session.user.id)
-                .order('created_at', { ascending: false })
-                .limit(1);
+                .eq('user_id', session.user.id);
                 
               if (profileError) {
                 console.error('Error fetching user profile:', profileError);
+                setError('Error fetching user profile');
               } else if (profiles && profiles.length > 0) {
                 console.log('User profile found:', profiles[0]);
                 setUserPlan(profiles[0].plan as any || 'free');
-              } else {
-                console.log('No user profile found, using default plan');
+                
+                // If there are multiple profiles, clean up duplicates
+                if (profiles.length > 1) {
+                  console.log('Found multiple profiles for user, keeping the most recent one');
+                  
+                  // Sort profiles by created_at (newest first)
+                  const sortedProfiles = [...profiles].sort((a, b) => 
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                  );
+                  
+                  // Keep the most recent profile
+                  const keepProfileId = sortedProfiles[0].id;
+                  
+                  // Delete the older duplicates
+                  for (let i = 1; i < sortedProfiles.length; i++) {
+                    try {
+                      await supabase
+                        .from('user_profiles')
+                        .delete()
+                        .eq('id', sortedProfiles[i].id);
+                      
+                      console.log(`Deleted duplicate profile with ID: ${sortedProfiles[i].id}`);
+                    } catch (deleteError) {
+                      console.error('Error deleting duplicate profile:', deleteError);
+                    }
+                  }
+                }
               }
             } catch (profileError) {
-              console.error('Exception fetching user profile:', profileError);
+              console.error('Error in profile fetch:', profileError);
+              setError('Error fetching user data');
             }
           } else {
             console.log('No initial session found');
@@ -60,7 +86,7 @@ function App() {
         }
       } catch (error) {
         console.error('Error in initializeAuth:', error);
-        setAuthError(`Auth initialization error: ${error.message}`);
+        setError('Authentication initialization failed');
       } finally {
         console.log('Setting loading to false');
         setLoading(false);
@@ -78,6 +104,8 @@ function App() {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session?.user) {
           console.log('Setting user from auth change:', session.user);
+          console.log('User metadata from auth change:', session.user.user_metadata);
+          console.log('User raw metadata from auth change:', session.user.raw_user_meta_data);
           setUser(session.user);
           
           // Fetch user profile to get plan
@@ -85,20 +113,43 @@ function App() {
             const { data: profiles, error: profileError } = await supabase
               .from('user_profiles')
               .select('*')
-              .eq('user_id', session.user.id)
-              .order('created_at', { ascending: false })
-              .limit(1);
+              .eq('user_id', session.user.id);
               
             if (profileError) {
               console.error('Error fetching user profile after auth change:', profileError);
             } else if (profiles && profiles.length > 0) {
               console.log('User profile found after auth change:', profiles[0]);
               setUserPlan(profiles[0].plan as any || 'free');
-            } else {
-              console.log('No user profile found after auth change, using default plan');
+              
+              // If there are multiple profiles, clean up duplicates
+              if (profiles.length > 1) {
+                console.log('Found multiple profiles for user, keeping the most recent one');
+                
+                // Sort profiles by created_at (newest first)
+                const sortedProfiles = [...profiles].sort((a, b) => 
+                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+                
+                // Keep the most recent profile
+                const keepProfileId = sortedProfiles[0].id;
+                
+                // Delete the older duplicates
+                for (let i = 1; i < sortedProfiles.length; i++) {
+                  try {
+                    await supabase
+                      .from('user_profiles')
+                      .delete()
+                      .eq('id', sortedProfiles[i].id);
+                    
+                    console.log(`Deleted duplicate profile with ID: ${sortedProfiles[i].id}`);
+                  } catch (deleteError) {
+                    console.error('Error deleting duplicate profile:', deleteError);
+                  }
+                }
+              }
             }
           } catch (profileError) {
-            console.error('Exception fetching user profile after auth change:', profileError);
+            console.error('Error fetching user profile after auth change:', profileError);
           }
         }
       } else if (event === 'SIGNED_OUT') {
@@ -170,6 +221,7 @@ function App() {
               console.error('Error getting session:', error);
             } else if (session?.user) {
               console.log('User found in session:', session.user);
+              console.log('User metadata:', session.user.user_metadata);
               setUser(session.user);
               
               // Fetch user profile to get plan
@@ -177,20 +229,16 @@ function App() {
                 const { data: profiles, error: profileError } = await supabase
                   .from('user_profiles')
                   .select('*')
-                  .eq('user_id', session.user.id)
-                  .order('created_at', { ascending: false })
-                  .limit(1);
+                  .eq('user_id', session.user.id);
                   
                 if (profileError) {
                   console.error('Error fetching user profile after auth success:', profileError);
                 } else if (profiles && profiles.length > 0) {
                   console.log('User profile found after auth success:', profiles[0]);
                   setUserPlan(profiles[0].plan as any || 'free');
-                } else {
-                  console.log('No user profile found after auth success, using default plan');
                 }
               } catch (profileError) {
-                console.error('Exception fetching user profile after auth success:', profileError);
+                console.error('Error fetching user profile after auth success:', profileError);
               }
               
               resolve();
@@ -237,15 +285,13 @@ function App() {
         const { data: existingProfiles, error: fetchError } = await supabase
           .from('user_profiles')
           .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1);
+          .eq('user_id', user.id);
           
         if (fetchError) {
-          console.error('Error fetching existing profile:', fetchError);
+          console.error('Error fetching user profiles:', fetchError);
         } else if (existingProfiles && existingProfiles.length > 0) {
           // Update existing profile
-          const { error: updateError } = await supabase
+          await supabase
             .from('user_profiles')
             .update({ 
               plan: userPlan,
@@ -253,23 +299,6 @@ function App() {
               updated_at: new Date().toISOString()
             })
             .eq('id', existingProfiles[0].id);
-            
-          if (updateError) {
-            console.error('Error updating user profile after onboarding:', updateError);
-          }
-        } else {
-          // Create new profile if none exists
-          const { error: insertError } = await supabase
-            .from('user_profiles')
-            .insert({
-              user_id: user.id,
-              plan: userPlan,
-              onboarding_completed_at: new Date().toISOString()
-            });
-            
-          if (insertError) {
-            console.error('Error creating user profile after onboarding:', insertError);
-          }
         }
       } catch (error) {
         console.error('Error updating user profile after onboarding:', error);
@@ -298,17 +327,23 @@ function App() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
-          {authError && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600 text-sm">{authError}</p>
-              <button 
-                onClick={() => window.location.reload()}
-                className="mt-2 text-sm text-purple-600 hover:text-purple-800"
-              >
-                Reload Page
-              </button>
-            </div>
-          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center max-w-md p-6 bg-red-50 rounded-lg border border-red-200">
+          <h2 className="text-xl font-semibold text-red-700 mb-2">Error Loading Application</h2>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Reload Application
+          </button>
         </div>
       </div>
     );
