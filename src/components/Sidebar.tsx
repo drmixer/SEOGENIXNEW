@@ -15,7 +15,10 @@ import {
   History,
   Edit3,
   Download,
-  Radar
+  Radar,
+  Brain,
+  Eye,
+  Layers
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -54,7 +57,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const newFeatures = [
     { id: 'history', label: 'Performance History', icon: History, available: isDevelopment || userPlan !== 'free' },
     { id: 'editor', label: 'Content Editor', icon: Edit3, available: isDevelopment || userPlan !== 'free' },
+    { id: 'realtime-editor', label: 'Real-time Editor', icon: Brain, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
     { id: 'reports', label: 'Reports', icon: Download, available: isDevelopment || userPlan !== 'free' },
+    { id: 'competitive-viz', label: 'Competitive Insights', icon: Eye, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
+    { id: 'integrations', label: 'CMS Integrations', icon: Layers, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
   ];
 
   const bottomItems = [
@@ -123,7 +129,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* New Features Section */}
         <div className="mt-8">
           <div className="flex items-center space-x-2 mb-4">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">New Features</h3>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Advanced Features</h3>
             <span className="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">NEW</span>
           </div>
           <nav className="space-y-2">

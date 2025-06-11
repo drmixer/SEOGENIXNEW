@@ -64,6 +64,15 @@ export const apiService = {
     });
   },
 
+  // Enhanced Audit Insights
+  async getEnhancedAuditInsights(url: string, content: string, previousScore?: number) {
+    return await apiCall(`${API_BASE_URL}/enhanced-audit-insights`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url, content, previousScore })
+    });
+  },
+
   // Schema Generator
   async generateSchema(url: string, contentType: string, content?: string) {
     return await apiCall(`${API_BASE_URL}/schema-generator`, {

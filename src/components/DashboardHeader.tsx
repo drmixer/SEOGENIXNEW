@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowLeft, Settings, User, LogOut } from 'lucide-react';
+import ProactiveAlerts from './ProactiveAlerts';
 
 interface DashboardHeaderProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -44,6 +45,9 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userPlan, onNavigateT
             <div className={`px-3 py-1 rounded-full text-sm font-medium ${planColors[userPlan]}`}>
               {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)} Plan
             </div>
+            
+            {/* Proactive Alerts */}
+            <ProactiveAlerts user={user} userPlan={userPlan} />
             
             <div className="flex items-center space-x-2 text-sm text-gray-600">
               <User className="w-4 h-4" />

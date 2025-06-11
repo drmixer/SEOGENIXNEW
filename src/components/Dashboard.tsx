@@ -6,6 +6,9 @@ import ToolsGrid from './ToolsGrid';
 import HistoricalPerformance from './HistoricalPerformance';
 import ReportGenerator from './ReportGenerator';
 import ContentEditor from './ContentEditor';
+import RealTimeContentEditor from './RealTimeContentEditor';
+import CompetitiveVisualization from './CompetitiveVisualization';
+import CMSIntegrations from './CMSIntegrations';
 import ChatbotPopup from './ChatbotPopup';
 import DashboardWalkthrough from './DashboardWalkthrough';
 import SiteSelector from './SiteSelector';
@@ -404,6 +407,15 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       case 'editor':
         return <ContentEditor userPlan={userPlan} />;
       
+      case 'realtime-editor':
+        return <RealTimeContentEditor userPlan={userPlan} />;
+      
+      case 'competitive-viz':
+        return <CompetitiveVisualization userPlan={userPlan} />;
+      
+      case 'integrations':
+        return <CMSIntegrations userPlan={userPlan} />;
+      
       case 'settings':
         return (
           <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100 text-center">
@@ -527,6 +539,16 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           userPlan={userPlan} 
           onToolRun={() => setHasRunTools(true)} 
           selectedTool="competitive"
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+          onToolComplete={handleToolComplete}
+        />;
+      
+      case 'discovery':
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool="discovery"
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
           onToolComplete={handleToolComplete}
