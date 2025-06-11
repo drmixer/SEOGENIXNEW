@@ -4,6 +4,7 @@ import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
 import OnboardingModal from './components/OnboardingModal';
+import { WhiteLabelProvider } from './components/WhiteLabelProvider';
 
 function App() {
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'pricing'>('landing');
@@ -195,43 +196,45 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      {currentView === 'landing' || currentView === 'pricing' ? (
-        <LandingPage 
-          onNavigateToDashboard={handleNavigateToDashboard}
-          onPlanSelect={handlePlanSelect}
-          user={user}
-          onShowSignup={handleShowPricing}
-          onShowLogin={handleShowLogin}
-          onSignOut={handleSignOut}
-          initialView={currentView}
-          onNavigateToLanding={() => setCurrentView('landing')}
-        />
-      ) : (
-        <Dashboard 
-          userPlan={userPlan}
-          onNavigateToLanding={() => setCurrentView('landing')}
-          user={user}
-          onSignOut={handleSignOut}
-        />
-      )}
+    <WhiteLabelProvider user={user}>
+      <div className="min-h-screen bg-white">
+        {currentView === 'landing' || currentView === 'pricing' ? (
+          <LandingPage 
+            onNavigateToDashboard={handleNavigateToDashboard}
+            onPlanSelect={handlePlanSelect}
+            user={user}
+            onShowSignup={handleShowPricing}
+            onShowLogin={handleShowLogin}
+            onSignOut={handleSignOut}
+            initialView={currentView}
+            onNavigateToLanding={() => setCurrentView('landing')}
+          />
+        ) : (
+          <Dashboard 
+            userPlan={userPlan}
+            onNavigateToLanding={() => setCurrentView('landing')}
+            user={user}
+            onSignOut={handleSignOut}
+          />
+        )}
 
-      {showAuthModal && (
-        <AuthModal
-          onClose={() => setShowAuthModal(false)}
-          onSuccess={handleAuthSuccess}
-          initialMode={authModalMode}
-        />
-      )}
+        {showAuthModal && (
+          <AuthModal
+            onClose={() => setShowAuthModal(false)}
+            onSuccess={handleAuthSuccess}
+            initialMode={authModalMode}
+          />
+        )}
 
-      {showOnboarding && (
-        <OnboardingModal
-          userPlan={userPlan}
-          onComplete={handleOnboardingComplete}
-          onClose={() => setShowOnboarding(false)}
-        />
-      )}
-    </div>
+        {showOnboarding && (
+          <OnboardingModal
+            userPlan={userPlan}
+            onComplete={handleOnboardingComplete}
+            onClose={() => setShowOnboarding(false)}
+          />
+        )}
+      </div>
+    </WhiteLabelProvider>
   );
 }
 

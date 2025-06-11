@@ -219,37 +219,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
 
   const renderForm = () => {
     switch (tool.id) {
-      case 'discovery':
-        return (
-          <div className="space-y-4">
-            {renderWebsiteSelector()}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Analysis Depth</label>
-              <select
-                value={formData.analysisDepth || 'basic'}
-                onChange={(e) => setFormData({...formData, analysisDepth: e.target.value})}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value="basic">Basic Discovery</option>
-                <option value="comprehensive">Comprehensive Analysis</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
-              <input
-                type="text"
-                value={formData.industry}
-                onChange={(e) => setFormData({...formData, industry: e.target.value})}
-                placeholder="Technology, Healthcare, Finance..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-              {userProfile?.industry && (
-                <p className="text-xs text-gray-500 mt-1">From your profile: {userProfile.industry}</p>
-              )}
-            </div>
-          </div>
-        );
-      
       case 'audit':
         return (
           <div className="space-y-4">
@@ -600,6 +569,44 @@ const ToolModal: React.FC<ToolModalProps> = ({
           </div>
         );
       
+      case 'discovery':
+        return (
+          <div className="space-y-4">
+            {renderWebsiteSelector()}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
+              <input
+                type="text"
+                value={formData.industry}
+                onChange={(e) => setFormData({...formData, industry: e.target.value})}
+                placeholder="Technology, Healthcare, Finance..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              {userProfile?.industry && (
+                <p className="text-xs text-gray-500 mt-1">From your profile: {userProfile.industry}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Analysis Depth</label>
+              <select
+                value={formData.analysisDepth || 'basic'}
+                onChange={(e) => setFormData({...formData, analysisDepth: e.target.value})}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="basic">Basic Discovery</option>
+                <option value="comprehensive">Comprehensive Analysis</option>
+              </select>
+            </div>
+            {userProfile?.business_description && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-800">
+                  <strong>Business Description:</strong> {userProfile.business_description}
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      
       default:
         return (
           <div className="text-center py-8">
@@ -621,54 +628,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
     }
 
     switch (tool.id) {
-      case 'discovery':
-        return (
-          <div className="space-y-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <h4 className="font-medium text-green-900 mb-2">Competitor Discovery Results</h4>
-              <p className="text-green-800">Found <strong>{result.totalSuggestions}</strong> potential competitors</p>
-              <p className="text-green-800 text-sm">Competitive Intensity: <strong>{result.competitiveIntensity}</strong></p>
-            </div>
-            
-            <div className="space-y-3 max-h-60 overflow-y-auto">
-              {result.competitorSuggestions.slice(0, 8).map((competitor: any, i: number) => (
-                <div key={i} className="border border-gray-200 rounded p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-sm">{competitor.name}</span>
-                    <div className="flex items-center space-x-2">
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        competitor.type === 'direct' ? 'bg-red-100 text-red-800' :
-                        competitor.type === 'indirect' ? 'bg-yellow-100 text-yellow-800' :
-                        competitor.type === 'industry_leader' ? 'bg-blue-100 text-blue-800' :
-                        'bg-green-100 text-green-800'
-                      }`}>
-                        {competitor.type.replace('_', ' ')}
-                      </span>
-                      <span className="text-xs font-medium">{competitor.relevanceScore}/100</span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-2">{competitor.reason}</p>
-                  <div className="text-xs text-gray-500">
-                    <strong>Strengths:</strong> {competitor.keyStrengths.slice(0, 2).join(', ')}
-                  </div>
-                  <a href={competitor.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center mt-1">
-                    Visit site <ExternalLink className="w-3 h-3 ml-1" />
-                  </a>
-                </div>
-              ))}
-            </div>
-            
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <h5 className="font-medium text-blue-900 mb-2">Key Insights:</h5>
-              <ul className="text-sm text-blue-800 space-y-1">
-                <li>• {result.insights.directCompetitors} direct competitors identified</li>
-                <li>• {result.insights.emergingPlayers} emerging players to watch</li>
-                <li>• {result.insights.marketGaps}</li>
-              </ul>
-            </div>
-          </div>
-        );
-      
       case 'audit':
         return (
           <div className="space-y-4">
@@ -905,6 +864,41 @@ const ToolModal: React.FC<ToolModalProps> = ({
           </div>
         );
       
+      case 'discovery':
+        return (
+          <div className="space-y-4">
+            <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+              <h4 className="font-medium text-teal-900 mb-2">Competitor Discovery Results</h4>
+              <p className="text-teal-800">Found {result.totalSuggestions} potential competitors | Average relevance: {result.averageRelevance}%</p>
+              <p className="text-teal-800 text-sm">Competitive intensity: {result.competitiveIntensity}</p>
+            </div>
+            <div className="space-y-3 max-h-60 overflow-y-auto">
+              {result.competitorSuggestions.slice(0, 6).map((comp: any, i: number) => (
+                <div key={i} className="border border-gray-200 rounded p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <span className="font-medium text-sm">{comp.name}</span>
+                      <span className={`ml-2 text-xs px-2 py-1 rounded ${
+                        comp.type === 'direct' ? 'bg-red-100 text-red-800' :
+                        comp.type === 'indirect' ? 'bg-yellow-100 text-yellow-800' :
+                        comp.type === 'industry_leader' ? 'bg-blue-100 text-blue-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {comp.type.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <span className="text-sm font-bold">{comp.relevanceScore}%</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-2">{comp.reason}</p>
+                  <div className="text-xs text-gray-500">
+                    <strong>Strengths:</strong> {comp.keyStrengths.slice(0, 2).join(', ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      
       default:
         return (
           <div className="bg-gray-50 p-4 rounded">
@@ -1115,7 +1109,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       description: 'AI-powered discovery of unknown competitors',
       icon: Radar,
       available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan),
-      color: 'from-violet-500 to-violet-600'
+      color: 'from-emerald-500 to-emerald-600'
     }
   ];
 
