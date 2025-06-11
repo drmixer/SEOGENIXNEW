@@ -453,10 +453,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const handleToolComplete = (toolName: string, success: boolean, message?: string) => {
     if (success) {
       addToast({
+        id: `tool-${Date.now()}`,
         type: 'success',
         title: `${toolName} Completed`,
         message: message || 'Tool executed successfully',
-        duration: 4000
+        duration: 4000,
+        onClose: () => {}
       });
       
       // Regenerate insights after tool completion
@@ -465,10 +467,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       }, 1000);
     } else {
       addToast({
+        id: `tool-error-${Date.now()}`,
         type: 'error',
         title: `${toolName} Failed`,
         message: message || 'Tool execution failed',
-        duration: 6000
+        duration: 6000,
+        onClose: () => {}
       });
     }
   };
@@ -758,26 +762,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           </div>
         );
       
-      case 'audit':
-      case 'schema':
-      case 'citations':
-      case 'voice':
-      case 'summaries':
-      case 'entities':
-      case 'generator':
-      case 'optimizer':
-      case 'prompts':
-      case 'competitive':
-      case 'discovery':
-        return <ToolsGrid 
-          userPlan={userPlan} 
-          onToolRun={() => setHasRunTools(true)} 
-          selectedTool={activeSection}
-          selectedWebsite={selectedWebsite}
-          userProfile={userProfile}
-          onToolComplete={handleToolComplete}
-        />;
-      
       default:
         return <ToolsGrid 
           userPlan={userPlan} 
@@ -842,10 +826,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           onProfileUpdate={(profile) => {
             setUserProfile(profile);
             addToast({
+              id: `settings-updated-${Date.now()}`,
               type: 'success',
               title: 'Settings Updated',
               message: 'Your profile has been updated successfully',
-              duration: 3000
+              duration: 3000,
+              onClose: () => {}
             });
             // Regenerate insights after profile update
             setTimeout(() => {
@@ -862,10 +848,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           userPlan={userPlan}
           onPlanChange={(plan) => {
             addToast({
+              id: `plan-change-${Date.now()}`,
               type: 'info',
               title: 'Plan Change Requested',
               message: `Plan change to ${plan} would be processed by payment system`,
-              duration: 4000
+              duration: 4000,
+              onClose: () => {}
             });
           }}
         />

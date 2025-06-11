@@ -54,6 +54,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [toolResults, setToolResults] = useState<Record<string, ToolResult>>({});
   const [expandedTool, setExpandedTool] = useState<string | null>(selectedTool || null);
   const [showToolModal, setShowToolModal] = useState<string | null>(null);
+  const [selectedCompetitor, setSelectedCompetitor] = useState<string>('');
 
   // Enable all tools for development/testing
   const isDevelopment = true;
@@ -160,8 +161,22 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     }
   ];
 
+  // Set initial expanded tool based on selectedTool prop
+  useEffect(() => {
+    if (selectedTool) {
+      setExpandedTool(selectedTool);
+    }
+  }, [selectedTool]);
+
+  // Set initial competitor if available
+  useEffect(() => {
+    if (userProfile?.competitors?.length > 0) {
+      setSelectedCompetitor(userProfile.competitors[0].url);
+    }
+  }, [userProfile]);
+
   const runTool = async (toolId: string) => {
-    if (!selectedWebsite && toolId !== 'generator' && toolId !== 'prompts') {
+    if (!selectedWebsite && !selectedCompetitor && toolId !== 'generator' && toolId !== 'prompts') {
       alert('Please select a website first');
       return;
     }
@@ -173,6 +188,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     try {
       let result: any = {};
       const websiteUrl = selectedWebsite || 'https://example.com';
+      const competitorUrl = selectedCompetitor || '';
 
       // Track tool usage
       try {
@@ -384,7 +400,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                   <Copy className="w-4 h-4" />
                 </button>
               </div>
-              <pre className="text-sm text-gray-700 bg-white p-3 rounded border overflow-x-auto">
+              <pre className="text-sm text-gray-700 bg-white p-3 rounded border overflow-x-auto max-h-60">
                 {result.schema?.substring(0, 300)}...
               </pre>
               <p className="text-xs text-gray-600 mt-2">{result.instructions}</p>
@@ -590,7 +606,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             
             <div className="bg-gray-50 p-4 rounded-lg">
               <h4 className="font-medium text-gray-900 mb-2">Optimized Content:</h4>
-              <div className="bg-white p-3 rounded border text-sm text-gray-700 whitespace-pre-wrap">
+              <div className="bg-white p-3 rounded border text-sm text-gray-700">
                 {result.optimizedContent?.substring(0, 200)}...
               </div>
             </div>
@@ -750,72 +766,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     }
   };
 
-  // Tool Modal Component
-  const ToolModal = ({ toolId, onClose }: { toolId: string, onClose: () => void }) => {
-    const tool = tools.find(t => t.id === toolId);
-    const result = toolResults[toolId];
-    const IconComponent = tool?.icon || FileText;
-    
-    if (!tool) return null;
-    
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <div className="flex items-center space-x-3">
-              <div className={`p-3 rounded-lg bg-gradient-to-r ${tool.color}`}>
-                <IconComponent className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900">{tool.name}</h3>
-                <p className="text-sm text-gray-500">{tool.description}</p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-6">
-            {loadingTool === toolId ? (
-              <div className="flex flex-col items-center justify-center h-full">
-                <Loader className="w-10 h-10 text-purple-600 animate-spin mb-4" />
-                <p className="text-gray-600">Running {tool.name}...</p>
-              </div>
-            ) : result ? (
-              renderToolResult(toolId, result)
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full">
-                <div className={`p-4 rounded-lg bg-gradient-to-r ${tool.color} mb-4`}>
-                  <IconComponent className="w-10 h-10 text-white" />
-                </div>
-                <p className="text-gray-600 mb-4">Ready to run {tool.name}</p>
-                <button
-                  onClick={() => runTool(toolId)}
-                  className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300"
-                >
-                  Run Tool
-                </button>
-              </div>
-            )}
-          </div>
-          
-          <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   if (showPreview) {
     return (
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
@@ -824,11 +774,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           {tools.slice(0, 6).map((tool) => {
             const IconComponent = tool.icon;
             return (
-              <div 
-                key={tool.id} 
-                className="p-4 border border-gray-200 rounded-lg hover:border-purple-300 transition-colors cursor-pointer"
-                onClick={() => tool.available && setShowToolModal(tool.id)}
-              >
+              <div key={tool.id} className="p-4 border border-gray-200 rounded-lg hover:border-purple-300 transition-colors">
                 <div className="flex items-center space-x-3 mb-2">
                   <div className={`p-2 rounded-lg bg-gradient-to-r ${tool.color}`}>
                     <IconComponent className="w-5 h-5 text-white" />
@@ -856,6 +802,118 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     tools;
 
   const categories = [...new Set(categoriesToShow.map(tool => tool.category))];
+
+  // Tool Modal Component
+  const ToolModal = ({ toolId, onClose }: { toolId: string, onClose: () => void }) => {
+    const tool = tools.find(t => t.id === toolId);
+    const result = toolResults[toolId];
+    
+    if (!tool) return null;
+    
+    const IconComponent = tool.icon;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center space-x-3">
+              <div className={`p-3 rounded-lg bg-gradient-to-r ${tool.color}`}>
+                <IconComponent className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">{tool.name}</h3>
+                <p className="text-sm text-gray-500">{tool.description}</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          
+          <div className="p-6 overflow-y-auto flex-1">
+            {toolId === 'competitive' && userProfile?.competitors?.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Website to Analyze
+                </label>
+                <select
+                  value={selectedCompetitor}
+                  onChange={(e) => setSelectedCompetitor(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="">Select a competitor</option>
+                  {userProfile.competitors.map((comp: any, index: number) => (
+                    <option key={index} value={comp.url}>
+                      {comp.name} ({comp.url})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            {result ? (
+              renderToolResult(toolId, result)
+            ) : (
+              <div className="text-center py-8">
+                <div className="text-gray-400 mb-4">
+                  <Target className="w-12 h-12 mx-auto" />
+                </div>
+                <p className="text-gray-600 mb-4">Run the tool to see results</p>
+                <button
+                  onClick={() => runTool(toolId)}
+                  disabled={loadingTool === toolId}
+                  className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2 mx-auto"
+                >
+                  {loadingTool === toolId ? (
+                    <>
+                      <Loader className="w-5 h-5 animate-spin" />
+                      <span>Running...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Run {tool.name}</span>
+                      <Target className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Close
+            </button>
+            {result && (
+              <button
+                onClick={() => runTool(toolId)}
+                disabled={loadingTool === toolId}
+                className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+              >
+                {loadingTool === toolId ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    <span>Running...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Run Again</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -902,7 +960,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                       
                       <div className="flex items-center justify-between">
                         <button
-                          onClick={() => tool.available ? setShowToolModal(tool.id) : null}
+                          onClick={() => {
+                            if (tool.available) {
+                              setShowToolModal(tool.id);
+                              if (!toolResults[tool.id]) {
+                                runTool(tool.id);
+                              }
+                            }
+                          }}
                           disabled={!tool.available || isLoading}
                           className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
                             tool.available

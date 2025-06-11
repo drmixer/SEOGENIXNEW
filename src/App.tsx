@@ -34,36 +34,20 @@ function App() {
             console.log('User raw metadata:', session.user.raw_user_meta_data);
             setUser(session.user);
             
-            // Get user plan from metadata
-            const userMetadataPlan = session.user.user_metadata?.plan || 
-                                    session.user.raw_user_meta_data?.plan;
-            
-            if (userMetadataPlan && ['free', 'core', 'pro', 'agency'].includes(userMetadataPlan)) {
-              console.log('Setting user plan from metadata:', userMetadataPlan);
-              setUserPlan(userMetadataPlan as 'free' | 'core' | 'pro' | 'agency');
-            } else {
-              // Try to get plan from user profile
-              try {
-                const { data: userProfile } = await supabase
-                  .from('user_profiles')
-                  .select('plan')
-                  .eq('user_id', session.user.id)
-                  .single();
+            // Fetch user profile to get plan
+            try {
+              const { data: profiles } = await supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('user_id', session.user.id)
+                .single();
                 
-                if (userProfile?.plan && ['free', 'core', 'pro', 'agency'].includes(userProfile.plan)) {
-                  console.log('Setting user plan from profile:', userProfile.plan);
-                  setUserPlan(userProfile.plan as 'free' | 'core' | 'pro' | 'agency');
-                  
-                  // Update user metadata if plan is in profile but not in metadata
-                  if (!userMetadataPlan) {
-                    await supabase.auth.updateUser({
-                      data: { plan: userProfile.plan }
-                    });
-                  }
-                }
-              } catch (error) {
-                console.error('Error getting user profile:', error);
+              if (profiles) {
+                console.log('User profile found:', profiles);
+                setUserPlan(profiles.plan as any || 'free');
               }
+            } catch (profileError) {
+              console.error('Error fetching user profile:', profileError);
             }
           } else {
             console.log('No initial session found');
@@ -92,34 +76,26 @@ function App() {
           console.log('User raw metadata from auth change:', session.user.raw_user_meta_data);
           setUser(session.user);
           
-          // Get user plan from metadata
-          const userMetadataPlan = session.user.user_metadata?.plan || 
-                                  session.user.raw_user_meta_data?.plan;
-          
-          if (userMetadataPlan && ['free', 'core', 'pro', 'agency'].includes(userMetadataPlan)) {
-            console.log('Setting user plan from metadata on auth change:', userMetadataPlan);
-            setUserPlan(userMetadataPlan as 'free' | 'core' | 'pro' | 'agency');
-          } else {
-            // Try to get plan from user profile
-            try {
-              const { data: userProfile } = await supabase
-                .from('user_profiles')
-                .select('plan')
-                .eq('user_id', session.user.id)
-                .single();
+          // Fetch user profile to get plan
+          try {
+            const { data: profiles } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('user_id', session.user.id)
+              .single();
               
-              if (userProfile?.plan && ['free', 'core', 'pro', 'agency'].includes(userProfile.plan)) {
-                console.log('Setting user plan from profile on auth change:', userProfile.plan);
-                setUserPlan(userProfile.plan as 'free' | 'core' | 'pro' | 'agency');
-              }
-            } catch (error) {
-              console.error('Error getting user profile on auth change:', error);
+            if (profiles) {
+              console.log('User profile found after auth change:', profiles);
+              setUserPlan(profiles.plan as any || 'free');
             }
+          } catch (profileError) {
+            console.error('Error fetching user profile after auth change:', profileError);
           }
         }
       } else if (event === 'SIGNED_OUT') {
         console.log('User signed out, clearing user state');
         setUser(null);
+        setUserPlan('free');
       }
       
       setLoading(false);
@@ -188,13 +164,20 @@ function App() {
               console.log('User metadata:', session.user.user_metadata);
               setUser(session.user);
               
-              // Get user plan from metadata
-              const userMetadataPlan = session.user.user_metadata?.plan || 
-                                      session.user.raw_user_meta_data?.plan;
-              
-              if (userMetadataPlan && ['free', 'core', 'pro', 'agency'].includes(userMetadataPlan)) {
-                console.log('Setting user plan from metadata after auth success:', userMetadataPlan);
-                setUserPlan(userMetadataPlan as 'free' | 'core' | 'pro' | 'agency');
+              // Fetch user profile to get plan
+              try {
+                const { data: profiles } = await supabase
+                  .from('user_profiles')
+                  .select('*')
+                  .eq('user_id', session.user.id)
+                  .single();
+                  
+                if (profiles) {
+                  console.log('User profile found after auth success:', profiles);
+                  setUserPlan(profiles.plan as any || 'free');
+                }
+              } catch (profileError) {
+                console.error('Error fetching user profile after auth success:', profileError);
               }
               
               resolve();
@@ -230,10 +213,35 @@ function App() {
     }
   };
 
-  const handleOnboardingComplete = () => {
+  const handleOnboardingComplete = async () => {
     setShowOnboarding(false);
     
     console.log('Onboarding completed in App.tsx - setting walkthrough trigger and navigating to dashboard');
+    
+    // Update user profile with selected plan if needed
+    if (user) {
+      try {
+        const { data: existingProfile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+          
+        if (existingProfile) {
+          // Update existing profile
+          await supabase
+            .from('user_profiles')
+            .update({ 
+              plan: userPlan,
+              onboarding_completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingProfile.id);
+        }
+      } catch (error) {
+        console.error('Error updating user profile after onboarding:', error);
+      }
+    }
     
     // Set the walkthrough trigger flag BEFORE navigating to dashboard
     localStorage.setItem('seogenix_immediate_walkthrough', 'true');

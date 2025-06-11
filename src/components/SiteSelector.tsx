@@ -56,11 +56,15 @@ const SiteSelector: React.FC<SiteSelectorProps> = ({
               onChange={(e) => onWebsiteChange(e.target.value)}
               className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-4 py-3 pr-10 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             >
-              {websites.map((website, index) => (
-                <option key={index} value={website.url}>
-                  {website.name} ({website.url})
-                </option>
-              ))}
+              {websites.length === 0 ? (
+                <option value="">No websites available</option>
+              ) : (
+                websites.map((website, index) => (
+                  <option key={index} value={website.url}>
+                    {website.name} ({website.url})
+                  </option>
+                ))
+              )}
             </select>
             <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
           </div>
