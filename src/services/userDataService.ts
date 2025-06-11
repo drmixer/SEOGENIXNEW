@@ -161,16 +161,14 @@ export const userDataService = {
         .from('white_label_settings')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .limit(1);
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          return null; // No settings found
-        }
         throw error;
       }
 
-      return data;
+      // Return null if no settings found, otherwise return the first result
+      return data && data.length > 0 ? data[0] : null;
     } catch (error) {
       console.error('Error fetching white-label settings:', error);
       return null;
