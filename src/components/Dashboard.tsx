@@ -433,7 +433,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Handle tool launch from Genie
   const handleToolLaunch = async (toolId: string) => {
     setSelectedTool(toolId);
-    setActiveToolModal(toolId);
+    setActiveSection(toolId);
     
     // Track tool launch activity
     try {
@@ -453,12 +453,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const handleToolComplete = (toolName: string, success: boolean, message?: string) => {
     if (success) {
       addToast({
-        id: `tool-${Date.now()}`,
         type: 'success',
         title: `${toolName} Completed`,
         message: message || 'Tool executed successfully',
-        duration: 4000,
-        onClose: removeToast
+        duration: 4000
       });
       
       // Regenerate insights after tool completion
@@ -467,12 +465,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       }, 1000);
     } else {
       addToast({
-        id: `tool-error-${Date.now()}`,
         type: 'error',
         title: `${toolName} Failed`,
         message: message || 'Tool execution failed',
-        duration: 6000,
-        onClose: removeToast
+        duration: 6000
       });
     }
   };
@@ -480,15 +476,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Handle insight action clicks
   const handleInsightAction = (insight: ActionableInsight) => {
     if (insight.actionUrl) {
-      if (insight.actionUrl === 'audit' || insight.actionUrl === 'schema' || 
-          insight.actionUrl === 'citations' || insight.actionUrl === 'optimizer' ||
-          insight.actionUrl === 'generator' || insight.actionUrl === 'discovery') {
-        // Open tool modal instead of navigating
-        setSelectedTool(insight.actionUrl);
-        setActiveToolModal(insight.actionUrl);
-      } else {
-        setActiveSection(insight.actionUrl);
-      }
+      setActiveSection(insight.actionUrl);
       
       // Track insight action
       try {
@@ -507,11 +495,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         console.error('Error tracking insight action:', error);
       }
     }
-  };
-
-  // Set active tool modal
-  const setActiveToolModal = (toolId: string | null) => {
-    setSelectedTool(toolId);
   };
 
   // Handle settings modal actions
@@ -684,7 +667,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   selectedWebsite={selectedWebsite}
                   userProfile={userProfile}
                   onToolComplete={handleToolComplete}
-                  selectedTool={selectedTool}
                 />
               </>
             ) : (
@@ -702,7 +684,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                       Run your first AI Visibility Audit to see how well your content is optimized for AI systems like ChatGPT, Claude, and voice assistants.
                     </p>
                     <button
-                      onClick={() => setActiveToolModal('audit')}
+                      onClick={() => setActiveSection('audit')}
                       className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition-all duration-300 inline-flex items-center space-x-2"
                     >
                       <span>Run Your First Audit</span>
@@ -776,17 +758,35 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           </div>
         );
       
+      case 'audit':
+      case 'schema':
+      case 'citations':
+      case 'voice':
+      case 'summaries':
+      case 'entities':
+      case 'generator':
+      case 'optimizer':
+      case 'prompts':
+      case 'competitive':
+      case 'discovery':
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool={activeSection}
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+          onToolComplete={handleToolComplete}
+        />;
+      
       default:
-        return (
-          <ToolsGrid 
-            userPlan={userPlan} 
-            onToolRun={() => setHasRunTools(true)} 
-            selectedWebsite={selectedWebsite}
-            userProfile={userProfile}
-            onToolComplete={handleToolComplete}
-            selectedTool={activeSection}
-          />
-        );
+        return <ToolsGrid 
+          userPlan={userPlan} 
+          onToolRun={() => setHasRunTools(true)} 
+          selectedTool={activeSection}
+          selectedWebsite={selectedWebsite}
+          userProfile={userProfile}
+          onToolComplete={handleToolComplete}
+        />;
     }
   };
 
@@ -842,12 +842,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           onProfileUpdate={(profile) => {
             setUserProfile(profile);
             addToast({
-              id: `settings-updated-${Date.now()}`,
               type: 'success',
               title: 'Settings Updated',
               message: 'Your profile has been updated successfully',
-              duration: 3000,
-              onClose: removeToast
+              duration: 3000
             });
             // Regenerate insights after profile update
             setTimeout(() => {
@@ -864,12 +862,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           userPlan={userPlan}
           onPlanChange={(plan) => {
             addToast({
-              id: `plan-change-${Date.now()}`,
               type: 'info',
               title: 'Plan Change Requested',
               message: `Plan change to ${plan} would be processed by payment system`,
-              duration: 4000,
-              onClose: removeToast
+              duration: 4000
             });
           }}
         />

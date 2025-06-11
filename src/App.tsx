@@ -33,6 +33,38 @@ function App() {
             console.log('User metadata:', session.user.user_metadata);
             console.log('User raw metadata:', session.user.raw_user_meta_data);
             setUser(session.user);
+            
+            // Get user plan from metadata
+            const userMetadataPlan = session.user.user_metadata?.plan || 
+                                    session.user.raw_user_meta_data?.plan;
+            
+            if (userMetadataPlan && ['free', 'core', 'pro', 'agency'].includes(userMetadataPlan)) {
+              console.log('Setting user plan from metadata:', userMetadataPlan);
+              setUserPlan(userMetadataPlan as 'free' | 'core' | 'pro' | 'agency');
+            } else {
+              // Try to get plan from user profile
+              try {
+                const { data: userProfile } = await supabase
+                  .from('user_profiles')
+                  .select('plan')
+                  .eq('user_id', session.user.id)
+                  .single();
+                
+                if (userProfile?.plan && ['free', 'core', 'pro', 'agency'].includes(userProfile.plan)) {
+                  console.log('Setting user plan from profile:', userProfile.plan);
+                  setUserPlan(userProfile.plan as 'free' | 'core' | 'pro' | 'agency');
+                  
+                  // Update user metadata if plan is in profile but not in metadata
+                  if (!userMetadataPlan) {
+                    await supabase.auth.updateUser({
+                      data: { plan: userProfile.plan }
+                    });
+                  }
+                }
+              } catch (error) {
+                console.error('Error getting user profile:', error);
+              }
+            }
           } else {
             console.log('No initial session found');
           }
@@ -59,6 +91,31 @@ function App() {
           console.log('User metadata from auth change:', session.user.user_metadata);
           console.log('User raw metadata from auth change:', session.user.raw_user_meta_data);
           setUser(session.user);
+          
+          // Get user plan from metadata
+          const userMetadataPlan = session.user.user_metadata?.plan || 
+                                  session.user.raw_user_meta_data?.plan;
+          
+          if (userMetadataPlan && ['free', 'core', 'pro', 'agency'].includes(userMetadataPlan)) {
+            console.log('Setting user plan from metadata on auth change:', userMetadataPlan);
+            setUserPlan(userMetadataPlan as 'free' | 'core' | 'pro' | 'agency');
+          } else {
+            // Try to get plan from user profile
+            try {
+              const { data: userProfile } = await supabase
+                .from('user_profiles')
+                .select('plan')
+                .eq('user_id', session.user.id)
+                .single();
+              
+              if (userProfile?.plan && ['free', 'core', 'pro', 'agency'].includes(userProfile.plan)) {
+                console.log('Setting user plan from profile on auth change:', userProfile.plan);
+                setUserPlan(userProfile.plan as 'free' | 'core' | 'pro' | 'agency');
+              }
+            } catch (error) {
+              console.error('Error getting user profile on auth change:', error);
+            }
+          }
         }
       } else if (event === 'SIGNED_OUT') {
         console.log('User signed out, clearing user state');
@@ -130,6 +187,16 @@ function App() {
               console.log('User found in session:', session.user);
               console.log('User metadata:', session.user.user_metadata);
               setUser(session.user);
+              
+              // Get user plan from metadata
+              const userMetadataPlan = session.user.user_metadata?.plan || 
+                                      session.user.raw_user_meta_data?.plan;
+              
+              if (userMetadataPlan && ['free', 'core', 'pro', 'agency'].includes(userMetadataPlan)) {
+                console.log('Setting user plan from metadata after auth success:', userMetadataPlan);
+                setUserPlan(userMetadataPlan as 'free' | 'core' | 'pro' | 'agency');
+              }
+              
               resolve();
               return;
             }

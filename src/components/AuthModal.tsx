@@ -15,6 +15,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +52,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
           options: {
             data: {
               full_name: name,
+              plan: selectedPlan // Store the selected plan in user metadata
             },
           },
         });
@@ -169,6 +171,30 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
               </div>
             </div>
 
+            {!isLogin && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select Plan
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['free', 'core', 'pro', 'agency'] as const).map((plan) => (
+                    <button
+                      key={plan}
+                      type="button"
+                      onClick={() => setSelectedPlan(plan)}
+                      className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        selectedPlan === plan
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {plan.charAt(0).toUpperCase() + plan.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p className="text-red-800 text-sm">{error}</p>
@@ -209,7 +235,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
           {!isLogin && (
             <div className="mt-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-blue-800 text-sm">
-                By creating an account, you'll start with our Free plan. You can upgrade anytime to access advanced features.
+                By creating an account, you'll start with our {selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} plan. You can upgrade or downgrade anytime.
               </p>
             </div>
           )}

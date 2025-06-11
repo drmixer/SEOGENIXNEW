@@ -110,7 +110,11 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         // Save to database
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          console.log(`Creating user profile with plan: ${userPlan}`);
+          // Update user metadata with plan
+          await supabase.auth.updateUser({
+            data: { plan: userPlan }
+          });
+          
           await userDataService.createUserProfile({
             user_id: user.id,
             websites: onboardingData.websites,
@@ -139,7 +143,6 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
       
       // Save to localStorage for backward compatibility
       localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
-      localStorage.setItem('seogenix_user_plan', userPlan);
       
       // Complete onboarding
       onComplete();
