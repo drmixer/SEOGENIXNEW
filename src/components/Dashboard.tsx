@@ -9,6 +9,7 @@ import ContentEditor from './ContentEditor';
 import RealTimeContentEditor from './RealTimeContentEditor';
 import CompetitiveVisualization from './CompetitiveVisualization';
 import CMSIntegrations from './CMSIntegrations';
+import OptimizationPlaybooks from './OptimizationPlaybooks';
 import ChatbotPopup from './ChatbotPopup';
 import DashboardWalkthrough from './DashboardWalkthrough';
 import SiteSelector from './SiteSelector';
@@ -36,6 +37,8 @@ interface ActionableInsight {
   actionUrl?: string;
   icon: React.ComponentType<any>;
   color: string;
+  contextualTip?: string;
+  learnMoreLink?: string;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut }) => {
@@ -138,7 +141,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           action: 'Add Website',
           actionUrl: 'settings',
           icon: Target,
-          color: 'from-red-500 to-red-600'
+          color: 'from-red-500 to-red-600',
+          contextualTip: 'Adding your website is essential for AI visibility tracking. Without it, you cannot run audits or monitor your performance against competitors.',
+          learnMoreLink: 'https://docs.seogenix.com/getting-started/add-website'
         });
       }
 
@@ -152,7 +157,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           action: 'Run Audit',
           actionUrl: 'audit',
           icon: BarChart3,
-          color: 'from-blue-500 to-blue-600'
+          color: 'from-blue-500 to-blue-600',
+          contextualTip: 'AI visibility audits analyze how well your content is structured for AI systems like ChatGPT, Claude, and voice assistants. This baseline is crucial for improvement.',
+          learnMoreLink: 'https://docs.seogenix.com/tools/ai-visibility-audit'
         });
       }
 
@@ -168,7 +175,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             action: 'Optimize Content',
             actionUrl: 'optimizer',
             icon: AlertTriangle,
-            color: 'from-red-500 to-red-600'
+            color: 'from-red-500 to-red-600',
+            contextualTip: 'Scores below 60 indicate significant issues with AI comprehension. Content optimization can quickly improve your visibility and citation likelihood.',
+            learnMoreLink: 'https://docs.seogenix.com/optimization/content-optimizer'
           });
         } else if (latestAudit.overall_score < 75) {
           insights.push({
@@ -179,7 +188,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             action: 'Generate Schema',
             actionUrl: 'schema',
             icon: TrendingUp,
-            color: 'from-yellow-500 to-yellow-600'
+            color: 'from-yellow-500 to-yellow-600',
+            contextualTip: 'Schema markup helps AI systems understand your content structure and context, leading to better comprehension and higher citation rates.',
+            learnMoreLink: 'https://docs.seogenix.com/tools/schema-generator'
           });
         }
 
@@ -193,7 +204,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             action: 'Generate Content',
             actionUrl: 'generator',
             icon: Zap,
-            color: 'from-purple-500 to-purple-600'
+            color: 'from-purple-500 to-purple-600',
+            contextualTip: 'Well-structured content with clear headings, FAQs, and logical flow helps AI systems extract and cite information more effectively.',
+            learnMoreLink: 'https://docs.seogenix.com/optimization/content-structure'
           });
         }
 
@@ -206,7 +219,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             action: 'Track Citations',
             actionUrl: 'citations',
             icon: Target,
-            color: 'from-teal-500 to-teal-600'
+            color: 'from-teal-500 to-teal-600',
+            contextualTip: 'Citation likelihood measures how likely AI systems are to reference your content. Higher scores mean more AI mentions and increased visibility.',
+            learnMoreLink: 'https://docs.seogenix.com/monitoring/citation-tracking'
           });
         }
       }
@@ -221,7 +236,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           action: 'Discover Competitors',
           actionUrl: 'discovery',
           icon: Users,
-          color: 'from-indigo-500 to-indigo-600'
+          color: 'from-indigo-500 to-indigo-600',
+          contextualTip: 'Competitive analysis reveals gaps in your AI visibility strategy and helps identify content opportunities your competitors are missing.',
+          learnMoreLink: 'https://docs.seogenix.com/analysis/competitive-intelligence'
         });
       }
 
@@ -240,7 +257,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           action: 'Run Quick Audit',
           actionUrl: 'audit',
           icon: CheckCircle,
-          color: 'from-green-500 to-green-600'
+          color: 'from-green-500 to-green-600',
+          contextualTip: 'AI algorithms and search patterns evolve constantly. Regular optimization ensures your content stays visible and relevant to AI systems.',
+          learnMoreLink: 'https://docs.seogenix.com/best-practices/regular-optimization'
         });
       }
 
@@ -254,7 +273,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           action: 'View Plans',
           actionUrl: 'billing',
           icon: TrendingUp,
-          color: 'from-purple-500 to-purple-600'
+          color: 'from-purple-500 to-purple-600',
+          contextualTip: 'Advanced plans provide detailed subscore breakdowns, optimization tools, and competitive analysis to accelerate your AI visibility improvements.',
+          learnMoreLink: 'https://docs.seogenix.com/plans/feature-comparison'
         });
       }
 
@@ -268,7 +289,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           action: 'Analyze Competitors',
           actionUrl: 'competitive',
           icon: BarChart3,
-          color: 'from-green-500 to-green-600'
+          color: 'from-green-500 to-green-600',
+          contextualTip: 'High scores indicate excellent AI visibility. Competitive analysis helps you stay ahead by identifying emerging trends and maintaining your advantage.',
+          learnMoreLink: 'https://docs.seogenix.com/advanced/maintaining-leadership'
         });
       }
 
@@ -574,7 +597,27 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                             </div>
                             <div className="flex-1">
                               <h4 className="font-medium text-gray-900 mb-1">{insight.title}</h4>
-                              <p className="text-sm text-gray-600 mb-3">{insight.description}</p>
+                              <p className="text-sm text-gray-600 mb-2">{insight.description}</p>
+                              
+                              {/* Contextual Tip */}
+                              {insight.contextualTip && (
+                                <div className="bg-white bg-opacity-50 rounded-lg p-3 mb-3 border border-gray-200">
+                                  <p className="text-xs text-gray-700 leading-relaxed">
+                                    💡 <strong>Why this matters:</strong> {insight.contextualTip}
+                                  </p>
+                                  {insight.learnMoreLink && (
+                                    <a 
+                                      href={insight.learnMoreLink} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:text-blue-700 mt-1 inline-block"
+                                    >
+                                      Learn more →
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                              
                               <button
                                 onClick={() => handleInsightAction(insight)}
                                 className={`inline-flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
@@ -665,6 +708,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             )}
           </div>
         );
+      
+      case 'playbooks':
+        return <OptimizationPlaybooks userPlan={userPlan} onSectionChange={setActiveSection} />;
       
       case 'history':
         return <HistoricalPerformance userPlan={userPlan} selectedWebsite={selectedWebsite} />;

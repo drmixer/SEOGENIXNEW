@@ -18,7 +18,8 @@ import {
   Radar,
   Brain,
   Eye,
-  Layers
+  Layers,
+  BookOpen
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -55,6 +56,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const newFeatures = [
+    { id: 'playbooks', label: 'Optimization Playbooks', icon: BookOpen, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
     { id: 'history', label: 'Performance History', icon: History, available: isDevelopment || userPlan !== 'free' },
     { id: 'editor', label: 'Content Editor', icon: Edit3, available: isDevelopment || userPlan !== 'free' },
     { id: 'realtime-editor', label: 'Real-time Editor', icon: Brain, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
