@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Loader, Copy, Download, ExternalLink, CheckCircle, AlertCircle, Target, FileText, Search, Mic, Globe, Users, Zap, TrendingUp, Lightbulb, BarChart3, Radar } from 'lucide-react';
+import { apiService } from '../services/api';
+import { userDataService } from '../services/userDataService';
+import { supabase } from '../lib/supabase';
 
 interface ToolModalProps {
   isOpen: boolean;
@@ -25,6 +28,14 @@ const ToolModal: React.FC<ToolModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'config' | 'running' | 'results'>('config');
   const [formData, setFormData] = useState<Record<string, any>>({});
+
+  // Reset form data when tool changes
+  useEffect(() => {
+    setFormData({});
+    setResult(null);
+    setError(null);
+    setStep('config');
+  }, [toolId]);
 
   if (!isOpen) return null;
 
@@ -68,148 +79,141 @@ const ToolModal: React.FC<ToolModalProps> = ({
     setError(null);
 
     try {
-      // Simulate API call with a delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      let result: any = {};
+      const websiteUrl = selectedWebsite || formData.url || 'https://example.com';
 
-      // Generate mock results based on tool type
-      let mockResult: any = {};
-      
+      // Track tool usage
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await userDataService.trackActivity({
+            user_id: user.id,
+            activity_type: 'tool_used',
+            tool_id: toolId,
+            website_url: websiteUrl,
+            activity_data: { timestamp: new Date().toISOString() }
+          });
+        }
+      } catch (error) {
+        console.error('Error tracking tool usage:', error);
+      }
+
       switch (toolId) {
         case 'audit':
-          mockResult = {
-            overallScore: Math.floor(Math.random() * 30) + 60,
-            subscores: {
-              aiUnderstanding: Math.floor(Math.random() * 30) + 60,
-              citationLikelihood: Math.floor(Math.random() * 30) + 60,
-              conversationalReadiness: Math.floor(Math.random() * 30) + 60,
-              contentStructure: Math.floor(Math.random() * 30) + 60
-            },
-            recommendations: [
-              'Add more structured data markup to improve AI comprehension',
-              'Create FAQ sections to better answer common questions',
-              'Improve heading structure for better content organization',
-              'Add more entity definitions for key concepts',
-              'Optimize for voice search with conversational content'
-            ],
-            issues: [
-              'Limited structured data implementation',
-              'Inconsistent heading hierarchy',
-              'Missing conversational content elements',
-              'Insufficient context for AI understanding'
-            ]
-          };
+          result = await apiService.runAudit(websiteUrl);
+          
+          // Save audit result to history
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await userDataService.saveAuditResult({
+                user_id: user.id,
+                website_url: websiteUrl,
+                overall_score: result.overallScore,
+                ai_understanding: result.subscores.aiUnderstanding,
+                citation_likelihood: result.subscores.citationLikelihood,
+                conversational_readiness: result.subscores.conversationalReadiness,
+                content_structure: result.subscores.contentStructure,
+                recommendations: result.recommendations,
+                issues: result.issues,
+                audit_data: result
+              });
+            }
+          } catch (error) {
+            console.error('Error saving audit result:', error);
+          }
           break;
 
         case 'schema':
-          mockResult = {
-            schema: `{
-  "@context": "https://schema.org",
-  "@type": "Article",
-  "headline": "Understanding AI Visibility",
-  "author": {
-    "@type": "Person",
-    "name": "SEOGENIX Team"
-  },
-  "publisher": {
-    "@type": "Organization",
-    "name": "SEOGENIX",
-    "logo": {
-      "@type": "ImageObject",
-      "url": "https://example.com/logo.png"
-    }
-  },
-  "datePublished": "2025-01-15T08:00:00+08:00",
-  "dateModified": "2025-01-20T09:30:00+08:00",
-  "description": "Learn how AI visibility impacts your content's performance in modern search.",
-  "mainEntityOfPage": {
-    "@type": "WebPage",
-    "@id": "${selectedWebsite || 'https://example.com'}"
-  }
-}`,
-            instructions: 'Add this JSON-LD script tag to your page head section to improve AI understanding',
-            implementation: `<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "Article",
-  "headline": "Understanding AI Visibility",
-  "author": {
-    "@type": "Person",
-    "name": "SEOGENIX Team"
-  },
-  "publisher": {
-    "@type": "Organization",
-    "name": "SEOGENIX",
-    "logo": {
-      "@type": "ImageObject",
-      "url": "https://example.com/logo.png"
-    }
-  },
-  "datePublished": "2025-01-15T08:00:00+08:00",
-  "dateModified": "2025-01-20T09:30:00+08:00",
-  "description": "Learn how AI visibility impacts your content's performance in modern search.",
-  "mainEntityOfPage": {
-    "@type": "WebPage",
-    "@id": "${selectedWebsite || 'https://example.com'}"
-  }
-}
-</script>`
-          };
+          result = await apiService.generateSchema(websiteUrl, formData.contentType || 'article');
           break;
 
         case 'citations':
-          mockResult = {
-            total: Math.floor(Math.random() * 20) + 5,
-            confidenceBreakdown: {
-              high: Math.floor(Math.random() * 10) + 2,
-              medium: Math.floor(Math.random() * 10) + 2,
-              low: Math.floor(Math.random() * 5)
-            },
-            sources: {
-              llm: Math.floor(Math.random() * 10) + 2,
-              google: Math.floor(Math.random() * 5) + 1,
-              reddit: Math.floor(Math.random() * 3),
-              news: Math.floor(Math.random() * 2)
-            },
-            citations: [
-              {
-                source: 'ChatGPT',
-                url: 'https://chat.openai.com',
-                snippet: `According to ${selectedWebsite || 'example.com'}, AI visibility refers to how well AI systems can understand, process, and cite your content...`,
-                date: new Date().toISOString(),
-                type: 'llm',
-                confidence_score: 95
-              },
-              {
-                source: 'Google Search',
-                url: 'https://google.com/search?q=ai+visibility',
-                snippet: `${selectedWebsite || 'Example.com'} provides a comprehensive guide to optimizing content for AI systems...`,
-                date: new Date().toISOString(),
-                type: 'google',
-                confidence_score: 85
-              },
-              {
-                source: 'Reddit - r/SEO',
-                url: 'https://reddit.com/r/SEO/comments/abc123',
-                snippet: `I found this great resource on ${selectedWebsite || 'example.com'} about AI visibility optimization...`,
-                date: new Date().toISOString(),
-                type: 'reddit',
-                confidence_score: 70
-              }
-            ]
-          };
+          const domain = new URL(websiteUrl).hostname;
+          const keywords = formData.keywords ? formData.keywords.split(',').map((k: string) => k.trim()) : 
+                          userProfile?.industry ? [userProfile.industry, 'AI', 'SEO'] : ['AI', 'SEO', 'optimization'];
+          result = await apiService.trackCitations(domain, keywords);
           break;
 
-        // Add more mock results for other tools as needed
+        case 'voice':
+          const voiceQuery = formData.query || `What is ${new URL(websiteUrl).hostname}?`;
+          const assistants = formData.assistants || ['siri', 'alexa', 'google'];
+          result = await apiService.testVoiceAssistants(voiceQuery, assistants);
+          break;
+
+        case 'summaries':
+          result = await apiService.generateLLMSummary(websiteUrl, formData.summaryType || 'overview');
+          break;
+
+        case 'entities':
+          result = await apiService.analyzeEntityCoverage(
+            websiteUrl, 
+            undefined, 
+            userProfile?.industry,
+            userProfile?.competitors?.map((c: any) => c.url) || []
+          );
+          break;
+
+        case 'generator':
+          result = await apiService.generateAIContent(
+            formData.contentType || 'faq',
+            formData.topic || userProfile?.industry || 'Technology',
+            formData.keywords ? formData.keywords.split(',').map((k: string) => k.trim()) : ['AI', 'SEO', 'optimization'],
+            formData.tone || 'professional',
+            userProfile?.industry,
+            formData.audience || 'Business owners and marketers'
+          );
+          break;
+
+        case 'optimizer':
+          const sampleContent = formData.content || `Welcome to our website. We provide excellent services and solutions for your business needs.`;
+          result = await apiService.optimizeContent(
+            sampleContent,
+            formData.keywords ? formData.keywords.split(',').map((k: string) => k.trim()) : ['AI', 'SEO', 'optimization'],
+            formData.contentType || 'article'
+          );
+          break;
+
+        case 'prompts':
+          result = await apiService.generatePromptSuggestions(
+            formData.topic || userProfile?.industry || 'Technology',
+            userProfile?.industry,
+            formData.audience || 'Business professionals',
+            formData.contentType || 'article',
+            formData.intent || 'informational'
+          );
+          break;
+
+        case 'competitive':
+          const competitors = userProfile?.competitors?.map((c: any) => c.url) || 
+                             formData.competitors?.split(',').map((c: string) => c.trim()) || 
+                             ['https://competitor1.com', 'https://competitor2.com'];
+          result = await apiService.performCompetitiveAnalysis(
+            websiteUrl,
+            competitors,
+            userProfile?.industry,
+            formData.analysisType || 'detailed'
+          );
+          break;
+
+        case 'discovery':
+          result = await apiService.discoverCompetitors(
+            websiteUrl,
+            userProfile?.industry,
+            userProfile?.business_description,
+            userProfile?.competitors?.map((c: any) => c.url) || [],
+            formData.analysisDepth || 'comprehensive'
+          );
+          break;
+
         default:
-          mockResult = {
-            message: `${toolName} executed successfully`,
-            timestamp: new Date().toISOString()
-          };
+          throw new Error('Unknown tool');
       }
 
-      setResult(mockResult);
+      setResult(result);
       setStep('results');
       onComplete?.(toolName, true, 'Tool executed successfully');
+
     } catch (error) {
       console.error(`Error running ${toolId}:`, error);
       setError(error.message || 'Tool execution failed');
@@ -232,7 +236,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
               <input
                 type="url"
-                value={selectedWebsite || ''}
+                value={selectedWebsite || formData.url || ''}
                 readOnly={!!selectedWebsite}
                 onChange={(e) => setFormData({ ...formData, url: e.target.value })}
                 placeholder="https://example.com"
@@ -262,7 +266,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
               <input
                 type="url"
-                value={selectedWebsite || ''}
+                value={selectedWebsite || formData.url || ''}
                 readOnly={!!selectedWebsite}
                 onChange={(e) => setFormData({ ...formData, url: e.target.value })}
                 placeholder="https://example.com"
@@ -322,6 +326,208 @@ const ToolModal: React.FC<ToolModalProps> = ({
               <label htmlFor="savePrompt" className="ml-2 block text-sm text-gray-700">
                 Save this search for future tracking
               </label>
+            </div>
+          </div>
+        );
+      
+      case 'voice':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Voice Query</label>
+              <input
+                type="text"
+                value={formData.query || `What is ${selectedWebsite ? new URL(selectedWebsite).hostname : 'your website'} about?`}
+                onChange={(e) => setFormData({ ...formData, query: e.target.value })}
+                placeholder="What is your website about?"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Voice Assistants</label>
+              <div className="space-y-2">
+                {['siri', 'alexa', 'google'].map(assistant => (
+                  <label key={assistant} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.assistants ? formData.assistants.includes(assistant) : true}
+                      onChange={(e) => {
+                        const current = formData.assistants || ['siri', 'alexa', 'google'];
+                        if (e.target.checked) {
+                          setFormData({ ...formData, assistants: [...current.filter((a: string) => a !== assistant), assistant] });
+                        } else {
+                          setFormData({ ...formData, assistants: current.filter((a: string) => a !== assistant) });
+                        }
+                      }}
+                      className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700 capitalize">{assistant}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      
+      case 'competitive':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Your Website</label>
+              <input
+                type="url"
+                value={selectedWebsite || formData.url || ''}
+                readOnly={!!selectedWebsite}
+                onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                placeholder="https://example.com"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Competitors</label>
+              {userProfile?.competitors && userProfile.competitors.length > 0 ? (
+                <div className="space-y-2">
+                  {userProfile.competitors.map((competitor: any, index: number) => (
+                    <label key={index} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={formData.selectedCompetitors ? formData.selectedCompetitors.includes(competitor.url) : true}
+                        onChange={(e) => {
+                          const current = formData.selectedCompetitors || userProfile.competitors.map((c: any) => c.url);
+                          if (e.target.checked) {
+                            setFormData({ ...formData, selectedCompetitors: [...current.filter((url: string) => url !== competitor.url), competitor.url] });
+                          } else {
+                            setFormData({ ...formData, selectedCompetitors: current.filter((url: string) => url !== competitor.url) });
+                          }
+                        }}
+                        className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{competitor.name} ({competitor.url})</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  <input
+                    type="text"
+                    value={formData.competitors || ''}
+                    onChange={(e) => setFormData({ ...formData, competitors: e.target.value })}
+                    placeholder="https://competitor1.com, https://competitor2.com"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Enter competitor URLs separated by commas</p>
+                </div>
+              )}
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Analysis Type</label>
+              <select
+                value={formData.analysisType || 'detailed'}
+                onChange={(e) => setFormData({ ...formData, analysisType: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="basic">Basic Analysis</option>
+                <option value="detailed">Detailed Analysis</option>
+                <option value="comprehensive">Comprehensive Analysis</option>
+              </select>
+            </div>
+          </div>
+        );
+      
+      case 'discovery':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Your Website</label>
+              <input
+                type="url"
+                value={selectedWebsite || formData.url || ''}
+                readOnly={!!selectedWebsite}
+                onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                placeholder="https://example.com"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
+              <input
+                type="text"
+                value={formData.industry || userProfile?.industry || ''}
+                onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+                placeholder="Technology, Healthcare, Finance, etc."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Analysis Depth</label>
+              <select
+                value={formData.analysisDepth || 'comprehensive'}
+                onChange={(e) => setFormData({ ...formData, analysisDepth: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="basic">Basic</option>
+                <option value="comprehensive">Comprehensive</option>
+              </select>
+            </div>
+          </div>
+        );
+      
+      case 'generator':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Content Type</label>
+              <select
+                value={formData.contentType || 'faq'}
+                onChange={(e) => setFormData({ ...formData, contentType: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="faq">FAQ Content</option>
+                <option value="meta-tags">Meta Tags</option>
+                <option value="snippets">Featured Snippets</option>
+                <option value="headings">Heading Structure</option>
+                <option value="descriptions">Descriptions</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Topic</label>
+              <input
+                type="text"
+                value={formData.topic || userProfile?.industry || ''}
+                onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                placeholder="AI Visibility, SEO, etc."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Target Keywords (comma separated)</label>
+              <input
+                type="text"
+                value={formData.keywords || 'AI, SEO, optimization'}
+                onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
+                placeholder="AI, SEO, optimization"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tone</label>
+              <select
+                value={formData.tone || 'professional'}
+                onChange={(e) => setFormData({ ...formData, tone: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="professional">Professional</option>
+                <option value="casual">Casual</option>
+                <option value="technical">Technical</option>
+                <option value="friendly">Friendly</option>
+              </select>
             </div>
           </div>
         );
@@ -494,8 +700,337 @@ const ToolModal: React.FC<ToolModalProps> = ({
           </div>
         );
 
-      // Add more result renderers for other tools
-      
+      case 'voice':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-blue-600">{result.summary?.totalMentions || 0}</div>
+                <div className="text-sm text-blue-800">Mentions</div>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-green-600">{result.summary?.averageRanking || 0}</div>
+                <div className="text-sm text-green-800">Avg Ranking</div>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-purple-600">{result.summary?.averageConfidence || 0}%</div>
+                <div className="text-sm text-purple-800">Confidence</div>
+              </div>
+            </div>
+            
+            {result.results && result.results.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="font-medium text-gray-900">Assistant Responses:</h4>
+                {result.results.map((voiceResult: any, index: number) => (
+                  <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">{voiceResult.assistant}</span>
+                      <span className={`text-sm px-2 py-1 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2">{voiceResult.response}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'summaries':
+        return (
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">AI-Optimized Summary</h4>
+              <p className="text-gray-700 mb-3">{result.summary}</p>
+              
+              {result.entities && result.entities.length > 0 && (
+                <div className="mb-3">
+                  <h5 className="font-medium text-gray-800 mb-1">Key Entities:</h5>
+                  <div className="flex flex-wrap gap-1">
+                    {result.entities.slice(0, 5).map((entity: string, index: number) => (
+                      <span key={index} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                        {entity.split(':')[0]}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {result.topics && result.topics.length > 0 && (
+                <div>
+                  <h5 className="font-medium text-gray-800 mb-1">Main Topics:</h5>
+                  <div className="flex flex-wrap gap-1">
+                    {result.topics.slice(0, 5).map((topic: string, index: number) => (
+                      <span key={index} className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                        {topic}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'entities':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-blue-600">{result.coverageScore || 0}%</div>
+                <div className="text-sm text-blue-800">Coverage Score</div>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-green-600">{result.mentionedCount || 0}</div>
+                <div className="text-sm text-green-800">Mentioned</div>
+              </div>
+              <div className="bg-red-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-red-600">{result.missingCount || 0}</div>
+                <div className="text-sm text-red-800">Missing</div>
+              </div>
+            </div>
+            
+            {result.missingEntities && result.missingEntities.length > 0 && (
+              <div className="bg-yellow-50 p-4 rounded-lg">
+                <h4 className="font-medium text-yellow-900 mb-2">Missing Important Entities:</h4>
+                <div className="space-y-2">
+                  {result.missingEntities.slice(0, 5).map((entity: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <span className="text-yellow-800">{entity.name}</span>
+                      <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded">
+                        {entity.type} - {entity.importance}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'generator':
+        return (
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-gray-900">Generated Content</h4>
+                <button
+                  onClick={() => copyToClipboard(JSON.stringify(result.generatedContent, null, 2))}
+                  className="text-blue-600 hover:text-blue-700 p-1 rounded"
+                  title="Copy to clipboard"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+              
+              {result.generatedContent?.faqs && (
+                <div className="space-y-2">
+                  <h5 className="font-medium text-gray-800">Generated FAQs:</h5>
+                  {result.generatedContent.faqs.slice(0, 3).map((faq: any, index: number) => (
+                    <div key={index} className="bg-white p-3 rounded border">
+                      <div className="font-medium text-gray-900">{faq.question}</div>
+                      <div className="text-gray-700 text-sm mt-1">{faq.answer}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <div className="mt-3 text-xs text-gray-600">
+                Word count: {result.wordCount} | Generated: {new Date(result.generatedAt).toLocaleString()}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'optimizer':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-red-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-red-600">{result.originalScore || 0}</div>
+                <div className="text-sm text-red-800">Original Score</div>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-green-600">{result.optimizedScore || 0}</div>
+                <div className="text-sm text-green-800">Optimized Score</div>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-blue-600">+{result.improvement || 0}</div>
+                <div className="text-sm text-blue-800">Improvement</div>
+              </div>
+            </div>
+            
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Optimized Content:</h4>
+              <div className="bg-white p-3 rounded border text-sm text-gray-700 whitespace-pre-wrap max-h-60 overflow-y-auto">
+                {result.optimizedContent}
+              </div>
+              <div className="flex justify-end mt-2">
+                <button
+                  onClick={() => copyToClipboard(result.optimizedContent)}
+                  className="text-blue-600 hover:text-blue-700 flex items-center space-x-1 text-sm"
+                >
+                  <Copy className="w-4 h-4" />
+                  <span>Copy Content</span>
+                </button>
+              </div>
+            </div>
+            
+            {result.improvements && result.improvements.length > 0 && (
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">Improvements Made:</h4>
+                <ul className="text-sm text-blue-800 space-y-2">
+                  {result.improvements.map((improvement: string, index: number) => (
+                    <li key={index} className="flex items-start space-x-2">
+                      <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <span>{improvement}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'prompts':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-blue-600">{result.totalPrompts || 0}</div>
+                <div className="text-sm text-blue-800">Total Prompts</div>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-green-600">{result.averageLikelihood || 0}%</div>
+                <div className="text-sm text-green-800">Avg Likelihood</div>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-purple-600">{result.statistics?.highLikelihoodPrompts || 0}</div>
+                <div className="text-sm text-purple-800">High Priority</div>
+              </div>
+            </div>
+            
+            {result.promptSuggestions && result.promptSuggestions.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="font-medium text-gray-900">Top Prompt Suggestions:</h4>
+                {result.promptSuggestions.slice(0, 5).map((prompt: any, index: number) => (
+                  <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">{prompt.category}</span>
+                      <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {prompt.likelihood}% likely
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 mt-2 font-medium">"{prompt.prompt}"</p>
+                    <p className="text-xs text-gray-600 mt-1">{prompt.optimization}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'competitive':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-blue-600">#{result.summary?.ranking || 'N/A'}</div>
+                <div className="text-sm text-blue-800">Your Ranking</div>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-green-600">{result.summary?.primarySiteScore || 0}</div>
+                <div className="text-sm text-green-800">Your Score</div>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-purple-600">{result.summary?.averageCompetitorScore || 0}</div>
+                <div className="text-sm text-purple-800">Competitor Avg</div>
+              </div>
+            </div>
+            
+            {result.competitorAnalyses && result.competitorAnalyses.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="font-medium text-gray-900">Competitor Analysis:</h4>
+                {result.competitorAnalyses.map((competitor: any, index: number) => (
+                  <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">{competitor.name}</span>
+                      <span className="text-sm bg-gray-200 text-gray-800 px-2 py-1 rounded">
+                        {competitor.overallScore}/100
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 mt-2 text-xs">
+                      <div>AI: {competitor.subscores?.aiUnderstanding}</div>
+                      <div>Citation: {competitor.subscores?.citationLikelihood}</div>
+                      <div>Voice: {competitor.subscores?.conversationalReadiness}</div>
+                      <div>Structure: {competitor.subscores?.contentStructure}</div>
+                    </div>
+                    
+                    {competitor.strengths && competitor.strengths.length > 0 && (
+                      <div className="mt-2">
+                        <h5 className="text-xs font-medium text-gray-700">Strengths:</h5>
+                        <p className="text-xs text-gray-600">{competitor.strengths[0]}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'discovery':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-blue-600">{result.totalSuggestions || 0}</div>
+                <div className="text-sm text-blue-800">Competitors Found</div>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-green-600">{result.averageRelevance || 0}%</div>
+                <div className="text-sm text-green-800">Avg Relevance</div>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-lg text-center">
+                <div className="text-xl font-bold text-purple-600">{result.competitiveIntensity || 'Low'}</div>
+                <div className="text-sm text-purple-800">Market Intensity</div>
+              </div>
+            </div>
+            
+            {result.competitorSuggestions && result.competitorSuggestions.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="font-medium text-gray-900">New Competitors Discovered:</h4>
+                {result.competitorSuggestions.map((competitor: any, index: number) => (
+                  <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">{competitor.name}</span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          {competitor.type}
+                        </span>
+                        <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">
+                          {competitor.relevanceScore}% relevant
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2">{competitor.reason}</p>
+                    <a 
+                      href={competitor.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1 mt-1"
+                    >
+                      <span>{competitor.url}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
       default:
         return (
           <div className="p-4 bg-gray-50 rounded-lg">
@@ -511,7 +1046,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className={`p-3 rounded-lg bg-gradient-to-r ${getToolColor(toolId)}`}>

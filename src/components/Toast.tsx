@@ -72,7 +72,7 @@ const Toast: React.FC<ToastProps> = ({ id, type, title, message, duration = 5000
       className={`
         transform transition-all duration-300 ease-in-out
         ${isVisible && !isLeaving ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
-        max-w-sm w-full shadow-lg rounded-lg pointer-events-auto overflow-hidden
+        w-full shadow-lg rounded-lg pointer-events-auto overflow-hidden
         ${getStyles()}
       `}
     >
