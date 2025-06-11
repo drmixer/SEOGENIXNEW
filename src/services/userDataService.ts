@@ -78,6 +78,23 @@ export interface CMSIntegration {
   updated_at: string;
 }
 
+export interface SavedCitationPrompt {
+  id: string;
+  user_id: string;
+  domain: string;
+  keywords: string[];
+  prompt_text?: string;
+  created_at: string;
+}
+
+export interface FingerprintPhrase {
+  id: string;
+  user_id: string;
+  phrase: string;
+  description?: string;
+  created_at: string;
+}
+
 export const userDataService = {
   // User Profile Management
   async getUserProfile(userId: string): Promise<UserProfile | null> {
@@ -256,6 +273,119 @@ export const userDataService = {
       return true;
     } catch (error) {
       console.error('Error deleting CMS integration:', error);
+      return false;
+    }
+  },
+
+  // Saved Citation Prompts
+  async getSavedCitationPrompts(userId: string): Promise<SavedCitationPrompt[]> {
+    try {
+      const { data, error } = await supabase
+        .from('saved_citation_prompts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching saved citation prompts:', error);
+      return [];
+    }
+  },
+
+  async saveCitationPrompt(prompt: Partial<SavedCitationPrompt>): Promise<SavedCitationPrompt | null> {
+    try {
+      const { data, error } = await supabase
+        .from('saved_citation_prompts')
+        .insert(prompt)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error saving citation prompt:', error);
+      return null;
+    }
+  },
+
+  async deleteSavedCitationPrompt(promptId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('saved_citation_prompts')
+        .delete()
+        .eq('id', promptId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting saved citation prompt:', error);
+      return false;
+    }
+  },
+
+  // Fingerprint Phrases
+  async getFingerprintPhrases(userId: string): Promise<FingerprintPhrase[]> {
+    try {
+      const { data, error } = await supabase
+        .from('fingerprint_phrases')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching fingerprint phrases:', error);
+      return [];
+    }
+  },
+
+  async saveFingerprintPhrase(phrase: Partial<FingerprintPhrase>): Promise<FingerprintPhrase | null> {
+    try {
+      const { data, error } = await supabase
+        .from('fingerprint_phrases')
+        .insert(phrase)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error saving fingerprint phrase:', error);
+      return null;
+    }
+  },
+
+  async updateFingerprintPhrase(phraseId: string, updates: Partial<FingerprintPhrase>): Promise<FingerprintPhrase | null> {
+    try {
+      const { data, error } = await supabase
+        .from('fingerprint_phrases')
+        .update(updates)
+        .eq('id', phraseId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating fingerprint phrase:', error);
+      return null;
+    }
+  },
+
+  async deleteFingerprintPhrase(phraseId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('fingerprint_phrases')
+        .delete()
+        .eq('id', phraseId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting fingerprint phrase:', error);
       return false;
     }
   },
