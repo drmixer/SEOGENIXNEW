@@ -597,10 +597,13 @@ const ToolModal: React.FC<ToolModalProps> = ({
                 <option value="comprehensive">Comprehensive Analysis</option>
               </select>
             </div>
-            {userProfile?.business_description && (
+            {userProfile?.competitors?.length > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-blue-800 text-sm">
-                  <strong>Business Description:</strong> {userProfile.business_description}
+                  <strong>Known competitors:</strong> {userProfile.competitors.map((c: any) => c.name).join(', ')}
+                </p>
+                <p className="text-blue-600 text-xs mt-1">
+                  We'll discover additional competitors you may not be aware of.
                 </p>
               </div>
             )}
@@ -873,26 +876,31 @@ const ToolModal: React.FC<ToolModalProps> = ({
               <p className="text-teal-800 text-sm">Competitive intensity: {result.competitiveIntensity}</p>
             </div>
             <div className="space-y-3 max-h-60 overflow-y-auto">
-              {result.competitorSuggestions.slice(0, 6).map((comp: any, i: number) => (
+              {result.competitorSuggestions.slice(0, 6).map((competitor: any, i: number) => (
                 <div key={i} className="border border-gray-200 rounded p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <span className="font-medium text-sm">{comp.name}</span>
-                      <span className={`ml-2 text-xs px-2 py-1 rounded ${
-                        comp.type === 'direct' ? 'bg-red-100 text-red-800' :
-                        comp.type === 'indirect' ? 'bg-yellow-100 text-yellow-800' :
-                        comp.type === 'industry_leader' ? 'bg-blue-100 text-blue-800' :
+                    <div className="flex items-center space-x-2">
+                      <span className="font-medium text-sm">{competitor.name}</span>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        competitor.type === 'direct' ? 'bg-red-100 text-red-800' :
+                        competitor.type === 'indirect' ? 'bg-yellow-100 text-yellow-800' :
+                        competitor.type === 'industry_leader' ? 'bg-blue-100 text-blue-800' :
                         'bg-green-100 text-green-800'
                       }`}>
-                        {comp.type.replace('_', ' ')}
+                        {competitor.type.replace('_', ' ')}
                       </span>
                     </div>
-                    <span className="text-sm font-bold">{comp.relevanceScore}%</span>
+                    <span className="text-sm font-bold">{competitor.relevanceScore}/100</span>
                   </div>
-                  <p className="text-xs text-gray-600 mb-2">{comp.reason}</p>
+                  <p className="text-xs text-gray-600 mb-2">{competitor.reason}</p>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">{comp.marketPosition}</span>
-                    <a href={comp.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center">
+                    <span className="text-xs text-gray-500">{competitor.marketPosition}</span>
+                    <a 
+                      href={competitor.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline flex items-center"
+                    >
                       Visit <ExternalLink className="w-3 h-3 ml-1" />
                     </a>
                   </div>
@@ -1112,7 +1120,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       description: 'AI-powered discovery of unknown competitors',
       icon: Radar,
       available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan),
-      color: 'from-emerald-500 to-emerald-600'
+      color: 'from-indigo-500 to-purple-600'
     }
   ];
 

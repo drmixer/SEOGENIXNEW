@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
-import { ExternalLink, Settings, CheckCircle, AlertCircle, Loader, Globe, Code, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ExternalLink, Settings, CheckCircle, AlertCircle, Loader, Globe, Code, Zap, X, Upload, Download } from 'lucide-react';
+import { apiService } from '../services/api';
+import { userDataService, type CMSIntegration } from '../services/userDataService';
+import { supabase } from '../lib/supabase';
 
 interface CMSIntegrationsProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -19,6 +22,10 @@ interface Integration {
 const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [connectedIntegrations, setConnectedIntegrations] = useState<CMSIntegration[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showConnectionModal, setShowConnectionModal] = useState<Integration | null>(null);
+  const [connectionForm, setConnectionForm] = useState<any>({});
 
   const integrations: Integration[] = [
     {
@@ -149,20 +156,90 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
     }
   ];
 
+  useEffect(() => {
+    loadConnectedIntegrations();
+  }, []);
+
+  const loadConnectedIntegrations = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const integrations = await userDataService.getCMSIntegrations(user.id);
+        setConnectedIntegrations(integrations);
+      }
+    } catch (error) {
+      console.error('Error loading integrations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleConnect = async (integration: Integration) => {
-    setConnecting(integration.id);
+    setShowConnectionModal(integration);
+    setConnectionForm({});
+  };
+
+  const handleConnectionSubmit = async () => {
+    if (!showConnectionModal) return;
     
-    // Simulate connection process
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    setConnecting(showConnectionModal.id);
     
-    // In a real implementation, this would:
-    // 1. Open OAuth flow or API key setup
-    // 2. Validate credentials
-    // 3. Set up webhooks/automation
-    // 4. Update integration status
+    try {
+      let response;
+      
+      if (showConnectionModal.id === 'wordpress') {
+        response = await apiService.connectWordPress(
+          connectionForm.siteUrl,
+          connectionForm.username,
+          connectionForm.applicationPassword
+        );
+      } else if (showConnectionModal.id === 'shopify') {
+        response = await apiService.connectShopify(
+          connectionForm.shopDomain,
+          connectionForm.accessToken
+        );
+      }
+      
+      if (response?.success) {
+        await loadConnectedIntegrations();
+        setShowConnectionModal(null);
+        setConnectionForm({});
+      } else {
+        throw new Error(response?.error || 'Connection failed');
+      }
+    } catch (error) {
+      console.error('Connection error:', error);
+      alert(`Failed to connect ${showConnectionModal.name}: ${error.message}`);
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  const handleDisconnect = async (integrationId: string, cmsType: string) => {
+    if (!confirm('Are you sure you want to disconnect this integration?')) return;
     
-    setConnecting(null);
-    alert(`${integration.name} integration would be set up here!`);
+    try {
+      await apiService.disconnectCMS(cmsType as 'wordpress' | 'shopify');
+      await userDataService.deleteCMSIntegration(integrationId);
+      await loadConnectedIntegrations();
+    } catch (error) {
+      console.error('Disconnect error:', error);
+      alert('Failed to disconnect integration');
+    }
+  };
+
+  const handleSync = async (integration: CMSIntegration) => {
+    try {
+      const response = await apiService.syncCMSData(integration.cms_type as 'wordpress' | 'shopify');
+      if (response?.success) {
+        await loadConnectedIntegrations();
+        alert('Sync completed successfully');
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      alert('Sync failed');
+    }
   };
 
   const canUseIntegration = (integration: Integration) => {
@@ -173,7 +250,13 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
     return userPlanLevel >= requiredLevel;
   };
 
-  const getStatusIcon = (status: Integration['status']) => {
+  const getIntegrationStatus = (integration: Integration) => {
+    const connected = connectedIntegrations.find(ci => ci.cms_type === integration.id);
+    if (connected) return 'connected';
+    return integration.status;
+  };
+
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'connected': return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'available': return <Globe className="w-5 h-5 text-blue-500" />;
@@ -182,12 +265,89 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
     }
   };
 
-  const getStatusText = (status: Integration['status']) => {
+  const getStatusText = (status: string) => {
     switch (status) {
       case 'connected': return 'Connected';
       case 'available': return 'Available';
       case 'coming_soon': return 'Coming Soon';
       default: return 'Unknown';
+    }
+  };
+
+  const renderConnectionForm = () => {
+    if (!showConnectionModal) return null;
+
+    switch (showConnectionModal.id) {
+      case 'wordpress':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">WordPress Site URL</label>
+              <input
+                type="url"
+                value={connectionForm.siteUrl || ''}
+                onChange={(e) => setConnectionForm({...connectionForm, siteUrl: e.target.value})}
+                placeholder="https://yoursite.com"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <input
+                type="text"
+                value={connectionForm.username || ''}
+                onChange={(e) => setConnectionForm({...connectionForm, username: e.target.value})}
+                placeholder="WordPress username"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Application Password</label>
+              <input
+                type="password"
+                value={connectionForm.applicationPassword || ''}
+                onChange={(e) => setConnectionForm({...connectionForm, applicationPassword: e.target.value})}
+                placeholder="WordPress application password"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Generate an application password in your WordPress admin under Users → Profile
+              </p>
+            </div>
+          </div>
+        );
+      
+      case 'shopify':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Shop Domain</label>
+              <input
+                type="text"
+                value={connectionForm.shopDomain || ''}
+                onChange={(e) => setConnectionForm({...connectionForm, shopDomain: e.target.value})}
+                placeholder="yourstore.myshopify.com"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Access Token</label>
+              <input
+                type="password"
+                value={connectionForm.accessToken || ''}
+                onChange={(e) => setConnectionForm({...connectionForm, accessToken: e.target.value})}
+                placeholder="Shopify private app access token"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Create a private app in your Shopify admin to get an access token
+              </p>
+            </div>
+          </div>
+        );
+      
+      default:
+        return <p className="text-gray-600">Connection form not available for this integration.</p>;
     }
   };
 
@@ -199,14 +359,54 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
           <p className="text-gray-600 mt-1">Connect your content management system for seamless optimization</p>
         </div>
         <div className="text-sm text-gray-500">
-          {integrations.filter(i => canUseIntegration(i)).length} of {integrations.length} available
+          {connectedIntegrations.length} connected • {integrations.filter(i => canUseIntegration(i)).length} available
         </div>
       </div>
+
+      {/* Connected Integrations */}
+      {connectedIntegrations.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Connected Integrations</h3>
+          <div className="space-y-4">
+            {connectedIntegrations.map((integration) => (
+              <div key={integration.id} className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <CheckCircle className="w-6 h-6 text-green-500" />
+                  <div>
+                    <h4 className="font-medium text-gray-900">{integration.cms_name}</h4>
+                    <p className="text-sm text-gray-600">{integration.site_url}</p>
+                    <p className="text-xs text-gray-500">
+                      Last synced: {integration.last_sync_at ? new Date(integration.last_sync_at).toLocaleDateString() : 'Never'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleSync(integration)}
+                    className="text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                    title="Sync data"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDisconnect(integration.id, integration.cms_type)}
+                    className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                    title="Disconnect"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Integration Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {integrations.map((integration) => {
           const canUse = canUseIntegration(integration);
+          const status = getIntegrationStatus(integration);
           const isConnecting = connecting === integration.id;
           
           return (
@@ -226,8 +426,8 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
                     <div>
                       <h3 className="font-semibold text-gray-900">{integration.name}</h3>
                       <div className="flex items-center space-x-2 mt-1">
-                        {getStatusIcon(integration.status)}
-                        <span className="text-xs text-gray-500">{getStatusText(integration.status)}</span>
+                        {getStatusIcon(status)}
+                        <span className="text-xs text-gray-500">{getStatusText(status)}</span>
                       </div>
                     </div>
                   </div>
@@ -256,7 +456,7 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
                 </div>
 
                 {canUse ? (
-                  integration.status === 'available' ? (
+                  status === 'available' ? (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -277,7 +477,7 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
                         </>
                       )}
                     </button>
-                  ) : integration.status === 'connected' ? (
+                  ) : status === 'connected' ? (
                     <button className="w-full bg-green-100 text-green-700 py-2 px-4 rounded-lg text-sm font-medium flex items-center justify-center space-x-2">
                       <CheckCircle className="w-4 h-4" />
                       <span>Connected</span>
@@ -301,6 +501,59 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
         })}
       </div>
 
+      {/* Connection Modal */}
+      {showConnectionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center space-x-3">
+                <span className="text-2xl">{showConnectionModal.icon}</span>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Connect {showConnectionModal.name}</h3>
+                  <p className="text-sm text-gray-500">Enter your connection details</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowConnectionModal(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {renderConnectionForm()}
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowConnectionModal(null)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConnectionSubmit}
+                  disabled={connecting === showConnectionModal.id}
+                  className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                >
+                  {connecting === showConnectionModal.id ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin" />
+                      <span>Connecting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      <span>Connect</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Integration Details Modal */}
       {selectedIntegration && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -317,7 +570,7 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
                 onClick={() => setSelectedIntegration(null)}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
-                <ExternalLink className="w-6 h-6" />
+                <X className="w-6 h-6" />
               </button>
             </div>
 
@@ -374,7 +627,10 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
               </button>
               {selectedIntegration.status === 'available' && canUseIntegration(selectedIntegration) && (
                 <button
-                  onClick={() => handleConnect(selectedIntegration)}
+                  onClick={() => {
+                    setSelectedIntegration(null);
+                    handleConnect(selectedIntegration);
+                  }}
                   disabled={connecting === selectedIntegration.id}
                   className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
                 >
