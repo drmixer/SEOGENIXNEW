@@ -187,6 +187,21 @@ export const apiService = {
     });
   },
 
+  // Competitor Discovery
+  async discoverCompetitors(
+    url: string,
+    industry?: string,
+    businessDescription?: string,
+    existingCompetitors?: string[],
+    analysisDepth?: 'basic' | 'comprehensive'
+  ) {
+    return await apiCall(`${API_BASE_URL}/competitor-discovery`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url, industry, businessDescription, existingCompetitors, analysisDepth })
+    });
+  },
+
   // Report Generator
   async generateReport(
     reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive',

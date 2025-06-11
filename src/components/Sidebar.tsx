@@ -14,7 +14,8 @@ import {
   Settings,
   History,
   Edit3,
-  Download
+  Download,
+  Radar
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -47,6 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'optimizer', label: 'Content Optimizer', icon: TrendingUp, available: isDevelopment || userPlan !== 'free' },
     { id: 'prompts', label: 'Prompt Suggestions', icon: Lightbulb, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'competitive', label: 'Competitive Analysis', icon: BarChart3, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
+    { id: 'discovery', label: 'Competitor Discovery', icon: Radar, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
   ];
 
   const newFeatures = [
