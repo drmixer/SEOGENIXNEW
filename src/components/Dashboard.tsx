@@ -18,12 +18,24 @@ import ToastContainer from './ToastContainer';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../hooks/useToast';
+import { TrendingUp, AlertTriangle, Target, Zap, Users, BarChart3, CheckCircle, ArrowRight } from 'lucide-react';
 
 interface DashboardProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
   onNavigateToLanding: () => void;
   user: any;
   onSignOut: () => void;
+}
+
+interface ActionableInsight {
+  id: string;
+  type: 'urgent' | 'opportunity' | 'suggestion';
+  title: string;
+  description: string;
+  action: string;
+  actionUrl?: string;
+  icon: React.ComponentType<any>;
+  color: string;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut }) => {
@@ -37,6 +49,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
+  const [actionableInsights, setActionableInsights] = useState<ActionableInsight[]>([]);
   const { toasts, addToast, removeToast } = useToast();
 
   // Extract first name from user data
@@ -104,6 +117,168 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     return 'User';
   };
 
+  // Generate actionable insights based on user data
+  const generateActionableInsights = async () => {
+    if (!user || !userProfile) return;
+
+    const insights: ActionableInsight[] = [];
+
+    try {
+      // Get recent audit history
+      const auditHistory = await userDataService.getAuditHistory(user.id, 5);
+      const recentActivity = await userDataService.getRecentActivity(user.id, 10);
+
+      // 1. No websites configured
+      if (!userProfile.websites || userProfile.websites.length === 0) {
+        insights.push({
+          id: 'no-websites',
+          type: 'urgent',
+          title: 'Add Your First Website',
+          description: 'Start optimizing by adding your website to track AI visibility performance.',
+          action: 'Add Website',
+          actionUrl: 'settings',
+          icon: Target,
+          color: 'from-red-500 to-red-600'
+        });
+      }
+
+      // 2. No audits run yet
+      if (auditHistory.length === 0 && userProfile.websites?.length > 0) {
+        insights.push({
+          id: 'no-audits',
+          type: 'urgent',
+          title: 'Run Your First AI Visibility Audit',
+          description: 'Get baseline scores and discover optimization opportunities for your website.',
+          action: 'Run Audit',
+          actionUrl: 'audit',
+          icon: BarChart3,
+          color: 'from-blue-500 to-blue-600'
+        });
+      }
+
+      // 3. Low audit scores
+      if (auditHistory.length > 0) {
+        const latestAudit = auditHistory[0];
+        if (latestAudit.overall_score < 60) {
+          insights.push({
+            id: 'low-score',
+            type: 'urgent',
+            title: 'Critical: Low AI Visibility Score',
+            description: `Your latest score is ${latestAudit.overall_score}/100. Use Content Optimizer to improve immediately.`,
+            action: 'Optimize Content',
+            actionUrl: 'optimizer',
+            icon: AlertTriangle,
+            color: 'from-red-500 to-red-600'
+          });
+        } else if (latestAudit.overall_score < 75) {
+          insights.push({
+            id: 'medium-score',
+            type: 'opportunity',
+            title: 'Improve Your AI Visibility Score',
+            description: `Score: ${latestAudit.overall_score}/100. Add structured data with Schema Generator for quick wins.`,
+            action: 'Generate Schema',
+            actionUrl: 'schema',
+            icon: TrendingUp,
+            color: 'from-yellow-500 to-yellow-600'
+          });
+        }
+
+        // Check for specific subscore issues
+        if (latestAudit.content_structure < 70) {
+          insights.push({
+            id: 'structure-issue',
+            type: 'opportunity',
+            title: 'Content Structure Needs Work',
+            description: `Structure score: ${latestAudit.content_structure}/100. Generate FAQ content to improve organization.`,
+            action: 'Generate Content',
+            actionUrl: 'generator',
+            icon: Zap,
+            color: 'from-purple-500 to-purple-600'
+          });
+        }
+
+        if (latestAudit.citation_likelihood < 70) {
+          insights.push({
+            id: 'citation-issue',
+            type: 'opportunity',
+            title: 'Low Citation Likelihood',
+            description: `Citation score: ${latestAudit.citation_likelihood}/100. Track current mentions and optimize content.`,
+            action: 'Track Citations',
+            actionUrl: 'citations',
+            icon: Target,
+            color: 'from-teal-500 to-teal-600'
+          });
+        }
+      }
+
+      // 4. No competitors added
+      if ((!userProfile.competitors || userProfile.competitors.length === 0) && userPlan !== 'free') {
+        insights.push({
+          id: 'no-competitors',
+          type: 'opportunity',
+          title: 'Add Competitors for Benchmarking',
+          description: 'Discover how you stack up against competitors and find new optimization opportunities.',
+          action: 'Discover Competitors',
+          actionUrl: 'discovery',
+          icon: Users,
+          color: 'from-indigo-500 to-indigo-600'
+        });
+      }
+
+      // 5. Haven't used tools recently
+      const recentToolUsage = recentActivity.filter(a => 
+        a.activity_type === 'tool_used' && 
+        new Date(a.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      );
+
+      if (recentToolUsage.length === 0 && auditHistory.length > 0) {
+        insights.push({
+          id: 'inactive',
+          type: 'suggestion',
+          title: 'Stay Active with Regular Optimization',
+          description: 'You haven\'t used optimization tools this week. Regular monitoring maintains AI visibility.',
+          action: 'Run Quick Audit',
+          actionUrl: 'audit',
+          icon: CheckCircle,
+          color: 'from-green-500 to-green-600'
+        });
+      }
+
+      // 6. Plan-specific suggestions
+      if (userPlan === 'free' && auditHistory.length >= 2) {
+        insights.push({
+          id: 'upgrade-suggestion',
+          type: 'opportunity',
+          title: 'Unlock Advanced Features',
+          description: 'You\'ve run multiple audits! Upgrade to Core for detailed insights and optimization tools.',
+          action: 'View Plans',
+          actionUrl: 'billing',
+          icon: TrendingUp,
+          color: 'from-purple-500 to-purple-600'
+        });
+      }
+
+      // 7. High-performing users
+      if (auditHistory.length > 0 && auditHistory[0].overall_score >= 85) {
+        insights.push({
+          id: 'high-performer',
+          type: 'suggestion',
+          title: 'Excellent AI Visibility!',
+          description: `Score: ${auditHistory[0].overall_score}/100. Maintain your edge with competitive analysis.`,
+          action: 'Analyze Competitors',
+          actionUrl: 'competitive',
+          icon: BarChart3,
+          color: 'from-green-500 to-green-600'
+        });
+      }
+
+      setActionableInsights(insights.slice(0, 3)); // Show top 3 insights
+
+    } catch (error) {
+      console.error('Error generating actionable insights:', error);
+    }
+  };
+
   // Load user profile and set up dashboard
   useEffect(() => {
     const loadUserProfile = async () => {
@@ -160,6 +335,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
     loadUserProfile();
   }, [user]);
+
+  // Generate insights when profile loads
+  useEffect(() => {
+    if (userProfile && user) {
+      generateActionableInsights();
+    }
+  }, [userProfile, user, userPlan]);
 
   // Track page visits
   useEffect(() => {
@@ -253,6 +435,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         message: message || 'Tool executed successfully',
         duration: 4000
       });
+      
+      // Regenerate insights after tool completion
+      setTimeout(() => {
+        generateActionableInsights();
+      }, 1000);
     } else {
       addToast({
         type: 'error',
@@ -260,6 +447,30 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         message: message || 'Tool execution failed',
         duration: 6000
       });
+    }
+  };
+
+  // Handle insight action clicks
+  const handleInsightAction = (insight: ActionableInsight) => {
+    if (insight.actionUrl) {
+      setActiveSection(insight.actionUrl);
+      
+      // Track insight action
+      try {
+        if (user) {
+          userDataService.trackActivity({
+            user_id: user.id,
+            activity_type: 'insight_action_taken',
+            activity_data: { 
+              insightId: insight.id,
+              insightType: insight.type,
+              actionUrl: insight.actionUrl
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error tracking insight action:', error);
+      }
     }
   };
 
@@ -335,6 +546,63 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                 </div>
               </div>
             </div>
+
+            {/* Actionable Insights Section */}
+            {actionableInsights.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Actionable Insights</h3>
+                  <span className="text-sm text-gray-500">{actionableInsights.length} recommendations</span>
+                </div>
+                
+                <div className="space-y-4">
+                  {actionableInsights.map((insight) => {
+                    const IconComponent = insight.icon;
+                    return (
+                      <div 
+                        key={insight.id}
+                        className={`p-4 rounded-lg border-l-4 ${
+                          insight.type === 'urgent' ? 'border-red-500 bg-red-50' :
+                          insight.type === 'opportunity' ? 'border-yellow-500 bg-yellow-50' :
+                          'border-blue-500 bg-blue-50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-3">
+                            <div className={`p-2 rounded-lg bg-gradient-to-r ${insight.color}`}>
+                              <IconComponent className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-medium text-gray-900 mb-1">{insight.title}</h4>
+                              <p className="text-sm text-gray-600 mb-3">{insight.description}</p>
+                              <button
+                                onClick={() => handleInsightAction(insight)}
+                                className={`inline-flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                  insight.type === 'urgent' ? 'bg-red-600 text-white hover:bg-red-700' :
+                                  insight.type === 'opportunity' ? 'bg-yellow-600 text-white hover:bg-yellow-700' :
+                                  'bg-blue-600 text-white hover:bg-blue-700'
+                                }`}
+                              >
+                                <span>{insight.action}</span>
+                                <ArrowRight className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            insight.type === 'urgent' ? 'bg-red-100 text-red-800' :
+                            insight.type === 'opportunity' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {insight.type}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Site Selector - Show if user has completed onboarding */}
             {userProfile && userProfile.websites && userProfile.websites.length > 0 && (
@@ -623,6 +891,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
               message: 'Your profile has been updated successfully',
               duration: 3000
             });
+            // Regenerate insights after profile update
+            setTimeout(() => {
+              generateActionableInsights();
+            }, 500);
           }}
         />
       )}
