@@ -223,5 +223,88 @@ export const apiService = {
       headers,
       body: JSON.stringify({ reportType, reportData, reportName, format })
     });
+  },
+
+  // CMS Integrations
+  async connectWordPress(siteUrl: string, username: string, applicationPassword: string) {
+    return await apiCall(`${API_BASE_URL}/wordpress-integration`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ 
+        action: 'connect', 
+        siteUrl, 
+        username, 
+        applicationPassword 
+      })
+    });
+  },
+
+  async publishToWordPress(content: {
+    title: string;
+    content: string;
+    excerpt?: string;
+    status?: 'draft' | 'publish';
+    categories?: string[];
+    tags?: string[];
+  }) {
+    return await apiCall(`${API_BASE_URL}/wordpress-integration`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ 
+        action: 'publish', 
+        content 
+      })
+    });
+  },
+
+  async connectShopify(shopDomain: string, accessToken: string) {
+    return await apiCall(`${API_BASE_URL}/shopify-integration`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ 
+        action: 'connect', 
+        shopDomain, 
+        accessToken 
+      })
+    });
+  },
+
+  async publishToShopify(product: {
+    title: string;
+    body_html: string;
+    vendor?: string;
+    product_type?: string;
+    tags?: string;
+    variants?: Array<{
+      price: string;
+      inventory_quantity?: number;
+    }>;
+  }) {
+    return await apiCall(`${API_BASE_URL}/shopify-integration`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ 
+        action: 'publish', 
+        product 
+      })
+    });
+  },
+
+  async syncCMSData(cmsType: 'wordpress' | 'shopify') {
+    const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
+    return await apiCall(`${API_BASE_URL}/${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action: 'sync' })
+    });
+  },
+
+  async disconnectCMS(cmsType: 'wordpress' | 'shopify') {
+    const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
+    return await apiCall(`${API_BASE_URL}/${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action: 'disconnect' })
+    });
   }
 };

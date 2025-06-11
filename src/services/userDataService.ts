@@ -48,6 +48,36 @@ export interface Report {
   created_at: string;
 }
 
+export interface WhiteLabelSettings {
+  id: string;
+  user_id: string;
+  custom_logo_url?: string;
+  primary_color_hex: string;
+  secondary_color_hex: string;
+  accent_color_hex: string;
+  custom_domain?: string;
+  company_name?: string;
+  favicon_url?: string;
+  custom_css?: string;
+  footer_text?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CMSIntegration {
+  id: string;
+  user_id: string;
+  cms_type: string;
+  cms_name: string;
+  site_url: string;
+  status: 'connected' | 'disconnected' | 'error';
+  credentials: any;
+  settings: any;
+  last_sync_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export const userDataService = {
   // User Profile Management
   async getUserProfile(userId: string): Promise<UserProfile | null> {
@@ -121,6 +151,114 @@ export const userDataService = {
     } catch (error) {
       console.error('Error in updateUserProfile:', error);
       return null;
+    }
+  },
+
+  // White-label Settings
+  async getWhiteLabelSettings(userId: string): Promise<WhiteLabelSettings | null> {
+    try {
+      const { data, error } = await supabase
+        .from('white_label_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // No settings found
+        }
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error fetching white-label settings:', error);
+      return null;
+    }
+  },
+
+  async updateWhiteLabelSettings(userId: string, settings: Partial<WhiteLabelSettings>): Promise<WhiteLabelSettings | null> {
+    try {
+      const { data, error } = await supabase
+        .from('white_label_settings')
+        .upsert({
+          user_id: userId,
+          ...settings,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating white-label settings:', error);
+      return null;
+    }
+  },
+
+  // CMS Integrations
+  async getCMSIntegrations(userId: string): Promise<CMSIntegration[]> {
+    try {
+      const { data, error } = await supabase
+        .from('cms_integrations')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching CMS integrations:', error);
+      return [];
+    }
+  },
+
+  async createCMSIntegration(integration: Partial<CMSIntegration>): Promise<CMSIntegration | null> {
+    try {
+      const { data, error } = await supabase
+        .from('cms_integrations')
+        .insert(integration)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating CMS integration:', error);
+      return null;
+    }
+  },
+
+  async updateCMSIntegration(integrationId: string, updates: Partial<CMSIntegration>): Promise<CMSIntegration | null> {
+    try {
+      const { data, error } = await supabase
+        .from('cms_integrations')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', integrationId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating CMS integration:', error);
+      return null;
+    }
+  },
+
+  async deleteCMSIntegration(integrationId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('cms_integrations')
+        .delete()
+        .eq('id', integrationId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting CMS integration:', error);
+      return false;
     }
   },
 
