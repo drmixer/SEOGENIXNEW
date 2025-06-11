@@ -31,14 +31,31 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
     }
   };
 
-  const runSampleAudit = async () => {
+  const runRealAudit = async () => {
     setIsLoading(true);
     setError(null);
     
     try {
       // Use selected website or fallback to example
       const urlToAudit = selectedWebsite || 'https://example.com';
-      const result = await apiService.runAudit(urlToAudit, 'Sample content for AI visibility analysis');
+      
+      // Fetch real content from the website
+      let websiteContent = '';
+      try {
+        const response = await fetch(urlToAudit, {
+          headers: {
+            'User-Agent': 'SEOGENIX AI Visibility Audit Bot 1.0'
+          }
+        });
+        if (response.ok) {
+          websiteContent = await response.text();
+        }
+      } catch (fetchError) {
+        console.warn('Could not fetch website content, using URL only');
+      }
+      
+      // Run real audit using Gemini API
+      const result = await apiService.runAudit(urlToAudit, websiteContent);
       setAuditData(result);
       setHasRunAudit(true);
       localStorage.setItem('seogenix_audit_run', 'true');
@@ -67,7 +84,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
             activity_data: { 
               score: result.overallScore,
               url: urlToAudit,
-              type: 'sample_audit'
+              type: 'real_audit'
             }
           });
         }
@@ -116,7 +133,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
               issues: latest.issues
             });
 
-            // Calculate weekly change
+            // Calculate weekly change from real data
             if (auditHistory.length > 1) {
               const weekAgo = new Date();
               weekAgo.setDate(weekAgo.getDate() - 7);
@@ -145,24 +162,19 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
     if (auditRun && !hasRunAudit) {
       setHasRunAudit(true);
       if (hasSubscores) {
-        runSampleAudit();
+        runRealAudit();
       }
     }
   }, [selectedWebsite]);
 
-  const overallScore = auditData?.overallScore || 72;
+  const overallScore = auditData?.overallScore || 0;
   
   const subscores = auditData ? [
     { name: 'AI Understanding', score: auditData.subscores.aiUnderstanding, icon: Brain, color: 'text-teal-600' },
     { name: 'Citation Likelihood', score: auditData.subscores.citationLikelihood, icon: Target, color: 'text-purple-600' },
     { name: 'Conversational Readiness', score: auditData.subscores.conversationalReadiness, icon: MessageSquare, color: 'text-indigo-600' },
     { name: 'Content Structure', score: auditData.subscores.contentStructure, icon: FileText, color: 'text-blue-600' }
-  ] : [
-    { name: 'AI Understanding', score: 85, icon: Brain, color: 'text-teal-600' },
-    { name: 'Citation Likelihood', score: 68, icon: Target, color: 'text-purple-600' },
-    { name: 'Conversational Readiness', score: 74, icon: MessageSquare, color: 'text-indigo-600' },
-    { name: 'Content Structure', score: 61, icon: FileText, color: 'text-blue-600' }
-  ];
+  ] : [];
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
@@ -191,16 +203,18 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
               )}
             </div>
             <div className="flex items-center space-x-2">
-              <div className={`flex items-center space-x-1 text-sm ${weeklyChange > 0 ? 'text-green-600' : weeklyChange < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                {weeklyChange > 0 ? <TrendingUp className="w-4 h-4" /> : weeklyChange < 0 ? <TrendingDown className="w-4 h-4" /> : null}
-                <span>{weeklyChange > 0 ? '+' : ''}{weeklyChange}% this week</span>
-              </div>
+              {weeklyChange !== 0 && (
+                <div className={`flex items-center space-x-1 text-sm ${weeklyChange > 0 ? 'text-green-600' : weeklyChange < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                  {weeklyChange > 0 ? <TrendingUp className="w-4 h-4" /> : weeklyChange < 0 ? <TrendingDown className="w-4 h-4" /> : null}
+                  <span>{weeklyChange > 0 ? '+' : ''}{weeklyChange}% this week</span>
+                </div>
+              )}
               {hasSubscores && (
                 <button
-                  onClick={runSampleAudit}
+                  onClick={runRealAudit}
                   disabled={isLoading}
                   className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                  title="Refresh audit"
+                  title="Run new audit"
                 >
                   <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
@@ -247,12 +261,27 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
             </div>
           </div>
           
-          <p className="text-center text-gray-600 text-sm">
-            {auditData ? 
-              'Live audit results from real API analysis' : 
-              'Your content is performing well for AI visibility with room for improvement in structure.'
-            }
-          </p>
+          {!hasRunAudit ? (
+            <div className="text-center">
+              <p className="text-gray-600 text-sm mb-4">
+                Run your first AI visibility audit to see your score
+              </p>
+              <button
+                onClick={runRealAudit}
+                disabled={isLoading}
+                className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+              >
+                {isLoading ? 'Running Audit...' : 'Run First Audit'}
+              </button>
+            </div>
+          ) : (
+            <p className="text-center text-gray-600 text-sm">
+              {auditData ? 
+                'Real-time audit results from AI analysis' : 
+                'Click refresh to run a new audit'
+              }
+            </p>
+          )}
           
           {error && (
             <p className="text-center text-red-500 text-sm mt-2">{error}</p>
@@ -270,7 +299,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
             )}
           </h3>
           
-          {hasSubscores ? (
+          {hasSubscores && auditData ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {subscores.map((subscore, index) => {
                 const IconComponent = subscore.icon;
@@ -295,6 +324,20 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
                 );
               })}
             </div>
+          ) : hasSubscores && !auditData ? (
+            <div className="text-center py-8">
+              <div className="text-gray-400 mb-4">
+                <Target className="w-12 h-12 mx-auto" />
+              </div>
+              <p className="text-gray-600 mb-4">Run an audit to see detailed breakdown</p>
+              <button
+                onClick={runRealAudit}
+                disabled={isLoading}
+                className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+              >
+                {isLoading ? 'Running Audit...' : 'Run Audit'}
+              </button>
+            </div>
           ) : (
             <div className="text-center py-8">
               <div className="bg-gray-50 rounded-lg p-6">
@@ -309,7 +352,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
             </div>
           )}
           
-          {auditData && hasSubscores && (
+          {auditData && hasSubscores && auditData.recommendations && (
             <div className="mt-6 p-4 bg-blue-50 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">Key Recommendations:</h4>
               <ul className="text-sm text-blue-800 space-y-1">
