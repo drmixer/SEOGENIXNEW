@@ -43,25 +43,29 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan 
     try {
       const keywords = targetKeywords.split(',').map(k => k.trim());
       
-      // Simulate real-time AI analysis
-      const response = await fetch('/api/real-time-analysis', {
+      // Use the real-time analysis API
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/real-time-content-analysis`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ content: text, keywords })
-      }).catch(() => {
-        // Fallback to simulated analysis for demo
-        return {
-          ok: true,
-          json: async () => generateSimulatedMetrics(text, keywords)
-        };
       });
 
       if (response.ok) {
         const data = await response.json();
         setMetrics(data);
+      } else {
+        // Fallback to simulated analysis
+        const data = generateSimulatedMetrics(text, keywords);
+        setMetrics(data);
       }
     } catch (error) {
       console.error('Real-time analysis error:', error);
+      // Fallback to simulated analysis
+      const data = generateSimulatedMetrics(text, keywords);
+      setMetrics(data);
     } finally {
       setIsAnalyzing(false);
     }

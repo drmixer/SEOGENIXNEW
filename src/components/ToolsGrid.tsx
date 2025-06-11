@@ -15,17 +15,13 @@ import {
   Loader,
   X,
   ChevronDown,
+  Radar,
   Plus,
   Trash2,
-  Copy,
-  RefreshCw,
-  Tag,
-  Filter,
-  ChevronRight,
-  AlertCircle
+  Save
 } from 'lucide-react';
 import { apiService } from '../services/api';
-import { userDataService, type SavedCitationPrompt, type FingerprintPhrase } from '../services/userDataService';
+import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 
 interface ToolsGridProps {
@@ -66,24 +62,15 @@ const ToolModal: React.FC<ToolModalProps> = ({
     competitors: userProfile?.competitors?.map((c: any) => c.url).join(', ') || ''
   });
 
-  // Citation tracker specific state
-  const [savedPrompts, setSavedPrompts] = useState<SavedCitationPrompt[]>([]);
-  const [fingerprintPhrases, setFingerprintPhrases] = useState<FingerprintPhrase[]>([]);
+  // Citation tracking specific state
+  const [savedPrompts, setSavedPrompts] = useState<any[]>([]);
+  const [fingerprintPhrases, setFingerprintPhrases] = useState<any[]>([]);
   const [showSavedPrompts, setShowSavedPrompts] = useState(false);
   const [showFingerprintManager, setShowFingerprintManager] = useState(false);
   const [newFingerprintPhrase, setNewFingerprintPhrase] = useState('');
-  const [keywordTags, setKeywordTags] = useState<string[]>(['AI', 'SEO']);
-  const [newKeyword, setNewKeyword] = useState('');
-  const [groupedResults, setGroupedResults] = useState<any>({});
-  const [showGrouped, setShowGrouped] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [resultsPerPage] = useState(10);
+  const [newFingerprintDescription, setNewFingerprintDescription] = useState('');
 
-  // Get available websites from user profile
-  const availableWebsites = userProfile?.websites || [];
-  const availableCompetitors = userProfile?.competitors || [];
-
-  // Load citation tracker data when modal opens
+  // Load citation tracking data
   React.useEffect(() => {
     if (tool.id === 'citations') {
       loadCitationData();
@@ -106,114 +93,52 @@ const ToolModal: React.FC<ToolModalProps> = ({
     }
   };
 
-  const addKeywordTag = () => {
-    if (newKeyword.trim() && !keywordTags.includes(newKeyword.trim())) {
-      setKeywordTags([...keywordTags, newKeyword.trim()]);
-      setNewKeyword('');
-    }
-  };
-
-  const removeKeywordTag = (keyword: string) => {
-    setKeywordTags(keywordTags.filter(k => k !== keyword));
-  };
-
-  const addFingerprintPhrase = async () => {
+  const saveFingerprintPhrase = async () => {
     if (!newFingerprintPhrase.trim()) return;
-    
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const saved = await userDataService.saveFingerprintPhrase({
+        await userDataService.saveFingerprintPhrase({
           user_id: user.id,
-          phrase: newFingerprintPhrase.trim(),
-          description: `Added for ${formData.url || 'citation tracking'}`
+          phrase: newFingerprintPhrase,
+          description: newFingerprintDescription
         });
-        
-        if (saved) {
-          setFingerprintPhrases([saved, ...fingerprintPhrases]);
-          setNewFingerprintPhrase('');
-        }
+        setNewFingerprintPhrase('');
+        setNewFingerprintDescription('');
+        await loadCitationData();
       }
     } catch (error) {
-      console.error('Error adding fingerprint phrase:', error);
+      console.error('Error saving fingerprint phrase:', error);
     }
   };
 
   const deleteFingerprintPhrase = async (phraseId: string) => {
     try {
-      const success = await userDataService.deleteFingerprintPhrase(phraseId);
-      if (success) {
-        setFingerprintPhrases(fingerprintPhrases.filter(p => p.id !== phraseId));
-      }
+      await userDataService.deleteFingerprintPhrase(phraseId);
+      await loadCitationData();
     } catch (error) {
       console.error('Error deleting fingerprint phrase:', error);
     }
   };
 
-  const runSavedPrompt = async (prompt: SavedCitationPrompt) => {
+  const rerunSavedPrompt = async (prompt: any) => {
     setFormData({
       ...formData,
       url: prompt.domain,
       keywords: prompt.keywords.join(', ')
     });
-    setKeywordTags(prompt.keywords);
     setShowSavedPrompts(false);
-    
-    // Auto-run the citation tracker
-    await handleSubmit(null, {
-      domain: prompt.domain,
-      keywords: prompt.keywords,
-      fingerprintPhrases: fingerprintPhrases.map(p => p.phrase),
-      savePrompt: false
-    });
+    // Trigger the citation tracking
+    handleSubmit(new Event('submit') as any);
   };
 
-  const deleteSavedPrompt = async (promptId: string) => {
-    try {
-      const success = await userDataService.deleteSavedCitationPrompt(promptId);
-      if (success) {
-        setSavedPrompts(savedPrompts.filter(p => p.id !== promptId));
-      }
-    } catch (error) {
-      console.error('Error deleting saved prompt:', error);
-    }
-  };
+  // Get available websites from user profile
+  const availableWebsites = userProfile?.websites || [];
+  const availableCompetitors = userProfile?.competitors || [];
 
-  const groupResultsBySource = (citations: any[]) => {
-    return citations.reduce((groups, citation) => {
-      const source = citation.type || 'other';
-      if (!groups[source]) {
-        groups[source] = [];
-      }
-      groups[source].push(citation);
-      return groups;
-    }, {});
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    // Could add toast notification here
-  };
-
-  const getConfidenceColor = (score: number) => {
-    if (score >= 80) return 'bg-green-100 text-green-800';
-    if (score >= 50) return 'bg-yellow-100 text-yellow-800';
-    return 'bg-red-100 text-red-800';
-  };
-
-  const getMatchTypeIcon = (matchType: string) => {
-    switch (matchType) {
-      case 'exact_url': return '🎯';
-      case 'domain': return '🌐';
-      case 'brand': return '🏷️';
-      case 'keyword': return '🔍';
-      case 'fingerprint': return '🔬';
-      default: return '📄';
-    }
-  };
-
-  const handleSubmit = async (e?: React.FormEvent, overrideData?: any) => {
-    if (e) e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setIsLoading(true);
     setResult(null);
 
@@ -221,7 +146,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
       let response;
       
       // Use selected website from dropdown
-      const urlToUse = overrideData?.domain || formData.url || availableWebsites[0]?.url || 'https://example.com';
+      const urlToUse = formData.url || availableWebsites[0]?.url || 'https://example.com';
       
       switch (tool.id) {
         case 'audit':
@@ -232,31 +157,12 @@ const ToolModal: React.FC<ToolModalProps> = ({
           break;
         case 'citations':
           const domain = urlToUse.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-          const keywords = overrideData?.keywords || keywordTags;
-          const phrases = overrideData?.fingerprintPhrases || fingerprintPhrases.map(p => p.phrase);
+          const keywords = formData.keywords?.split(',').map((k: string) => k.trim()) || ['AI', 'SEO'];
+          const selectedFingerprints = fingerprintPhrases
+            .filter(fp => formData[`fingerprint_${fp.id}`])
+            .map(fp => fp.phrase);
           
-          response = await fetch('/api/citation-tracker', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-            },
-            body: JSON.stringify({ 
-              domain: urlToUse,
-              keywords,
-              fingerprintPhrases: phrases,
-              savePrompt: overrideData?.savePrompt !== false
-            })
-          }).then(res => res.json()).catch(() => {
-            // Fallback to API service
-            return apiService.trackCitations(domain, keywords);
-          });
-          
-          // Group results by source
-          if (response.citations) {
-            const grouped = groupResultsBySource(response.citations);
-            setGroupedResults(grouped);
-          }
+          response = await apiService.trackCitations(domain, keywords, selectedFingerprints, formData.savePrompt);
           break;
         case 'voice':
           response = await apiService.testVoiceAssistants(formData.query || 'What is AI SEO?', ['siri', 'alexa', 'google']);
@@ -392,152 +298,83 @@ const ToolModal: React.FC<ToolModalProps> = ({
     );
   };
 
-  const renderCitationForm = () => {
+  const renderCitationTrackingForm = () => {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {renderWebsiteSelector()}
         
-        {/* Keywords with tag input */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Keywords</label>
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2 mb-2">
-              {keywordTags.map((keyword, index) => (
-                <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800">
-                  {keyword}
-                  <button
-                    onClick={() => removeKeywordTag(keyword)}
-                    className="ml-2 text-purple-600 hover:text-purple-800"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Keywords (comma-separated)</label>
+          <input
+            type="text"
+            value={formData.keywords || ''}
+            onChange={(e) => setFormData({...formData, keywords: e.target.value})}
+            placeholder="AI, SEO, optimization"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
+
+        {/* Fingerprint Phrases Selection */}
+        {fingerprintPhrases.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Fingerprint Phrases</label>
+            <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-3">
+              {fingerprintPhrases.map((phrase) => (
+                <label key={phrase.id} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={formData[`fingerprint_${phrase.id}`] || false}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      [`fingerprint_${phrase.id}`]: e.target.checked
+                    })}
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <span className="text-sm text-gray-700">{phrase.phrase}</span>
+                  {phrase.description && (
+                    <span className="text-xs text-gray-500">({phrase.description})</span>
+                  )}
+                </label>
               ))}
             </div>
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={newKeyword}
-                onChange={(e) => setNewKeyword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addKeywordTag())}
-                placeholder="Add keyword..."
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-              <button
-                onClick={addKeywordTag}
-                className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Fingerprint Phrases */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-gray-700">Fingerprint Phrases</label>
-            <button
-              onClick={() => setShowFingerprintManager(!showFingerprintManager)}
-              className="text-purple-600 hover:text-purple-700 text-sm flex items-center space-x-1"
-            >
-              <Tag className="w-4 h-4" />
-              <span>Manage ({fingerprintPhrases.length})</span>
-            </button>
-          </div>
-          
-          {showFingerprintManager && (
-            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={newFingerprintPhrase}
-                  onChange={(e) => setNewFingerprintPhrase(e.target.value)}
-                  placeholder="Add unique phrase from your content..."
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-                <button
-                  onClick={addFingerprintPhrase}
-                  className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-              
-              <div className="max-h-32 overflow-y-auto space-y-2">
-                {fingerprintPhrases.map((phrase) => (
-                  <div key={phrase.id} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
-                    <span className="text-sm text-gray-700">{phrase.phrase}</span>
-                    <button
-                      onClick={() => deleteFingerprintPhrase(phrase.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              
-              <p className="text-xs text-gray-500">
-                Fingerprint phrases are unique content snippets that help detect if AI systems have been influenced by your content.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Saved Prompts */}
-        {savedPrompts.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">Saved Prompts</label>
-              <button
-                onClick={() => setShowSavedPrompts(!showSavedPrompts)}
-                className="text-blue-600 hover:text-blue-700 text-sm flex items-center space-x-1"
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span>Re-run ({savedPrompts.length})</span>
-              </button>
-            </div>
-            
-            {showSavedPrompts && (
-              <div className="border border-gray-200 rounded-lg p-4 max-h-40 overflow-y-auto space-y-2">
-                {savedPrompts.map((prompt) => (
-                  <div key={prompt.id} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">{prompt.domain}</div>
-                      <div className="text-xs text-gray-500">{prompt.keywords.join(', ')}</div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => runSavedPrompt(prompt)}
-                        className="text-blue-600 hover:text-blue-700 p-1 rounded"
-                        title="Re-run this prompt"
-                      >
-                        <RefreshCw className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => deleteSavedPrompt(prompt.id)}
-                        className="text-red-600 hover:text-red-700 p-1 rounded"
-                        title="Delete saved prompt"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
+
+        {/* Save Prompt Option */}
+        <label className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={formData.savePrompt || false}
+            onChange={(e) => setFormData({...formData, savePrompt: e.target.checked})}
+            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+          />
+          <span className="text-sm text-gray-700">Save this search for future use</span>
+        </label>
+
+        {/* Action Buttons */}
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setShowSavedPrompts(true)}
+            className="text-blue-600 hover:text-blue-700 text-sm flex items-center space-x-1"
+          >
+            <Search className="w-4 h-4" />
+            <span>Saved Searches</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFingerprintManager(true)}
+            className="text-purple-600 hover:text-purple-700 text-sm flex items-center space-x-1"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Manage Phrases</span>
+          </button>
+        </div>
       </div>
     );
   };
 
   const renderForm = () => {
-    if (tool.id === 'citations') {
-      return renderCitationForm();
-    }
-
     switch (tool.id) {
       case 'audit':
         return (
@@ -577,6 +414,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
             </div>
           </div>
         );
+      
+      case 'citations':
+        return renderCitationTrackingForm();
       
       case 'voice':
         return (
@@ -871,7 +711,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
             </div>
           </div>
         );
-
+      
       case 'discovery':
         return (
           <div className="space-y-4">
@@ -885,6 +725,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
                 placeholder="Technology, Healthcare, Finance..."
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
+              {userProfile?.industry && (
+                <p className="text-xs text-gray-500 mt-1">From your profile: {userProfile.industry}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Analysis Depth</label>
@@ -909,212 +752,15 @@ const ToolModal: React.FC<ToolModalProps> = ({
     }
   };
 
-  const renderCitationResults = () => {
-    if (!result || !result.citations) return null;
-
-    const citations = result.citations;
-    const totalPages = Math.ceil(citations.length / resultsPerPage);
-    const startIndex = (currentPage - 1) * resultsPerPage;
-    const endIndex = startIndex + resultsPerPage;
-    const currentCitations = citations.slice(startIndex, endIndex);
-
-    return (
-      <div className="space-y-4">
-        {/* Results Summary */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="font-medium text-blue-900 mb-2">Citation Results Summary</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <div className="text-blue-800 font-medium">{result.total}</div>
-              <div className="text-blue-600">Total Citations</div>
-            </div>
-            <div>
-              <div className="text-blue-800 font-medium">{result.confidenceBreakdown?.high || 0}</div>
-              <div className="text-blue-600">High Confidence</div>
-            </div>
-            <div>
-              <div className="text-blue-800 font-medium">{result.matchTypes?.fingerprint || 0}</div>
-              <div className="text-blue-600">Fingerprint Matches</div>
-            </div>
-            <div>
-              <div className="text-blue-800 font-medium">{Object.keys(result.sources || {}).length}</div>
-              <div className="text-blue-600">Source Types</div>
-            </div>
-          </div>
-        </div>
-
-        {/* View Toggle */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setShowGrouped(!showGrouped)}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                showGrouped ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Filter className="w-4 h-4 inline mr-1" />
-              {showGrouped ? 'Show All' : 'Group by Source'}
-            </button>
-          </div>
-          
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-600">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Results Display */}
-        {showGrouped ? (
-          <div className="space-y-4">
-            {Object.entries(groupedResults).map(([source, sourceCitations]: [string, any]) => (
-              <div key={source} className="border border-gray-200 rounded-lg">
-                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <h5 className="font-medium text-gray-900 capitalize">{source} ({sourceCitations.length})</h5>
-                    <ChevronRight className="w-4 h-4 text-gray-400" />
-                  </div>
-                </div>
-                <div className="p-4 space-y-3">
-                  {sourceCitations.slice(0, 3).map((citation: any, index: number) => (
-                    <div key={index} className="border-l-2 border-purple-300 pl-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-sm text-gray-900">{citation.source}</span>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs">{getMatchTypeIcon(citation.match_type)}</span>
-                          <span className={`text-xs px-2 py-1 rounded ${getConfidenceColor(citation.confidence_score)}`}>
-                            {citation.confidence_score}%
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-2">{citation.snippet}</p>
-                      <div className="flex items-center justify-between">
-                        <a href={citation.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center">
-                          View source <ExternalLink className="w-3 h-3 ml-1" />
-                        </a>
-                        <button
-                          onClick={() => copyToClipboard(citation.url)}
-                          className="text-xs text-gray-500 hover:text-gray-700 flex items-center"
-                        >
-                          <Copy className="w-3 h-3 mr-1" />
-                          Copy URL
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {sourceCitations.length > 3 && (
-                    <p className="text-xs text-gray-500 text-center">
-                      +{sourceCitations.length - 3} more citations
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {currentCitations.map((citation: any, index: number) => (
-              <div key={index} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-gray-900">{citation.source}</span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm">{getMatchTypeIcon(citation.match_type)}</span>
-                    <span className={`text-sm px-2 py-1 rounded ${getConfidenceColor(citation.confidence_score)}`}>
-                      {citation.confidence_score}% confidence
-                    </span>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600 mb-3">{citation.snippet}</p>
-                <div className="flex items-center justify-between">
-                  <a href={citation.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center">
-                    View source <ExternalLink className="w-3 h-3 ml-1" />
-                  </a>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => copyToClipboard(citation.snippet)}
-                      className="text-sm text-gray-500 hover:text-gray-700 flex items-center"
-                    >
-                      <Copy className="w-3 h-3 mr-1" />
-                      Copy Text
-                    </button>
-                    <button
-                      onClick={() => copyToClipboard(citation.url)}
-                      className="text-sm text-gray-500 hover:text-gray-700 flex items-center"
-                    >
-                      <Copy className="w-3 h-3 mr-1" />
-                      Copy URL
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Confidence Score Explanation */}
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h5 className="font-medium text-gray-900 mb-2">Confidence Score Guide</h5>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-            <div className="flex items-center space-x-1">
-              <span>🎯</span>
-              <span>100% - Exact URL</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span>🌐</span>
-              <span>70% - Domain Match</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span>🏷️</span>
-              <span>50% - Brand Mention</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span>🔍</span>
-              <span>20%+ - Keyword Match</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span>🔬</span>
-              <span>100% - Fingerprint</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   const renderResult = () => {
     if (!result) return null;
 
     if (result.error) {
       return (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center space-x-2 mb-2">
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <p className="text-red-800 font-medium">Error</p>
-          </div>
-          <p className="text-red-700">{result.error}</p>
+          <p className="text-red-800">{result.error}</p>
         </div>
       );
-    }
-
-    if (tool.id === 'citations') {
-      return renderCitationResults();
     }
 
     switch (tool.id) {
@@ -1151,6 +797,51 @@ const ToolModal: React.FC<ToolModalProps> = ({
               <pre className="bg-white p-3 rounded border text-xs overflow-x-auto">
                 {result.implementation}
               </pre>
+            </div>
+          </div>
+        );
+      
+      case 'citations':
+        return (
+          <div className="space-y-4">
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <h4 className="font-medium text-purple-900 mb-2">Citation Results</h4>
+              <p className="text-purple-800">Found {result.total} mentions across platforms</p>
+              {result.confidenceBreakdown && (
+                <div className="mt-2 text-sm text-purple-700">
+                  High confidence: {result.confidenceBreakdown.high} | 
+                  Medium: {result.confidenceBreakdown.medium} | 
+                  Low: {result.confidenceBreakdown.low}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {result.citations.slice(0, 10).map((citation: any, i: number) => (
+                <div key={i} className="border border-gray-200 rounded p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-sm">{citation.source}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-gray-500">{citation.type}</span>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        citation.confidence_score >= 80 ? 'bg-green-100 text-green-800' :
+                        citation.confidence_score >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {citation.confidence_score}% confidence
+                      </span>
+                      {citation.match_type === 'fingerprint' && (
+                        <span className="text-xs px-2 py-1 rounded bg-purple-100 text-purple-800">
+                          Fingerprint Match
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600">{citation.snippet}</p>
+                  <a href={citation.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center mt-1">
+                    View source <ExternalLink className="w-3 h-3 ml-1" />
+                  </a>
+                </div>
+              ))}
             </div>
           </div>
         );
@@ -1329,28 +1020,28 @@ const ToolModal: React.FC<ToolModalProps> = ({
             </div>
           </div>
         );
-
+      
       case 'discovery':
         return (
           <div className="space-y-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <h4 className="font-medium text-green-900 mb-2">Competitor Discovery Results</h4>
-              <p className="text-green-800">Found {result.totalSuggestions} potential competitors | Average relevance: {result.averageRelevance}%</p>
-              <p className="text-green-800 text-sm">Market intensity: {result.competitiveIntensity}</p>
+            <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+              <h4 className="font-medium text-teal-900 mb-2">Competitor Discovery Results</h4>
+              <p className="text-teal-800">Found {result.totalSuggestions} potential competitors</p>
+              <p className="text-teal-800 text-sm">Competitive intensity: {result.competitiveIntensity}</p>
             </div>
             <div className="space-y-3 max-h-60 overflow-y-auto">
-              {result.competitorSuggestions.slice(0, 5).map((competitor: any, i: number) => (
+              {result.competitorSuggestions.slice(0, 8).map((comp: any, i: number) => (
                 <div key={i} className="border border-gray-200 rounded p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-sm">{competitor.name}</span>
+                    <span className="font-medium text-sm">{comp.name}</span>
                     <div className="flex items-center space-x-2">
-                      <span className="text-xs bg-gray-100 px-2 py-1 rounded">{competitor.type}</span>
-                      <span className="text-xs font-bold">{competitor.relevanceScore}%</span>
+                      <span className="text-xs bg-gray-100 px-2 py-1 rounded">{comp.type}</span>
+                      <span className="text-xs text-gray-500">{comp.relevanceScore}% relevant</span>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-600 mb-2">{competitor.reason}</p>
-                  <a href={competitor.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center">
-                    Visit site <ExternalLink className="w-3 h-3 ml-1" />
+                  <p className="text-sm text-gray-600 mb-2">{comp.reason}</p>
+                  <a href={comp.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center">
+                    Visit website <ExternalLink className="w-3 h-3 ml-1" />
                   </a>
                 </div>
               ))}
@@ -1453,6 +1144,126 @@ const ToolModal: React.FC<ToolModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Saved Prompts Modal */}
+      {showSavedPrompts && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-60">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Saved Citation Searches</h3>
+              <button
+                onClick={() => setShowSavedPrompts(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
+              {savedPrompts.length === 0 ? (
+                <p className="text-gray-500 text-center">No saved searches yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {savedPrompts.map((prompt) => (
+                    <div key={prompt.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-gray-900">{prompt.domain}</span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(prompt.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">
+                        Keywords: {prompt.keywords.join(', ')}
+                      </p>
+                      <button
+                        onClick={() => rerunSavedPrompt(prompt)}
+                        className="text-blue-600 hover:text-blue-700 text-sm"
+                      >
+                        Re-run Search
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fingerprint Phrases Manager Modal */}
+      {showFingerprintManager && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-60">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Manage Fingerprint Phrases</h3>
+              <button
+                onClick={() => setShowFingerprintManager(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
+              {/* Add New Phrase */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-3">Add New Fingerprint Phrase</h4>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={newFingerprintPhrase}
+                    onChange={(e) => setNewFingerprintPhrase(e.target.value)}
+                    placeholder="Enter unique phrase to track"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                  <input
+                    type="text"
+                    value={newFingerprintDescription}
+                    onChange={(e) => setNewFingerprintDescription(e.target.value)}
+                    placeholder="Description (optional)"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                  <button
+                    onClick={saveFingerprintPhrase}
+                    disabled={!newFingerprintPhrase.trim()}
+                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Save Phrase</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing Phrases */}
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">Your Fingerprint Phrases</h4>
+                {fingerprintPhrases.length === 0 ? (
+                  <p className="text-gray-500 text-center">No fingerprint phrases yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {fingerprintPhrases.map((phrase) => (
+                      <div key={phrase.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-medium text-gray-900">{phrase.phrase}</span>
+                            {phrase.description && (
+                              <p className="text-sm text-gray-600 mt-1">{phrase.description}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => deleteFingerprintPhrase(phrase.id)}
+                            className="text-red-600 hover:text-red-700 p-1 rounded transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1501,7 +1312,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     {
       id: 'citations',
       name: 'Citation Tracker',
-      description: 'Monitor mentions from LLMs, Google, and other platforms with confidence scoring',
+      description: 'Monitor mentions from LLMs, Google, and other platforms',
       icon: Search,
       available: isDevelopment || userPlan !== 'free',
       color: 'from-purple-500 to-purple-600'
@@ -1565,10 +1376,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     {
       id: 'discovery',
       name: 'Competitor Discovery',
-      description: 'Discover unknown competitors using AI analysis',
-      icon: Search,
+      description: 'Find new competitors you should be tracking',
+      icon: Radar,
       available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan),
-      color: 'from-indigo-500 to-indigo-600'
+      color: 'from-emerald-500 to-emerald-600'
     }
   ];
 

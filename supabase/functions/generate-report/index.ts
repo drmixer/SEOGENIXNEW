@@ -1,4 +1,5 @@
 import { corsHeaders } from '../_shared/cors.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 interface ReportRequest {
   reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive';
@@ -14,6 +15,27 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { reportType, reportData, reportName, format }: ReportRequest = await req.json();
+
+    // Get user from auth header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Authorization header required');
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Supabase configuration missing');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user } } = await supabase.auth.getUser(token);
+    
+    if (!user) {
+      throw new Error('Invalid authentication');
+    }
 
     // Generate report content based on type and format
     let reportContent = '';
@@ -32,14 +54,48 @@ Deno.serve(async (req: Request) => {
       reportContent = JSON.stringify(reportData, null, 2);
     }
 
-    // In a real implementation, you would:
-    // 1. Generate the actual file content
-    // 2. Upload to cloud storage (like Supabase Storage)
-    // 3. Return the download URL
+    // Generate a unique filename
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `${reportName.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.${fileExtension}`;
+    
+    // Create a storage path for the user
+    const storagePath = `reports/${user.id}/${fileName}`;
+    
+    // Upload the file to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('reports')
+      .upload(storagePath, reportContent, {
+        contentType,
+        upsert: true
+      });
+    
+    if (uploadError) {
+      throw new Error(`Failed to upload report: ${uploadError.message}`);
+    }
+    
+    // Get a public URL for the file
+    const { data: urlData } = await supabase.storage
+      .from('reports')
+      .getPublicUrl(storagePath);
+    
+    const downloadUrl = urlData.publicUrl;
 
-    // For now, we'll simulate this
-    const fileName = `${reportName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${fileExtension}`;
-    const downloadUrl = `https://example.com/reports/${fileName}`;
+    // Save report metadata to the database
+    const { data: reportRecord, error: dbError } = await supabase
+      .from('reports')
+      .insert({
+        user_id: user.id,
+        report_type: reportType,
+        report_name: reportName,
+        report_data: reportData,
+        file_url: downloadUrl
+      })
+      .select()
+      .single();
+    
+    if (dbError) {
+      console.error('Error saving report metadata:', dbError);
+    }
 
     return new Response(
       JSON.stringify({
@@ -49,8 +105,7 @@ Deno.serve(async (req: Request) => {
         reportType,
         format,
         generatedAt: new Date().toISOString(),
-        // In development, include the content for preview
-        content: format === 'json' ? reportData : reportContent.substring(0, 1000) + '...'
+        reportId: reportRecord?.id
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -76,12 +131,27 @@ function generateCSVReport(reportType: string, data: any): string {
     data.auditHistory.forEach((audit: any) => {
       csv += `${audit.created_at},${audit.website_url},${audit.overall_score},${audit.ai_understanding},${audit.citation_likelihood},${audit.conversational_readiness},${audit.content_structure}\n`;
     });
+  } else if (reportType === 'competitive' && data.competitorAnalyses) {
+    csv = 'Competitor,URL,Overall Score,AI Understanding,Citation Likelihood,Conversational Readiness,Content Structure\n';
+    
+    data.competitorAnalyses.forEach((comp: any) => {
+      csv += `${comp.name},${comp.url},${comp.overallScore},${comp.subscores.aiUnderstanding},${comp.subscores.citationLikelihood},${comp.subscores.conversationalReadiness},${comp.subscores.contentStructure}\n`;
+    });
+  } else if (reportType === 'citation' && data.citations) {
+    csv = 'Source,URL,Snippet,Date,Type,Confidence Score,Match Type\n';
+    
+    data.citations.forEach((citation: any) => {
+      // Escape quotes in CSV fields
+      const escapedSnippet = citation.snippet.replace(/"/g, '""');
+      csv += `"${citation.source}","${citation.url}","${escapedSnippet}","${citation.date}","${citation.type}",${citation.confidence_score || 0},"${citation.match_type || ''}"\n`;
+    });
   } else if (reportType === 'comprehensive') {
     csv = 'Metric,Value\n';
     csv += `Total Audits,${data.auditHistory?.length || 0}\n`;
     csv += `Average Score,${data.auditHistory?.reduce((sum: number, a: any) => sum + a.overall_score, 0) / (data.auditHistory?.length || 1)}\n`;
     csv += `Industry,${data.profile?.industry || 'Not specified'}\n`;
     csv += `Websites,${data.profile?.websites?.length || 0}\n`;
+    csv += `Competitors,${data.profile?.competitors?.length || 0}\n`;
   }
   
   return csv;
@@ -153,6 +223,117 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
     });
     
     html += '</table>';
+    
+    if (latest?.recommendations?.length > 0) {
+      html += `
+        <h3>Key Recommendations</h3>
+        <ul>
+      `;
+      
+      latest.recommendations.forEach((rec: string) => {
+        html += `<li>${rec}</li>`;
+      });
+      
+      html += '</ul>';
+    }
+  } else if (reportType === 'competitive' && data.competitorAnalyses) {
+    html += `
+      <div class="metric">
+        <h2>Competitive Analysis</h2>
+        <p>Your ranking: #${data.summary?.ranking || 'N/A'}</p>
+        <p>Your score: ${data.summary?.primarySiteScore || 0}/100</p>
+        <p>Average competitor score: ${data.summary?.averageCompetitorScore || 0}/100</p>
+      </div>
+      
+      <h3>Competitor Comparison</h3>
+      <table>
+        <tr>
+          <th>Competitor</th>
+          <th>Overall Score</th>
+          <th>AI Understanding</th>
+          <th>Citation Likelihood</th>
+          <th>Conversational</th>
+          <th>Structure</th>
+        </tr>
+    `;
+    
+    data.competitorAnalyses.forEach((comp: any) => {
+      html += `
+        <tr>
+          <td>${comp.name}</td>
+          <td>${comp.overallScore}</td>
+          <td>${comp.subscores.aiUnderstanding}</td>
+          <td>${comp.subscores.citationLikelihood}</td>
+          <td>${comp.subscores.conversationalReadiness}</td>
+          <td>${comp.subscores.contentStructure}</td>
+        </tr>
+      `;
+    });
+    
+    html += '</table>';
+    
+    if (data.recommendations?.length > 0) {
+      html += `
+        <h3>Recommendations</h3>
+        <ul>
+      `;
+      
+      data.recommendations.forEach((rec: string) => {
+        html += `<li>${rec}</li>`;
+      });
+      
+      html += '</ul>';
+    }
+  } else if (reportType === 'citation' && data.citations) {
+    html += `
+      <div class="metric">
+        <h2>Citation Analysis</h2>
+        <p>Domain: ${data.domain}</p>
+        <p>Total mentions: ${data.total}</p>
+        <p>Keywords: ${data.searchTerms.join(', ')}</p>
+      </div>
+      
+      <h3>Citation Breakdown</h3>
+      <table>
+        <tr>
+          <th>Source</th>
+          <th>Type</th>
+          <th>Confidence</th>
+          <th>Match Type</th>
+          <th>Date</th>
+        </tr>
+    `;
+    
+    data.citations.forEach((citation: any) => {
+      html += `
+        <tr>
+          <td>${citation.source}</td>
+          <td>${citation.type}</td>
+          <td>${citation.confidence_score || 'N/A'}</td>
+          <td>${citation.match_type || 'N/A'}</td>
+          <td>${new Date(citation.date).toLocaleDateString()}</td>
+        </tr>
+      `;
+    });
+    
+    html += '</table>';
+    
+    html += `
+      <h3>Citation Snippets</h3>
+      <div style="margin-top: 20px;">
+    `;
+    
+    data.citations.forEach((citation: any, index: number) => {
+      html += `
+        <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+          <p><strong>Source:</strong> ${citation.source}</p>
+          <p><strong>Snippet:</strong> ${citation.snippet}</p>
+          <p><a href="${citation.url}" style="color: #8B5CF6;">View Source</a></p>
+        </div>
+      `;
+    });
+    
+    html += '</div>';
   }
 
   html += `
