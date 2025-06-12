@@ -235,7 +235,7 @@ function generateFallbackSummary(url: string, summaryType: string): Response {
         'Target markets'
       ];
       
-      optimizationNotes = 'This business summary clearly articulates the company's market position, business model, and value proposition for business-focused AI queries.';
+      optimizationNotes = 'This business summary clearly articulates the company\'s market position, business model, and value proposition for business-focused AI queries.';
       break;
       
     case 'audience':

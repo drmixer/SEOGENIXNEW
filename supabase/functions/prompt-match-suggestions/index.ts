@@ -316,7 +316,7 @@ function generateFallbackPromptSuggestions(
       intent: 'informational',
       aiSystem: 'ChatGPT',
       likelihood: 81,
-      optimization: 'Create a beginner's guide section with clear starting points'
+      optimization: 'Create a beginner\'s guide section with clear starting points'
     },
     {
       prompt: `Technical specifications for ${topic} implementation`,
