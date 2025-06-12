@@ -33,8 +33,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
         if (error) throw error;
         
         console.log('Login successful:', data);
-        console.log('User data:', data.user);
-        console.log('Session data:', data.session);
         
         // For login, session should be immediately available
         if (data.session && data.user) {
@@ -60,8 +58,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
         if (error) throw error;
         
         console.log('Signup response:', data);
-        console.log('User data:', data.user);
-        console.log('Session data:', data.session);
         
         // Check if email confirmation is required
         if (data.user && !data.session) {

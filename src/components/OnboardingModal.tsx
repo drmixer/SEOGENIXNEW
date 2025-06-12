@@ -104,8 +104,8 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
       
       try {
         const onboardingData = {
-          websites: websites.filter(w => w.url.trim() !== ''),
-          competitors: competitors.filter(c => c.url.trim() !== ''),
+          websites: websites.filter(w => w.url.trim() !== '' && w.name.trim() !== ''),
+          competitors: competitors.filter(c => c.url.trim() !== '' && c.name.trim() !== ''),
           industry,
           businessDescription,
           plan: userPlan,
@@ -388,12 +388,12 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                     <span>Add Another Competitor</span>
                   </button>
                 )}
-              </div>
-            )}
 
-            {error && (
-              <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-red-800 text-sm">{error}</p>
+                {error && (
+                  <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                    <p className="text-red-800 text-sm">{error}</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -41,11 +41,17 @@ function App() {
                 .from('user_profiles')
                 .select('*')
                 .eq('user_id', session.user.id)
-                .single();
+                .order('created_at', { ascending: false })
+                .limit(1);
                 
-              if (profiles) {
-                console.log('User profile found:', profiles);
-                setUserPlan(profiles.plan as any || 'free');
+              if (profiles && profiles.length > 0) {
+                console.log('User profile found:', profiles[0]);
+                setUserPlan(profiles[0].plan as any || 'free');
+                
+                // If onboarding is completed, go to dashboard
+                if (profiles[0].onboarding_completed_at) {
+                  setCurrentView('dashboard');
+                }
               }
             } catch (profileError) {
               console.error('Error fetching user profile:', profileError);
@@ -82,11 +88,12 @@ function App() {
               .from('user_profiles')
               .select('*')
               .eq('user_id', session.user.id)
-              .single();
+              .order('created_at', { ascending: false })
+              .limit(1);
               
-            if (profiles) {
-              console.log('User profile found after auth change:', profiles);
-              setUserPlan(profiles.plan as any || 'free');
+            if (profiles && profiles.length > 0) {
+              console.log('User profile found after auth change:', profiles[0]);
+              setUserPlan(profiles[0].plan as any || 'free');
             }
           } catch (profileError) {
             console.error('Error fetching user profile after auth change:', profileError);
@@ -96,6 +103,7 @@ function App() {
         console.log('User signed out, clearing user state');
         setUser(null);
         setUserPlan('free');
+        setCurrentView('landing');
       }
       
       setLoading(false);
@@ -169,14 +177,15 @@ function App() {
         .from('user_profiles')
         .select('*')
         .eq('user_id', session.user.id)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1);
         
-      if (profiles) {
-        console.log('User profile found after auth success:', profiles);
-        setUserPlan(profiles.plan as any || 'free');
+      if (profiles && profiles.length > 0) {
+        console.log('User profile found after auth success:', profiles[0]);
+        setUserPlan(profiles[0].plan as any || 'free');
         
         // If onboarding is already completed, go directly to dashboard
-        if (profiles.onboarding_completed_at) {
+        if (profiles[0].onboarding_completed_at) {
           console.log('Onboarding already completed, going to dashboard');
           setCurrentView('dashboard');
           return;
@@ -206,13 +215,14 @@ function App() {
     // Update user profile with selected plan if needed
     if (user) {
       try {
-        const { data: existingProfile } = await supabase
+        const { data: existingProfiles } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('user_id', user.id)
-          .single();
+          .order('created_at', { ascending: false })
+          .limit(1);
           
-        if (existingProfile) {
+        if (existingProfiles && existingProfiles.length > 0) {
           // Update existing profile
           await supabase
             .from('user_profiles')
@@ -221,7 +231,18 @@ function App() {
               onboarding_completed_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
-            .eq('id', existingProfile.id);
+            .eq('id', existingProfiles[0].id);
+        } else {
+          // Create new profile if none exists
+          await supabase
+            .from('user_profiles')
+            .insert({
+              user_id: user.id,
+              plan: userPlan,
+              onboarding_completed_at: new Date().toISOString(),
+              websites: [],
+              competitors: []
+            });
         }
       } catch (error) {
         console.error('Error updating user profile after onboarding:', error);
