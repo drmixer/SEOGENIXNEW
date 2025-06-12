@@ -25,7 +25,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
   const [competitors, setCompetitors] = useState<Competitor[]>([{ url: '', name: '' }]);
   const [industry, setIndustry] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Plan limits
@@ -99,16 +99,13 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
       setStep(step + 1);
     } else {
       // Save data and complete onboarding
-      setIsSubmitting(true);
+      setLoading(true);
       setError(null);
       
       try {
-        const filteredWebsites = websites.filter(w => w.url.trim() !== '' && w.name.trim() !== '');
-        const filteredCompetitors = competitors.filter(c => c.url.trim() !== '' && c.name.trim() !== '');
-        
         const onboardingData = {
-          websites: filteredWebsites,
-          competitors: filteredCompetitors,
+          websites: websites.filter(w => w.url.trim() !== ''),
+          competitors: competitors.filter(c => c.url.trim() !== ''),
           industry,
           businessDescription,
           plan: userPlan,
@@ -123,34 +120,15 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
             data: { plan: userPlan }
           });
           
-          // Check if profile already exists
-          const { data: existingProfiles } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('user_id', user.id);
-            
-          if (existingProfiles && existingProfiles.length > 0) {
-            // Update existing profile
-            await userDataService.updateUserProfile(user.id, {
-              websites: onboardingData.websites,
-              competitors: onboardingData.competitors,
-              industry: onboardingData.industry,
-              business_description: onboardingData.businessDescription,
-              plan: userPlan,
-              onboarding_completed_at: new Date().toISOString()
-            });
-          } else {
-            // Create new profile
-            await userDataService.createUserProfile({
-              user_id: user.id,
-              websites: onboardingData.websites,
-              competitors: onboardingData.competitors,
-              industry: onboardingData.industry,
-              business_description: onboardingData.businessDescription,
-              plan: userPlan,
-              onboarding_completed_at: new Date().toISOString()
-            });
-          }
+          await userDataService.createUserProfile({
+            user_id: user.id,
+            websites: onboardingData.websites,
+            competitors: onboardingData.competitors,
+            industry: onboardingData.industry,
+            business_description: onboardingData.businessDescription,
+            plan: userPlan,
+            onboarding_completed_at: new Date().toISOString()
+          });
 
           // Track onboarding completion
           await userDataService.trackActivity({
@@ -170,11 +148,11 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         
         // Complete onboarding
         onComplete();
-      } catch (err: any) {
-        console.error('Error saving onboarding data:', err);
-        setError(err.message || 'Failed to save onboarding data. Please try again.');
+      } catch (error) {
+        console.error('Error saving onboarding data:', error);
+        setError('Failed to save your settings. Please try again.');
       } finally {
-        setIsSubmitting(false);
+        setLoading(false);
       }
     }
   };
@@ -185,7 +163,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
     } else if (step === 2) {
       return industry.trim() !== '';
     } else {
-      return true; // Competitors are optional
+      return competitors.some(c => c.url.trim() !== '' && c.name.trim() !== '');
     }
   };
 
@@ -410,12 +388,12 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                     <span>Add Another Competitor</span>
                   </button>
                 )}
-                
-                {error && (
-                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-red-600 text-sm">{error}</p>
-                  </div>
-                )}
+              </div>
+            )}
+
+            {error && (
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-800 text-sm">{error}</p>
               </div>
             )}
           </div>
@@ -434,16 +412,12 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
             
             <button
               onClick={handleNext}
-              disabled={!canProceed() || isSubmitting}
+              disabled={!canProceed() || loading}
               className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
             >
-              {isSubmitting ? (
+              {loading ? (
                 <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Saving...</span>
+                  <span>Processing...</span>
                 </>
               ) : (
                 <>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import DashboardHeader from './DashboardHeader';
 import Sidebar from './Sidebar';
 import VisibilityScore from './VisibilityScore';
@@ -54,98 +54,82 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [showBilling, setShowBilling] = useState(false);
   const [actionableInsights, setActionableInsights] = useState<ActionableInsight[]>([]);
   const { toasts, addToast, removeToast } = useToast();
-  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   // Extract first name from user data
   const getFirstName = () => {
+    console.log('Getting first name for user:', user);
+    
     if (!user) {
+      console.log('No user object available');
       return 'User';
     }
     
     // Try multiple possible locations for the name
     if (user?.user_metadata?.full_name) {
       const firstName = user.user_metadata.full_name.split(' ')[0];
+      console.log('Using full_name from user_metadata:', firstName);
       return firstName;
     }
     
     if (user?.user_metadata?.name) {
       const firstName = user.user_metadata.name.split(' ')[0];
+      console.log('Using name from user_metadata:', firstName);
       return firstName;
     }
     
     if (user?.raw_user_meta_data?.full_name) {
       const firstName = user.raw_user_meta_data.full_name.split(' ')[0];
+      console.log('Using full_name from raw_user_meta_data:', firstName);
       return firstName;
     }
     
     if (user?.raw_user_meta_data?.name) {
       const firstName = user.raw_user_meta_data.name.split(' ')[0];
+      console.log('Using name from raw_user_meta_data:', firstName);
       return firstName;
     }
     
     // Check app_metadata
     if (user?.app_metadata?.full_name) {
       const firstName = user.app_metadata.full_name.split(' ')[0];
+      console.log('Using full_name from app_metadata:', firstName);
       return firstName;
     }
     
     if (user?.identities?.[0]?.identity_data?.full_name) {
       const firstName = user.identities[0].identity_data.full_name.split(' ')[0];
+      console.log('Using full_name from identities:', firstName);
       return firstName;
     }
     
     if (user?.identities?.[0]?.identity_data?.name) {
       const firstName = user.identities[0].identity_data.name.split(' ')[0];
+      console.log('Using name from identities:', firstName);
       return firstName;
     }
     
     // Fall back to email
     if (user?.email) {
       const emailName = user.email.split('@')[0];
+      console.log('Using email username:', emailName);
       return emailName.charAt(0).toUpperCase() + emailName.slice(1);
     }
     
+    console.log('Fallback to User');
     return 'User';
   };
 
   // Generate actionable insights based on user data
-  const generateActionableInsights = useCallback(async () => {
-    if (!user || !userProfile) {
-      setActionableInsights([{
-        id: 'welcome',
-        type: 'suggestion',
-        title: 'Welcome to SEOGENIX',
-        description: 'Explore the dashboard to discover AI visibility tools and features.',
-        action: 'Take Tour',
-        icon: Target,
-        color: 'from-blue-500 to-blue-600',
-        contextualTip: 'The dashboard tour will help you understand how to use the platform effectively.',
-      }]);
-      return;
-    }
+  const generateActionableInsights = async () => {
+    if (!user || !userProfile) return;
 
-    setLoadingInsights(true);
-    
     try {
       const insights: ActionableInsight[] = [];
 
       // Get recent audit history
-      let auditHistory = [];
-      let recentActivity = [];
-      
-      try {
-        auditHistory = await userDataService.getAuditHistory(user.id, 5);
-      } catch (error) {
-        console.error('Error loading audit history:', error);
-        auditHistory = [];
-      }
-      
-      try {
-        recentActivity = await userDataService.getRecentActivity(user.id, 10);
-      } catch (error) {
-        console.error('Error loading recent activity:', error);
-        recentActivity = [];
-      }
+      const auditHistory = await userDataService.getAuditHistory(user.id, 5);
+      const recentActivity = await userDataService.getRecentActivity(user.id, 10);
 
       // 1. No websites configured
       if (!userProfile.websites || userProfile.websites.length === 0) {
@@ -181,13 +165,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
       // 3. Low audit scores
       if (auditHistory.length > 0) {
-        const latest = auditHistory[0];
-        if (latest.overall_score < 60) {
+        const latestAudit = auditHistory[0];
+        if (latestAudit.overall_score < 60) {
           insights.push({
             id: 'low-score',
             type: 'urgent',
             title: 'Critical: Low AI Visibility Score',
-            description: `Your latest score is ${latest.overall_score}/100. Use Content Optimizer to improve immediately.`,
+            description: `Your latest score is ${latestAudit.overall_score}/100. Use Content Optimizer to improve immediately.`,
             action: 'Optimize Content',
             actionUrl: 'optimizer',
             icon: AlertTriangle,
@@ -195,12 +179,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             contextualTip: 'Scores below 60 indicate significant issues with AI comprehension. Content optimization can quickly improve your visibility and citation likelihood.',
             learnMoreLink: 'https://docs.seogenix.com/optimization/content-optimizer'
           });
-        } else if (latest.overall_score < 75) {
+        } else if (latestAudit.overall_score < 75) {
           insights.push({
             id: 'medium-score',
             type: 'opportunity',
             title: 'Improve Your AI Visibility Score',
-            description: `Score: ${latest.overall_score}/100. Add structured data with Schema Generator for quick wins.`,
+            description: `Score: ${latestAudit.overall_score}/100. Add structured data with Schema Generator for quick wins.`,
             action: 'Generate Schema',
             actionUrl: 'schema',
             icon: TrendingUp,
@@ -211,12 +195,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         }
 
         // Check for specific subscore issues
-        if (latest.content_structure < 70) {
+        if (latestAudit.content_structure < 70) {
           insights.push({
             id: 'structure-issue',
             type: 'opportunity',
             title: 'Content Structure Needs Work',
-            description: `Structure score: ${latest.content_structure}/100. Generate FAQ content to improve organization.`,
+            description: `Structure score: ${latestAudit.content_structure}/100. Generate FAQ content to improve organization.`,
             action: 'Generate Content',
             actionUrl: 'generator',
             icon: Zap,
@@ -226,12 +210,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           });
         }
 
-        if (latest.citation_likelihood < 70) {
+        if (latestAudit.citation_likelihood < 70) {
           insights.push({
             id: 'citation-issue',
             type: 'opportunity',
             title: 'Low Citation Likelihood',
-            description: `Citation score: ${latest.citation_likelihood}/100. Track current mentions and optimize content.`,
+            description: `Citation score: ${latestAudit.citation_likelihood}/100. Track current mentions and optimize content.`,
             action: 'Track Citations',
             actionUrl: 'citations',
             icon: Target,
@@ -312,23 +296,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       }
 
       setActionableInsights(insights.slice(0, 3)); // Show top 3 insights
+
     } catch (error) {
       console.error('Error generating actionable insights:', error);
-      // Set a default insight if there's an error
-      setActionableInsights([{
-        id: 'welcome',
-        type: 'suggestion',
-        title: 'Welcome to SEOGENIX',
-        description: 'Explore the dashboard to discover AI visibility tools and features.',
-        action: 'Take Tour',
-        icon: Target,
-        color: 'from-blue-500 to-blue-600',
-        contextualTip: 'The dashboard tour will help you understand how to use the platform effectively.',
-      }]);
-    } finally {
-      setLoadingInsights(false);
+      setDashboardError('Failed to generate insights. Please refresh the page.');
     }
-  }, [user, userProfile, userPlan]);
+  };
 
   // Load user profile and set up dashboard
   useEffect(() => {
@@ -377,21 +350,23 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         } else {
           console.log('No profile found for user - this is expected for new users');
         }
-        
-        // Set loading to false regardless of profile existence
-        setLoading(false);
-        
-        // Generate insights after profile is loaded
-        await generateActionableInsights();
-        
       } catch (error) {
         console.error('Error loading user profile:', error);
+        setDashboardError('Failed to load user profile. Please refresh the page.');
+      } finally {
         setLoading(false);
       }
     };
 
     loadUserProfile();
-  }, [user, generateActionableInsights]);
+  }, [user]);
+
+  // Generate insights when profile loads
+  useEffect(() => {
+    if (userProfile && user) {
+      generateActionableInsights();
+    }
+  }, [userProfile, user, userPlan]);
 
   // Track page visits
   useEffect(() => {
@@ -561,6 +536,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading user data...</p>
+          {dashboardError && (
+            <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{dashboardError}</p>
+          )}
         </div>
       </div>
     );
@@ -572,6 +550,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading dashboard...</p>
+          {dashboardError && (
+            <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{dashboardError}</p>
+          )}
         </div>
       </div>
     );
@@ -602,32 +583,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             </div>
 
             {/* Actionable Insights Section */}
-            {loadingInsights ? (
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Actionable Insights</h3>
-                  <div className="animate-pulse bg-gray-200 h-5 w-24 rounded"></div>
-                </div>
-                <div className="space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="animate-pulse p-4 rounded-lg border-l-4 border-gray-200 bg-gray-50">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3">
-                          <div className="bg-gray-200 p-2 rounded-lg h-9 w-9"></div>
-                          <div className="flex-1">
-                            <div className="bg-gray-200 h-5 w-48 rounded mb-2"></div>
-                            <div className="bg-gray-200 h-4 w-full rounded mb-2"></div>
-                            <div className="bg-gray-200 h-4 w-3/4 rounded mb-3"></div>
-                            <div className="bg-gray-200 h-8 w-32 rounded"></div>
-                          </div>
-                        </div>
-                        <div className="bg-gray-200 h-6 w-16 rounded-full"></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : actionableInsights.length > 0 ? (
+            {actionableInsights.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Actionable Insights</h3>
@@ -701,7 +657,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   })}
                 </div>
               </div>
-            ) : null}
+            )}
 
             {/* Site Selector - Show if user has completed onboarding */}
             {userProfile && userProfile.websites && userProfile.websites.length > 0 && (
@@ -845,7 +801,25 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         />
         
         <main className="flex-1 p-8 overflow-y-auto">
-          {renderActiveSection()}
+          {dashboardError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start">
+                <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 mr-2" />
+                <div>
+                  <h3 className="text-red-800 font-medium">Error</h3>
+                  <p className="text-red-700 text-sm">{dashboardError}</p>
+                  <button 
+                    onClick={() => window.location.reload()} 
+                    className="text-red-700 underline text-sm mt-2"
+                  >
+                    Refresh Page
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            renderActiveSection()
+          )}
         </main>
       </div>
       
