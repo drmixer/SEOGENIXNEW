@@ -17,6 +17,7 @@ function App() {
   const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
 
   useEffect(() => {
     // Get initial session
@@ -169,7 +170,10 @@ function App() {
 
   const handleNavigateToDashboard = () => {
     if (user) {
+      setDashboardLoading(true);
+      console.log('Navigating to dashboard for user:', user.id);
       setCurrentView('dashboard');
+      setTimeout(() => setDashboardLoading(false), 500);
     } else {
       setAuthModalMode('login');
       setShowAuthModal(true);
@@ -334,14 +338,35 @@ function App() {
   const handleSignOut = async () => {
     console.log('Signing out user');
     try {
-      await supabase.auth.signOut();
+      setLoading(true);
+      
+      // First, clean up local storage
+      localStorage.removeItem('seogenix_walkthrough_completed');
+      localStorage.removeItem('seogenix_immediate_walkthrough');
+      localStorage.removeItem('seogenix_tools_run');
+      localStorage.removeItem('seogenix_onboarding');
+      
+      // Perform the sign out
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      if (error) {
+        console.error('Error during sign out:', error);
+        throw error;
+      }
+      
       console.log('Sign out successful');
+      
+      // Ensure state is reset
       setUser(null);
       setCurrentView('landing');
       setSelectedPlan('free');
       setUserPlan('free');
+      setShowOnboarding(false);
+      setShowAuthModal(false);
     } catch (error) {
       console.error('Error signing out:', error);
+      alert('There was a problem signing out. Please try again or refresh the page.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -369,6 +394,17 @@ function App() {
           {authError && (
             <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{authError}</p>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (dashboardLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
         </div>
       </div>
     );

@@ -19,7 +19,7 @@ import ToastContainer from './ToastContainer';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../hooks/useToast';
-import { TrendingUp, AlertTriangle, Target, Zap, Users, BarChart3, CheckCircle, ArrowRight } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Target, Zap, Users, BarChart3, CheckCircle, ArrowRight, RefreshCw } from 'lucide-react';
 
 interface DashboardProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -55,68 +55,31 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [actionableInsights, setActionableInsights] = useState<ActionableInsight[]>([]);
   const { toasts, addToast, removeToast } = useToast();
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Extract first name from user data
   const getFirstName = () => {
-    console.log('Getting first name for user:', user);
-    
     if (!user) {
-      console.log('No user object available');
       return 'User';
     }
     
     // Try multiple possible locations for the name
     if (user?.user_metadata?.full_name) {
       const firstName = user.user_metadata.full_name.split(' ')[0];
-      console.log('Using full_name from user_metadata:', firstName);
       return firstName;
     }
     
     if (user?.user_metadata?.name) {
       const firstName = user.user_metadata.name.split(' ')[0];
-      console.log('Using name from user_metadata:', firstName);
-      return firstName;
-    }
-    
-    if (user?.raw_user_meta_data?.full_name) {
-      const firstName = user.raw_user_meta_data.full_name.split(' ')[0];
-      console.log('Using full_name from raw_user_meta_data:', firstName);
-      return firstName;
-    }
-    
-    if (user?.raw_user_meta_data?.name) {
-      const firstName = user.raw_user_meta_data.name.split(' ')[0];
-      console.log('Using name from raw_user_meta_data:', firstName);
-      return firstName;
-    }
-    
-    // Check app_metadata
-    if (user?.app_metadata?.full_name) {
-      const firstName = user.app_metadata.full_name.split(' ')[0];
-      console.log('Using full_name from app_metadata:', firstName);
-      return firstName;
-    }
-    
-    if (user?.identities?.[0]?.identity_data?.full_name) {
-      const firstName = user.identities[0].identity_data.full_name.split(' ')[0];
-      console.log('Using full_name from identities:', firstName);
-      return firstName;
-    }
-    
-    if (user?.identities?.[0]?.identity_data?.name) {
-      const firstName = user.identities[0].identity_data.name.split(' ')[0];
-      console.log('Using name from identities:', firstName);
       return firstName;
     }
     
     // Fall back to email
     if (user?.email) {
       const emailName = user.email.split('@')[0];
-      console.log('Using email username:', emailName);
       return emailName.charAt(0).toUpperCase() + emailName.slice(1);
     }
     
-    console.log('Fallback to User');
     return 'User';
   };
 
@@ -347,19 +310,28 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
               }, 1500);
             }
           }
+          
+          setLoading(false);
         } else {
           console.log('No profile found for user - this is expected for new users');
+          // Retry profile load if this is the first attempt (could be a timing issue)
+          if (retryCount < 2) {
+            console.log(`Retrying profile load (attempt ${retryCount + 1})`);
+            setRetryCount(retryCount + 1);
+            setTimeout(loadUserProfile, 1000);
+            return;
+          }
+          setLoading(false);
         }
       } catch (error) {
         console.error('Error loading user profile:', error);
         setDashboardError('Failed to load user profile. Please refresh the page.');
-      } finally {
         setLoading(false);
       }
     };
 
     loadUserProfile();
-  }, [user]);
+  }, [user, retryCount]);
 
   // Generate insights when profile loads
   useEffect(() => {
@@ -389,10 +361,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
   // Check for walkthrough trigger on dashboard load
   useEffect(() => {
-    console.log('Dashboard useEffect - checking for walkthrough triggers');
-    
     if (!user) {
-      console.log('No user, skipping walkthrough check');
       return;
     }
 
@@ -400,7 +369,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       // Set tools run state
       const toolsRun = localStorage.getItem('seogenix_tools_run');
       if (toolsRun) {
-        console.log('Tools have been run before');
         setHasRunTools(true);
       }
 
@@ -408,21 +376,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       const immediateWalkthrough = localStorage.getItem('seogenix_immediate_walkthrough');
       const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
       
-      console.log('Dashboard initialization:', {
-        immediateWalkthrough: !!immediateWalkthrough,
-        walkthroughCompleted: !!walkthroughCompleted,
-        userId: user.id,
-        userEmail: user.email
-      });
-
       // Always check for immediate walkthrough first
       if (immediateWalkthrough) {
-        console.log('Found immediate walkthrough flag - triggering walkthrough');
         localStorage.removeItem('seogenix_immediate_walkthrough');
         
         // Use a longer delay to ensure dashboard is fully rendered
         setTimeout(() => {
-          console.log('Starting immediate walkthrough...');
           setShowWalkthrough(true);
         }, 2000);
         return;
@@ -529,6 +488,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const isDevelopment = true; // Set to false for production
   const canAccessChatbot = isDevelopment || userPlan !== 'free';
 
+  // Force a reload of the dashboard to try again
+  const handleReloadDashboard = () => {
+    window.location.reload();
+  };
+
   // Don't render dashboard until we have user data
   if (!user) {
     return (
@@ -536,6 +500,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading user data...</p>
+          <div className="mt-4">
+            <button
+              onClick={onNavigateToLanding}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              Return to Home
+            </button>
+          </div>
           {dashboardError && (
             <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{dashboardError}</p>
           )}
@@ -802,19 +774,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         
         <main className="flex-1 p-8 overflow-y-auto">
           {dashboardError ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <div className="flex items-start">
-                <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 mr-2" />
-                <div>
-                  <h3 className="text-red-800 font-medium">Error</h3>
-                  <p className="text-red-700 text-sm">{dashboardError}</p>
-                  <button 
-                    onClick={() => window.location.reload()} 
-                    className="text-red-700 underline text-sm mt-2"
-                  >
-                    Refresh Page
-                  </button>
-                </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+              <div className="flex flex-col items-center text-center">
+                <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
+                <h3 className="text-lg font-medium text-red-800 mb-2">Dashboard Error</h3>
+                <p className="text-red-700 mb-4">{dashboardError}</p>
+                <button 
+                  onClick={handleReloadDashboard} 
+                  className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Reload Dashboard</span>
+                </button>
               </div>
             </div>
           ) : (

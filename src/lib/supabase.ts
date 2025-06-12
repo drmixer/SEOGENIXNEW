@@ -18,18 +18,55 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true
+  },
+  global: {
+    headers: {
+      'x-application-name': 'seogenix'
+    },
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   }
+});
+
+// Test the connection
+supabase.auth.getSession().then(({ data, error }) => {
+  if (error) {
+    console.error('Error testing Supabase connection:', error);
+  } else {
+    console.log('Supabase connection test successful, session exists:', !!data.session);
+  }
+}).catch(err => {
+  console.error('Exception testing Supabase connection:', err);
 });
 
 // Helper function to reset auth state - useful for debugging
 export const resetAuth = async () => {
   try {
+    console.log('Resetting auth state...');
+    
+    // Clean local storage
     localStorage.removeItem('supabase.auth.token');
     sessionStorage.removeItem('supabase.auth.token');
     
-    // Sign out current session if any
+    // Clear all other related storage
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('supabase.') || key.startsWith('seogenix_')) {
+        localStorage.removeItem(key);
+      }
+    });
+    
+    Object.keys(sessionStorage).forEach(key => {
+      if (key.startsWith('supabase.') || key.startsWith('seogenix_')) {
+        sessionStorage.removeItem(key);
+      }
+    });
+    
+    // Sign out current session
     await supabase.auth.signOut({
-      scope: 'local'
+      scope: 'global'
     });
     
     console.log('Auth state has been reset');
@@ -46,6 +83,14 @@ export const logSessionDebug = async () => {
     const { data, error } = await supabase.auth.getSession();
     console.log('DEBUG - Current session:', data.session ? 'Valid session' : 'No session');
     if (error) console.error('DEBUG - Session error:', error);
+    
+    if (data.session?.user) {
+      console.log('DEBUG - User ID:', data.session.user.id);
+      console.log('DEBUG - User email:', data.session.user.email);
+      console.log('DEBUG - User metadata:', data.session.user.user_metadata);
+      console.log('DEBUG - Session expires at:', new Date(data.session.expires_at * 1000).toLocaleString());
+    }
+    
     return { data, error };
   } catch (e) {
     console.error('DEBUG - Exception getting session:', e);

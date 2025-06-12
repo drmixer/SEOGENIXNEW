@@ -17,6 +17,28 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userPlan, onNavigateT
     agency: 'bg-gradient-to-r from-teal-500 to-purple-600 text-white'
   };
 
+  // Safely extract user display info
+  const getUserDisplayName = () => {
+    if (!user) return 'Guest';
+    
+    if (user.user_metadata?.full_name) {
+      return user.user_metadata.full_name;
+    }
+    
+    if (user.email) {
+      return user.email;
+    }
+    
+    return 'User';
+  };
+
+  const handleSignOut = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Sign out button clicked');
+    onSignOut();
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
       <div className="px-8 py-4">
@@ -51,7 +73,7 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userPlan, onNavigateT
             
             <div className="flex items-center space-x-2 text-sm text-gray-600">
               <User className="w-4 h-4" />
-              <span>{user?.user_metadata?.full_name || user?.email}</span>
+              <span>{getUserDisplayName()}</span>
             </div>
             
             <button className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
@@ -59,8 +81,8 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userPlan, onNavigateT
             </button>
             
             <button 
-              onClick={onSignOut}
-              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              onClick={handleSignOut}
+              className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               title="Sign Out"
             >
               <LogOut className="w-5 h-5" />
