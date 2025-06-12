@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import DashboardHeader from './DashboardHeader';
 import Sidebar from './Sidebar';
 import VisibilityScore from './VisibilityScore';
@@ -57,6 +57,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const { toasts, addToast, removeToast } = useToast();
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [profileFetchAttempted, setProfileFetchAttempted] = useState(false);
+  const profileFetchedRef = useRef(false);
 
   // Extract first name from user data
   const getFirstName = () => {
@@ -270,16 +271,24 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Load user profile and set up dashboard
   useEffect(() => {
     const loadUserProfile = async () => {
-      if (!user) {
+      if (!user || !user.id) {
         console.log('No user available, skipping profile load');
         setLoading(false);
         setLoadingProfile(false);
         return;
       }
 
+      // Prevent duplicate profile fetches
+      if (profileFetchedRef.current) {
+        console.log('Profile already fetched, skipping');
+        return;
+      }
+
       try {
         console.log('Loading user profile for:', user.id);
         setLoadingProfile(true);
+        profileFetchedRef.current = true;
+        
         const profile = await userDataService.getUserProfile(user.id);
         console.log('Loaded profile:', profile);
         
@@ -319,32 +328,26 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           if (toolsRun) {
             setHasRunTools(true);
           }
-          
-          setLoading(false);
-          setLoadingProfile(false);
-          setProfileFetchAttempted(true);
         } else {
           console.log('No profile found for user - this is expected for new users');
-          setLoading(false);
-          setLoadingProfile(false);
-          setProfileFetchAttempted(true);
         }
       } catch (error) {
         console.error('Error loading user profile:', error);
         setDashboardError('Failed to load user profile. Please refresh the page.');
+      } finally {
         setLoading(false);
         setLoadingProfile(false);
         setProfileFetchAttempted(true);
       }
     };
 
-    if (user && !profileFetchAttempted) {
+    if (user?.id && !profileFetchAttempted && !profileFetchedRef.current) {
       loadUserProfile();
     } else if (!user) {
       setLoading(false);
       setLoadingProfile(false);
     }
-  }, [user, profileFetchAttempted]);
+  }, [user?.id, profileFetchAttempted]); // Only depend on user.id, not the entire user object
 
   // Generate insights when profile loads
   useEffect(() => {
@@ -353,11 +356,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     }
   }, [userProfile, user, userPlan, generateActionableInsights]);
 
-  // Track page visits
+  // Track page visits - only once when section changes
   useEffect(() => {
     const trackPageVisit = async () => {
       try {
-        if (user) {
+        if (user && user.id) {
           await userDataService.trackActivity({
             user_id: user.id,
             activity_type: 'page_visited',
@@ -370,7 +373,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     };
 
     trackPageVisit();
-  }, [activeSection, user]);
+  }, [activeSection, user?.id]); // Only depend on user.id, not the entire user object
 
   // Handle tool launch from Genie
   const handleToolLaunch = async (toolId: string) => {
@@ -379,7 +382,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     
     // Track tool launch activity
     try {
-      if (user) {
+      if (user && user.id) {
         await userDataService.trackActivity({
           user_id: user.id,
           activity_type: 'tool_launched_from_genie',
@@ -430,7 +433,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       
       // Track insight action
       try {
-        if (user) {
+        if (user && user.id) {
           userDataService.trackActivity({
             user_id: user.id,
             activity_type: 'insight_action_taken',

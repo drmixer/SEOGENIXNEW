@@ -57,12 +57,12 @@ function App() {
           await fetchUserProfile(session.user.id);
         } else {
           console.log('No user in session, staying on landing page');
+          setLoading(false);
+          setAuthInitialized(true);
         }
       } catch (error) {
         console.error('Error in initializeAuth:', error);
         setAuthError('Authentication initialization failed: ' + (error as Error).message);
-      } finally {
-        console.log('Auth initialization complete');
         setLoading(false);
         setAuthInitialized(true);
       }
@@ -101,10 +101,16 @@ function App() {
           console.log('No profile found, showing onboarding');
           setShowOnboarding(true);
         }
+        
+        // Important: Set loading and authInitialized here to ensure they're set after profile fetch
+        setLoading(false);
+        setAuthInitialized(true);
       } catch (profileError) {
         console.error('Error in profile fetch:', profileError);
         // Continue with default plan and show onboarding
         setShowOnboarding(true);
+        setLoading(false);
+        setAuthInitialized(true);
       }
     };
 
@@ -121,6 +127,9 @@ function App() {
           console.log('Setting user from auth change:', session.user.id);
           setUser(session.user);
           
+          // Set authInitialized to true here as well to prevent timeout
+          setAuthInitialized(true);
+          
           // Fetch user profile to get plan - use a separate function to avoid nesting
           await fetchUserProfile(session.user.id);
         }
@@ -130,6 +139,8 @@ function App() {
         setUserPlan('free');
         setCurrentView('landing');
         setShowOnboarding(false);
+        setLoading(false);
+        setAuthInitialized(true);
       }
     });
 

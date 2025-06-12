@@ -102,6 +102,11 @@ const CACHE_TTL = 60000; // 1 minute cache TTL
 export const userDataService = {
   // User Profile Management
   async getUserProfile(userId: string): Promise<UserProfile | null> {
+    if (!userId) {
+      console.error('getUserProfile called with empty userId');
+      return null;
+    }
+    
     try {
       console.log('Fetching user profile for userId:', userId);
       
@@ -145,6 +150,11 @@ export const userDataService = {
   },
 
   async createUserProfile(profile: Partial<UserProfile>): Promise<UserProfile | null> {
+    if (!profile.user_id) {
+      console.error('createUserProfile called with empty user_id');
+      return null;
+    }
+    
     try {
       console.log('Creating user profile:', profile);
       
@@ -186,6 +196,11 @@ export const userDataService = {
   },
 
   async updateUserProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
+    if (!userId) {
+      console.error('updateUserProfile called with empty userId');
+      return null;
+    }
+    
     try {
       console.log('Updating user profile for userId:', userId, 'with updates:', updates);
       
@@ -233,6 +248,11 @@ export const userDataService = {
 
   // White-label Settings
   async getWhiteLabelSettings(userId: string): Promise<WhiteLabelSettings | null> {
+    if (!userId) {
+      console.error('getWhiteLabelSettings called with empty userId');
+      return null;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('white_label_settings')
@@ -253,6 +273,11 @@ export const userDataService = {
   },
 
   async updateWhiteLabelSettings(userId: string, settings: Partial<WhiteLabelSettings>): Promise<WhiteLabelSettings | null> {
+    if (!userId) {
+      console.error('updateWhiteLabelSettings called with empty userId');
+      return null;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('white_label_settings')
@@ -274,6 +299,11 @@ export const userDataService = {
 
   // CMS Integrations
   async getCMSIntegrations(userId: string): Promise<CMSIntegration[]> {
+    if (!userId) {
+      console.error('getCMSIntegrations called with empty userId');
+      return [];
+    }
+    
     try {
       const { data, error } = await supabase
         .from('cms_integrations')
@@ -290,6 +320,11 @@ export const userDataService = {
   },
 
   async createCMSIntegration(integration: Partial<CMSIntegration>): Promise<CMSIntegration | null> {
+    if (!integration.user_id) {
+      console.error('createCMSIntegration called with empty user_id');
+      return null;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('cms_integrations')
@@ -306,6 +341,11 @@ export const userDataService = {
   },
 
   async updateCMSIntegration(integrationId: string, updates: Partial<CMSIntegration>): Promise<CMSIntegration | null> {
+    if (!integrationId) {
+      console.error('updateCMSIntegration called with empty integrationId');
+      return null;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('cms_integrations')
@@ -323,6 +363,11 @@ export const userDataService = {
   },
 
   async deleteCMSIntegration(integrationId: string): Promise<boolean> {
+    if (!integrationId) {
+      console.error('deleteCMSIntegration called with empty integrationId');
+      return false;
+    }
+    
     try {
       const { error } = await supabase
         .from('cms_integrations')
@@ -339,6 +384,11 @@ export const userDataService = {
 
   // Saved Citation Prompts
   async getSavedCitationPrompts(userId: string): Promise<SavedCitationPrompt[]> {
+    if (!userId) {
+      console.error('getSavedCitationPrompts called with empty userId');
+      return [];
+    }
+    
     try {
       const { data, error } = await supabase
         .from('saved_citation_prompts')
@@ -355,6 +405,11 @@ export const userDataService = {
   },
 
   async saveCitationPrompt(prompt: Partial<SavedCitationPrompt>): Promise<SavedCitationPrompt | null> {
+    if (!prompt.user_id) {
+      console.error('saveCitationPrompt called with empty user_id');
+      return null;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('saved_citation_prompts')
@@ -371,6 +426,11 @@ export const userDataService = {
   },
 
   async deleteSavedCitationPrompt(promptId: string): Promise<boolean> {
+    if (!promptId) {
+      console.error('deleteSavedCitationPrompt called with empty promptId');
+      return false;
+    }
+    
     try {
       const { error } = await supabase
         .from('saved_citation_prompts')
@@ -387,6 +447,11 @@ export const userDataService = {
 
   // Fingerprint Phrases
   async getFingerprintPhrases(userId: string): Promise<FingerprintPhrase[]> {
+    if (!userId) {
+      console.error('getFingerprintPhrases called with empty userId');
+      return [];
+    }
+    
     try {
       const { data, error } = await supabase
         .from('fingerprint_phrases')
@@ -403,6 +468,11 @@ export const userDataService = {
   },
 
   async saveFingerprintPhrase(phrase: Partial<FingerprintPhrase>): Promise<FingerprintPhrase | null> {
+    if (!phrase.user_id) {
+      console.error('saveFingerprintPhrase called with empty user_id');
+      return null;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('fingerprint_phrases')
@@ -419,6 +489,11 @@ export const userDataService = {
   },
 
   async updateFingerprintPhrase(phraseId: string, updates: Partial<FingerprintPhrase>): Promise<FingerprintPhrase | null> {
+    if (!phraseId) {
+      console.error('updateFingerprintPhrase called with empty phraseId');
+      return null;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('fingerprint_phrases')
@@ -436,6 +511,11 @@ export const userDataService = {
   },
 
   async deleteFingerprintPhrase(phraseId: string): Promise<boolean> {
+    if (!phraseId) {
+      console.error('deleteFingerprintPhrase called with empty phraseId');
+      return false;
+    }
+    
     try {
       const { error } = await supabase
         .from('fingerprint_phrases')
@@ -452,6 +532,11 @@ export const userDataService = {
 
   // Audit History Management
   async saveAuditResult(auditResult: Partial<AuditHistoryEntry>): Promise<AuditHistoryEntry | null> {
+    if (!auditResult.user_id) {
+      console.error('saveAuditResult called with empty user_id');
+      return null;
+    }
+    
     try {
       console.log('Saving audit result:', auditResult);
       
@@ -475,6 +560,11 @@ export const userDataService = {
   },
 
   async getAuditHistory(userId: string, limit = 50): Promise<AuditHistoryEntry[]> {
+    if (!userId) {
+      console.error('getAuditHistory called with empty userId');
+      return [];
+    }
+    
     try {
       console.log('Fetching audit history for userId:', userId, 'limit:', limit);
       
@@ -499,6 +589,11 @@ export const userDataService = {
   },
 
   async getAuditHistoryForWebsite(userId: string, websiteUrl: string, limit = 20): Promise<AuditHistoryEntry[]> {
+    if (!userId || !websiteUrl) {
+      console.error('getAuditHistoryForWebsite called with empty userId or websiteUrl');
+      return [];
+    }
+    
     try {
       console.log('Fetching audit history for userId:', userId, 'website:', websiteUrl, 'limit:', limit);
       
@@ -525,6 +620,11 @@ export const userDataService = {
 
   // User Activity Tracking
   async trackActivity(activity: Partial<UserActivity>): Promise<void> {
+    if (!activity.user_id) {
+      console.error('trackActivity called with empty user_id');
+      return;
+    }
+    
     try {
       console.log('Tracking activity:', activity);
       
@@ -544,6 +644,11 @@ export const userDataService = {
   },
 
   async getRecentActivity(userId: string, limit = 20): Promise<UserActivity[]> {
+    if (!userId) {
+      console.error('getRecentActivity called with empty userId');
+      return [];
+    }
+    
     try {
       console.log('Fetching recent activity for userId:', userId, 'limit:', limit);
       
@@ -569,6 +674,11 @@ export const userDataService = {
 
   // Reports Management
   async saveReport(report: Partial<Report>): Promise<Report | null> {
+    if (!report.user_id) {
+      console.error('saveReport called with empty user_id');
+      return null;
+    }
+    
     try {
       console.log('Saving report:', report);
       
@@ -592,6 +702,11 @@ export const userDataService = {
   },
 
   async getUserReports(userId: string): Promise<Report[]> {
+    if (!userId) {
+      console.error('getUserReports called with empty userId');
+      return [];
+    }
+    
     try {
       console.log('Fetching user reports for userId:', userId);
       
@@ -615,6 +730,11 @@ export const userDataService = {
   },
 
   async deleteReport(reportId: string): Promise<boolean> {
+    if (!reportId) {
+      console.error('deleteReport called with empty reportId');
+      return false;
+    }
+    
     try {
       console.log('Deleting report:', reportId);
       
