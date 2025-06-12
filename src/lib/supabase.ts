@@ -1,51 +1,82 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables. Please check your .env file.');
+// Check if we have valid Supabase credentials
+const hasValidCredentials = supabaseUrl && 
+  supabaseAnonKey && 
+  supabaseUrl !== 'your_actual_supabase_url_here' && 
+  supabaseAnonKey !== 'your_actual_supabase_anon_key_here' &&
+  supabaseUrl.startsWith('https://') &&
+  supabaseAnonKey.length > 20;
+
+if (!hasValidCredentials) {
+  console.warn('Supabase credentials not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
 }
 
-console.log('Initializing Supabase client with:', { 
-  hasUrl: !!supabaseUrl, 
-  hasKey: !!supabaseAnonKey,
-  urlStart: supabaseUrl?.substring(0, 10) + '...' || 'missing'
-});
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Create a mock client for when credentials are not available
+const createMockClient = () => ({
   auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storageKey: 'seogenix-auth-token',
-    flowType: 'pkce'
+    getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+    signOut: () => Promise.resolve({ error: null }),
+    signUp: () => Promise.resolve({ data: { user: null, session: null }, error: { message: 'Supabase not configured' } }),
+    signInWithPassword: () => Promise.resolve({ data: { user: null, session: null }, error: { message: 'Supabase not configured' } }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } })
   },
-  global: {
-    headers: {
-      'x-application-name': 'seogenix'
-    },
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
-  }
+  from: () => ({
+    select: () => Promise.resolve({ data: [], error: { message: 'Supabase not configured' } }),
+    insert: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
+    update: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
+    delete: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } })
+  })
 });
 
-// Test the connection
-supabase.auth.getSession().then(({ data, error }) => {
-  if (error) {
-    console.error('Error testing Supabase connection:', error);
-  } else {
-    console.log('Supabase connection test successful, session exists:', !!data.session);
-  }
-}).catch(err => {
-  console.error('Exception testing Supabase connection:', err);
-});
+export const supabase = hasValidCredentials 
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'seogenix-auth-token',
+        flowType: 'pkce'
+      },
+      global: {
+        headers: {
+          'x-application-name': 'seogenix'
+        },
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      }
+    })
+  : createMockClient();
+
+// Test the connection only if we have valid credentials
+if (hasValidCredentials) {
+  console.log('Initializing Supabase client with valid credentials');
+  supabase.auth.getSession().then(({ data, error }) => {
+    if (error) {
+      console.error('Error testing Supabase connection:', error);
+    } else {
+      console.log('Supabase connection test successful, session exists:', !!data.session);
+    }
+  }).catch(err => {
+    console.error('Exception testing Supabase connection:', err);
+  });
+} else {
+  console.log('Supabase client initialized in mock mode - please configure your credentials');
+}
 
 // Helper function to reset auth state - useful for debugging
 export const resetAuth = async () => {
+  if (!hasValidCredentials) {
+    console.warn('Cannot reset auth - Supabase not configured');
+    return false;
+  }
+
   try {
     console.log('Resetting auth state...');
     
@@ -81,6 +112,11 @@ export const resetAuth = async () => {
 
 // Helper function to log session info for debugging
 export const logSessionDebug = async () => {
+  if (!hasValidCredentials) {
+    console.warn('Cannot debug session - Supabase not configured');
+    return { data: { session: null }, error: { message: 'Supabase not configured' } };
+  }
+
   try {
     const { data, error } = await supabase.auth.getSession();
     console.log('DEBUG - Current session:', data.session ? 'Valid session' : 'No session');
@@ -99,3 +135,6 @@ export const logSessionDebug = async () => {
     return { data: { session: null }, error: e };
   }
 };
+
+// Helper function to check if Supabase is properly configured
+export const isSupabaseConfigured = () => hasValidCredentials;
