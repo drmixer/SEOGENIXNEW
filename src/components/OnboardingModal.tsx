@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Globe, Target, ArrowRight, Building, FileText } from 'lucide-react';
+import { X, Plus, Trash2, Globe, Target, ArrowRight, Building, FileText, Loader } from 'lucide-react';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 

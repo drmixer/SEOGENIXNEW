@@ -56,6 +56,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const { toasts, addToast, removeToast } = useToast();
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   // Extract first name from user data
   const getFirstName = () => {
@@ -272,11 +273,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       if (!user) {
         console.log('No user available, skipping profile load');
         setLoading(false);
+        setLoadingProfile(false);
         return;
       }
 
       try {
         console.log('Loading user profile for:', user.id);
+        setLoadingProfile(true);
         const profile = await userDataService.getUserProfile(user.id);
         console.log('Loaded profile:', profile);
         
@@ -312,6 +315,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           }
           
           setLoading(false);
+          setLoadingProfile(false);
         } else {
           console.log('No profile found for user - this is expected for new users');
           // Retry profile load if this is the first attempt (could be a timing issue)
@@ -322,11 +326,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             return;
           }
           setLoading(false);
+          setLoadingProfile(false);
         }
       } catch (error) {
         console.error('Error loading user profile:', error);
         setDashboardError('Failed to load user profile. Please refresh the page.');
         setLoading(false);
+        setLoadingProfile(false);
       }
     };
 
@@ -516,7 +522,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     );
   }
 
-  if (loading) {
+  if (loading || loadingProfile) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">

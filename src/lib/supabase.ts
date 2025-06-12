@@ -17,7 +17,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    storageKey: 'seogenix-auth-token'
   },
   global: {
     headers: {
@@ -48,8 +49,8 @@ export const resetAuth = async () => {
     console.log('Resetting auth state...');
     
     // Clean local storage
-    localStorage.removeItem('supabase.auth.token');
-    sessionStorage.removeItem('supabase.auth.token');
+    localStorage.removeItem('seogenix-auth-token');
+    sessionStorage.removeItem('seogenix-auth-token');
     
     // Clear all other related storage
     Object.keys(localStorage).forEach(key => {
