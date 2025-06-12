@@ -51,7 +51,15 @@ function App() {
                 // If onboarding is completed, go to dashboard
                 if (profiles[0].onboarding_completed_at) {
                   setCurrentView('dashboard');
+                } else {
+                  // If onboarding is not completed, show onboarding modal
+                  console.log('Onboarding not completed, showing onboarding modal');
+                  setShowOnboarding(true);
                 }
+              } else {
+                // No profile found, show onboarding
+                console.log('No profile found, showing onboarding');
+                setShowOnboarding(true);
               }
             } catch (profileError) {
               console.error('Error fetching user profile:', profileError);
@@ -94,6 +102,16 @@ function App() {
             if (profiles && profiles.length > 0) {
               console.log('User profile found after auth change:', profiles[0]);
               setUserPlan(profiles[0].plan as any || 'free');
+              
+              // Check if onboarding is completed
+              if (!profiles[0].onboarding_completed_at) {
+                console.log('Onboarding not completed, showing onboarding modal');
+                setShowOnboarding(true);
+              }
+            } else {
+              // No profile found, show onboarding
+              console.log('No profile found after auth change, showing onboarding');
+              setShowOnboarding(true);
             }
           } catch (profileError) {
             console.error('Error fetching user profile after auth change:', profileError);
@@ -201,7 +219,7 @@ function App() {
       setUserPlan(selectedPlan);
       setShowOnboarding(true);
     } else {
-      // For login, go directly to dashboard
+      // For login, check if they need onboarding
       console.log('Going to dashboard for login');
       setCurrentView('dashboard');
     }
