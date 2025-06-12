@@ -81,12 +81,12 @@ const Header: React.FC<HeaderProps> = ({ onNavigateToDashboard, user, onShowSign
                   <LogIn className="w-4 h-4" />
                   <span>Sign In</span>
                 </button>
-                <button 
-                  onClick={onShowSignup}
+                <a 
+                  href="#pricing"
                   className="bg-gradient-to-r from-teal-500 to-blue-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transition-all duration-300"
                 >
                   Get Started
-                </button>
+                </a>
               </div>
             )}
           </nav>
