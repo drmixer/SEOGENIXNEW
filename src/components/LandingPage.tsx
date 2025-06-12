@@ -48,15 +48,6 @@ const LandingPage: React.FC<LandingPageProps> = ({
     }
   }, [initialView]);
 
-  // Handler for plan selection that shows signup modal
-  const handlePlanSelect = (plan: 'free' | 'core' | 'pro' | 'agency') => {
-    // Pass the selected plan to parent component
-    onPlanSelect(plan);
-    
-    // Show signup modal
-    onShowSignup();
-  };
-
   return (
     <div className="min-h-screen bg-white">
       <Header 
@@ -78,7 +69,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
           <HowItWorks />
         </>
       )}
-      <Pricing onPlanSelect={handlePlanSelect} />
+      <Pricing onPlanSelect={onPlanSelect} />
       {currentSection === 'landing' && (
         <>
           <FAQ />

@@ -44,13 +44,13 @@ const Hero: React.FC<HeroProps> = ({ onNavigateToDashboard, user, onShowSignup }
               </button>
             ) : (
               <>
-                <button 
-                  onClick={onShowSignup}
+                <a 
+                  href="#pricing"
                   className="bg-gradient-to-r from-teal-500 to-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-2"
                 >
                   <span>Get Started</span>
                   <ArrowRight className="w-5 h-5" />
-                </button>
+                </a>
                 <a 
                   href="#pricing"
                   className="border-2 border-purple-600 text-purple-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-purple-600 hover:text-white transition-all duration-300"
