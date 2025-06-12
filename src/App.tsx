@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
@@ -18,41 +18,52 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
-  const [authInitInProgress, setAuthInitInProgress] = useState(false);
+  
+  // Use refs to prevent race conditions and duplicate initializations
+  const authInitializedRef = useRef(false);
+  const initializationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const authListenerInitializedRef = useRef(false);
 
   useEffect(() => {
     // Get initial session
     const initializeAuth = async () => {
-      if (authInitInProgress) {
-        console.log('Auth initialization already in progress, skipping');
+      // Prevent multiple initialization attempts
+      if (authInitializedRef.current) {
+        console.log('Auth already initialized, skipping');
         return;
       }
       
       try {
         console.log('Initializing authentication...');
         setLoading(true);
-        setAuthInitInProgress(true);
+        authInitializedRef.current = true;
+        
+        // Clear any existing timer
+        if (initializationTimerRef.current) {
+          clearTimeout(initializationTimerRef.current);
+        }
         
         // Set a timeout to prevent hanging indefinitely
-        const timeoutId = setTimeout(() => {
+        initializationTimerRef.current = setTimeout(() => {
           console.log('Auth initialization timed out after 5 seconds');
           setLoading(false);
           setAuthInitialized(true);
-          setAuthInitInProgress(false);
           setAuthError('Authentication initialization timed out. Please refresh the page.');
         }, 5000);
         
         const { data: { session }, error } = await supabase.auth.getSession();
         
         // Clear the timeout since we got a response
-        clearTimeout(timeoutId);
+        if (initializationTimerRef.current) {
+          clearTimeout(initializationTimerRef.current);
+          initializationTimerRef.current = null;
+        }
         
         if (error) {
           console.error('Error getting initial session:', error);
           setAuthError('Failed to initialize authentication: ' + error.message);
           setLoading(false);
           setAuthInitialized(true);
-          setAuthInitInProgress(false);
           return;
         }
         
@@ -68,17 +79,13 @@ function App() {
           console.log('No user in session, staying on landing page');
           // Important: Set loading to false even when no user is found
           setLoading(false);
+          setAuthInitialized(true);
         }
-        
-        // Mark auth as initialized regardless of whether a user was found
-        setAuthInitialized(true);
-        setAuthInitInProgress(false);
       } catch (error) {
         console.error('Error in initializeAuth:', error);
         setAuthError('Authentication initialization failed: ' + (error as Error).message);
         setLoading(false);
         setAuthInitialized(true);
-        setAuthInitInProgress(false);
       }
     };
 
@@ -118,49 +125,72 @@ function App() {
         
         // Important: Set loading to false after profile is fetched
         setLoading(false);
+        setAuthInitialized(true);
       } catch (profileError) {
         console.error('Error in profile fetch:', profileError);
         // Continue with default plan and show onboarding
         setShowOnboarding(true);
         setLoading(false);
-      }
-    };
-
-    initializeAuth();
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, 'Session:', session?.user ? 'User present' : 'No user');
-      
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (session?.user) {
-          console.log('Setting user from auth change:', session.user.id);
-          setUser(session.user);
-          
-          // Fetch user profile to get plan - use a separate function to avoid nesting
-          await fetchUserProfile(session.user.id);
-        }
-      } else if (event === 'SIGNED_OUT') {
-        console.log('User signed out, clearing user state');
-        setUser(null);
-        setUserPlan('free');
-        setCurrentView('landing');
-        setShowOnboarding(false);
-        setLoading(false); // Ensure loading is set to false on sign out
-      } else if (event === 'INITIAL_SESSION') {
-        // This event is fired when the initial session is loaded
-        // We've already handled this in initializeAuth, but we'll ensure loading is false
-        setLoading(false);
         setAuthInitialized(true);
       }
-    });
-
-    return () => {
-      console.log('Cleaning up auth subscription');
-      subscription.unsubscribe();
     };
+
+    // Only initialize auth once
+    if (!authInitializedRef.current) {
+      initializeAuth();
+    }
+
+    // Listen for auth changes - only set up once
+    if (!authListenerInitializedRef.current) {
+      authListenerInitializedRef.current = true;
+      
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
+        // Clear any timeout immediately when any auth event occurs
+        if (initializationTimerRef.current) {
+          clearTimeout(initializationTimerRef.current);
+          initializationTimerRef.current = null;
+        }
+        
+        console.log('Auth state changed:', event, 'Session:', session?.user ? 'User present' : 'No user');
+        
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            console.log('Setting user from auth change:', session.user.id);
+            setUser(session.user);
+            
+            // Fetch user profile to get plan - use a separate function to avoid nesting
+            await fetchUserProfile(session.user.id);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          console.log('User signed out, clearing user state');
+          setUser(null);
+          setUserPlan('free');
+          setCurrentView('landing');
+          setShowOnboarding(false);
+          setLoading(false); // Ensure loading is set to false on sign out
+        } else if (event === 'INITIAL_SESSION') {
+          // This event is fired when the initial session is loaded
+          // We've already handled this in initializeAuth, but we'll ensure loading is false
+          setLoading(false);
+          setAuthInitialized(true);
+        }
+      });
+
+      return () => {
+        console.log('Cleaning up auth subscription');
+        subscription.unsubscribe();
+        
+        // Clear any timeout on unmount
+        if (initializationTimerRef.current) {
+          clearTimeout(initializationTimerRef.current);
+          initializationTimerRef.current = null;
+        }
+      };
+    }
+    
+    // Empty dependency array to ensure this only runs once on mount
   }, []);
 
   const handleNavigateToDashboard = () => {
@@ -358,6 +388,9 @@ function App() {
       setUserPlan('free');
       setShowOnboarding(false);
       setShowAuthModal(false);
+      
+      // Reset auth initialization state
+      authInitializedRef.current = false;
       
       // Force reload the page to clear any lingering state
       window.location.reload();

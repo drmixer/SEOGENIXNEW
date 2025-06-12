@@ -37,28 +37,77 @@ Deno.serve(async (req: Request) => {
     if (url && !content) {
       try {
         console.log(`Attempting to fetch content from URL: ${url}`);
-        const response = await fetch(url, {
-          headers: {
-            // Use a standard browser user agent to avoid being blocked
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36'
-          }
-        });
         
-        if (response.ok) {
-          pageContent = await response.text();
-          console.log(`Successfully fetched content from ${url}, length: ${pageContent.length} characters`);
+        // Try multiple approaches to fetch content
+        let fetchSuccessful = false;
+        
+        // First attempt: Standard browser user agent
+        try {
+          const response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.5'
+            }
+          });
           
-          // Log a sample of the content to verify it's complete
-          console.log(`Content sample: ${pageContent.substring(0, 200)}...`);
-          
-          // Check if we only got the head section
-          if (pageContent.includes('</head>') && !pageContent.includes('</body>')) {
-            console.warn('Warning: Content may only include the head section');
+          if (response.ok) {
+            pageContent = await response.text();
+            console.log(`Successfully fetched content from ${url}, length: ${pageContent.length} characters`);
+            
+            // Check if we only got the head section
+            if (pageContent.includes('</head>') && !pageContent.includes('</body>')) {
+              console.warn('Warning: Content may only include the head section, trying alternative approach');
+            } else {
+              fetchSuccessful = true;
+            }
+          } else {
+            console.error(`Failed to fetch URL: ${url}, status: ${response.status}, statusText: ${response.statusText}`);
           }
-        } else {
-          console.error(`Failed to fetch URL: ${url}, status: ${response.status}, statusText: ${response.statusText}`);
-          pageContent = `Sample content for ${url}`;
+        } catch (fetchError) {
+          console.error(`Error in first fetch attempt: ${fetchError.message}`);
         }
+        
+        // Second attempt: Mobile user agent if first attempt failed or only got head
+        if (!fetchSuccessful) {
+          try {
+            const mobileResponse = await fetch(url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5'
+              }
+            });
+            
+            if (mobileResponse.ok) {
+              const mobileContent = await mobileResponse.text();
+              
+              // If mobile content is more complete, use it
+              if (mobileContent.length > (pageContent?.length || 0) && mobileContent.includes('</body>')) {
+                pageContent = mobileContent;
+                console.log(`Successfully fetched content with mobile user agent, length: ${pageContent.length} characters`);
+                fetchSuccessful = true;
+              }
+            }
+          } catch (mobileError) {
+            console.error(`Error in mobile fetch attempt: ${mobileError.message}`);
+          }
+        }
+        
+        // If all fetch attempts failed or returned incomplete content
+        if (!fetchSuccessful || !pageContent || pageContent.length < 1000) {
+          console.warn(`Could not fetch complete content from ${url}, using fallback content`);
+          pageContent = `
+            This is fallback content for ${url}. 
+            The actual page content could not be fetched completely due to technical limitations.
+            The audit will proceed with limited information, which may affect accuracy.
+            Consider manually providing the full page content for a more accurate audit.
+          `;
+        }
+        
+        // Log a sample of the content to verify it's complete
+        console.log(`Content sample: ${pageContent.substring(0, 200)}...`);
+        
       } catch (error) {
         console.error('Failed to fetch URL:', error);
         pageContent = `Sample content for ${url}`;
