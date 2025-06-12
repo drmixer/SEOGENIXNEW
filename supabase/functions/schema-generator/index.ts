@@ -39,7 +39,7 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `Generate comprehensive Schema.org JSON-LD markup for a ${contentType} based on this information:
+              text: `Generate valid Schema.org JSON-LD markup for a ${contentType} based on this information:
 
               URL: ${url}
               ${content ? `Content: ${content}` : ''}
@@ -50,8 +50,10 @@ Deno.serve(async (req: Request) => {
               3. Use appropriate Schema.org vocabulary
               4. Ensure the markup will help AI systems understand the content better
               5. Include structured data that enhances AI visibility and citation likelihood
-              6. DO NOT include any comments in the JSON (no // comments)
+              6. DO NOT include any comments in the JSON
               7. Make sure the JSON is valid and can be parsed with JSON.parse()
+              8. Use double quotes for all property names and string values
+              9. Do not use any control characters or escape sequences that would make the JSON invalid
               
               For ${contentType} type, include relevant properties like:
               ${contentType === 'article' ? '- headline, author, datePublished, dateModified, publisher, mainEntityOfPage' : ''}
@@ -88,18 +90,20 @@ Deno.serve(async (req: Request) => {
     const schemaMarkup = geminiData.candidates[0].content.parts[0].text;
 
     // Clean up the response to ensure it's valid JSON
-    const cleanedSchema = schemaMarkup
+    let cleanedSchema = schemaMarkup
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
       .replace(/^[^{]*/, '')
       .replace(/[^}]*$/, '')
-      .replace(/\/\/.*$/gm, '')  // Remove any comments
+      .replace(/\/\/.*$/gm, '')  // Remove any single-line comments
       .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
       .trim();
 
     // Validate JSON
     let validatedSchema;
     try {
+      // Try to parse the JSON
       validatedSchema = JSON.parse(cleanedSchema);
       console.log('Generated valid JSON schema');
       
@@ -119,7 +123,37 @@ Deno.serve(async (req: Request) => {
     } catch (e) {
       console.error('Generated schema is not valid JSON:', cleanedSchema);
       console.error('Error:', e);
-      return generateFallbackSchema(contentType, url);
+      
+      // Try to fix common JSON issues
+      try {
+        // Fix missing quotes around property names
+        const fixedSchema = cleanedSchema
+          .replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3')
+          // Fix single quotes to double quotes
+          .replace(/'/g, '"')
+          // Fix trailing commas
+          .replace(/,\s*}/g, '}')
+          .replace(/,\s*]/g, ']');
+          
+        validatedSchema = JSON.parse(fixedSchema);
+        console.log('Fixed and validated JSON schema');
+        
+        const formattedSchema = JSON.stringify(validatedSchema, null, 2);
+        
+        return new Response(
+          JSON.stringify({ 
+            schema: formattedSchema,
+            instructions: 'Add this JSON-LD script tag to your page head section to improve AI understanding',
+            implementation: `<script type="application/ld+json">\n${formattedSchema}\n</script>`,
+            contentType,
+            url
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (fixError) {
+        console.error('Failed to fix JSON:', fixError);
+        return generateFallbackSchema(contentType, url);
+      }
     }
 
   } catch (error) {
