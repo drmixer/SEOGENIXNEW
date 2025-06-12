@@ -103,6 +103,22 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
       setError(null);
       
       try {
+        // Get current user
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          console.error('Error getting current user:', userError);
+          setError('Unable to complete onboarding: ' + userError.message);
+          setLoading(false);
+          return;
+        }
+        
+        if (!user) {
+          console.error('No user found during onboarding completion');
+          setError('User session not found. Please try logging in again.');
+          setLoading(false);
+          return;
+        }
+        
         const onboardingData = {
           websites: websites.filter(w => w.url.trim() !== '' && w.name.trim() !== ''),
           competitors: competitors.filter(c => c.url.trim() !== '' && c.name.trim() !== ''),
@@ -112,45 +128,70 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
           completedAt: new Date().toISOString()
         };
         
-        // Save to database
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          // Update user metadata with plan
-          await supabase.auth.updateUser({
-            data: { plan: userPlan }
-          });
+        console.log('Creating/updating profile with data:', onboardingData);
+        
+        // Update user metadata with plan
+        await supabase.auth.updateUser({
+          data: { plan: userPlan }
+        });
+        
+        // Check for existing profile
+        const { data: existingProfiles } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
           
-          await userDataService.createUserProfile({
-            user_id: user.id,
-            websites: onboardingData.websites,
-            competitors: onboardingData.competitors,
-            industry: onboardingData.industry,
-            business_description: onboardingData.businessDescription,
-            plan: userPlan,
-            onboarding_completed_at: new Date().toISOString()
-          });
-
-          // Track onboarding completion
-          await userDataService.trackActivity({
-            user_id: user.id,
-            activity_type: 'onboarding_completed',
-            activity_data: { 
+        if (existingProfiles && existingProfiles.length > 0) {
+          // Update existing profile
+          await supabase
+            .from('user_profiles')
+            .update({
+              websites: onboardingData.websites,
+              competitors: onboardingData.competitors,
+              industry: onboardingData.industry,
+              business_description: onboardingData.businessDescription,
               plan: userPlan,
-              websitesCount: onboardingData.websites.length,
-              competitorsCount: onboardingData.competitors.length,
-              industry: onboardingData.industry
-            }
-          });
+              onboarding_completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingProfiles[0].id);
+        } else {
+          // Create new profile
+          await supabase
+            .from('user_profiles')
+            .insert({
+              user_id: user.id,
+              websites: onboardingData.websites,
+              competitors: onboardingData.competitors,
+              industry: onboardingData.industry,
+              business_description: onboardingData.businessDescription,
+              plan: userPlan,
+              onboarding_completed_at: new Date().toISOString()
+            });
         }
+
+        // Track onboarding completion
+        await userDataService.trackActivity({
+          user_id: user.id,
+          activity_type: 'onboarding_completed',
+          activity_data: { 
+            plan: userPlan,
+            websitesCount: onboardingData.websites.length,
+            competitorsCount: onboardingData.competitors.length,
+            industry: onboardingData.industry
+          }
+        });
         
         // Save to localStorage for backward compatibility
         localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
         
         // Complete onboarding
         onComplete();
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error saving onboarding data:', error);
-        setError('Failed to save your settings. Please try again.');
+        setError('Failed to save your settings: ' + error.message);
       } finally {
         setLoading(false);
       }
@@ -417,6 +458,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
             >
               {loading ? (
                 <>
+                  <Loader className="w-4 h-4 animate-spin" />
                   <span>Processing...</span>
                 </>
               ) : (
