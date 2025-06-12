@@ -50,13 +50,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [userProfile, setUserProfile] = useState<any>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
   const [actionableInsights, setActionableInsights] = useState<ActionableInsight[]>([]);
   const { toasts, addToast, removeToast } = useToast();
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profileFetchAttempted, setProfileFetchAttempted] = useState(false);
 
   // Extract first name from user data
   const getFirstName = () => {
@@ -316,6 +317,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           
           setLoading(false);
           setLoadingProfile(false);
+          setProfileFetchAttempted(true);
         } else {
           console.log('No profile found for user - this is expected for new users');
           // Retry profile load if this is the first attempt (could be a timing issue)
@@ -327,17 +329,24 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           }
           setLoading(false);
           setLoadingProfile(false);
+          setProfileFetchAttempted(true);
         }
       } catch (error) {
         console.error('Error loading user profile:', error);
         setDashboardError('Failed to load user profile. Please refresh the page.');
         setLoading(false);
         setLoadingProfile(false);
+        setProfileFetchAttempted(true);
       }
     };
 
-    loadUserProfile();
-  }, [user, retryCount]);
+    if (user && !profileFetchAttempted) {
+      loadUserProfile();
+    } else if (!user) {
+      setLoading(false);
+      setLoadingProfile(false);
+    }
+  }, [user, retryCount, profileFetchAttempted]);
 
   // Generate insights when profile loads
   useEffect(() => {
