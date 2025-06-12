@@ -1,10 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
 import OnboardingModal from './components/OnboardingModal';
 import { WhiteLabelProvider } from './components/WhiteLabelProvider';
+import Integrations from './components/pages/Integrations';
+import HelpCenter from './components/pages/HelpCenter';
+import Documentation from './components/pages/Documentation';
+import ContactUs from './components/pages/ContactUs';
+import Status from './components/pages/Status';
+import PrivacyPolicy from './components/pages/PrivacyPolicy';
+import TermsOfService from './components/pages/TermsOfService';
+import CookiePolicy from './components/pages/CookiePolicy';
 
 function App() {
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'pricing'>('landing');
@@ -443,46 +452,60 @@ function App() {
   }
 
   return (
-    <WhiteLabelProvider user={user}>
-      <div className="min-h-screen bg-white">
-        {currentView === 'landing' || currentView === 'pricing' ? (
-          <LandingPage 
-            onNavigateToDashboard={handleNavigateToDashboard}
-            onPlanSelect={handlePlanSelect}
-            user={user}
-            onShowSignup={handleShowSignup}
-            onShowLogin={handleShowLogin}
-            onSignOut={handleSignOut}
-            initialView={currentView}
-            onNavigateToLanding={() => setCurrentView('landing')}
-          />
-        ) : (
-          <Dashboard 
-            userPlan={userPlan}
-            onNavigateToLanding={() => setCurrentView('landing')}
-            user={user}
-            onSignOut={handleSignOut}
-          />
-        )}
+    <Router>
+      <WhiteLabelProvider user={user}>
+        <div className="min-h-screen bg-white">
+          <Routes>
+            <Route path="/" element={
+              currentView === 'landing' || currentView === 'pricing' ? (
+                <LandingPage 
+                  onNavigateToDashboard={handleNavigateToDashboard}
+                  onPlanSelect={handlePlanSelect}
+                  user={user}
+                  onShowSignup={handleShowSignup}
+                  onShowLogin={handleShowLogin}
+                  onSignOut={handleSignOut}
+                  initialView={currentView}
+                  onNavigateToLanding={() => setCurrentView('landing')}
+                />
+              ) : (
+                <Dashboard 
+                  userPlan={userPlan}
+                  onNavigateToLanding={() => setCurrentView('landing')}
+                  user={user}
+                  onSignOut={handleSignOut}
+                />
+              )
+            } />
+            <Route path="/integrations" element={<Integrations />} />
+            <Route path="/help-center" element={<HelpCenter />} />
+            <Route path="/documentation" element={<Documentation />} />
+            <Route path="/contact-us" element={<ContactUs />} />
+            <Route path="/status" element={<Status />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
+            <Route path="/cookie-policy" element={<CookiePolicy />} />
+          </Routes>
 
-        {showAuthModal && (
-          <AuthModal
-            onClose={() => setShowAuthModal(false)}
-            onSuccess={handleAuthSuccess}
-            initialMode={authModalMode}
-            selectedPlan={selectedPlan}
-          />
-        )}
+          {showAuthModal && (
+            <AuthModal
+              onClose={() => setShowAuthModal(false)}
+              onSuccess={handleAuthSuccess}
+              initialMode={authModalMode}
+              selectedPlan={selectedPlan}
+            />
+          )}
 
-        {showOnboarding && user && (
-          <OnboardingModal
-            userPlan={userPlan}
-            onComplete={handleOnboardingComplete}
-            onClose={() => setShowOnboarding(false)}
-          />
-        )}
-      </div>
-    </WhiteLabelProvider>
+          {showOnboarding && user && (
+            <OnboardingModal
+              userPlan={userPlan}
+              onComplete={handleOnboardingComplete}
+              onClose={() => setShowOnboarding(false)}
+            />
+          )}
+        </div>
+      </WhiteLabelProvider>
+    </Router>
   );
 }
 
