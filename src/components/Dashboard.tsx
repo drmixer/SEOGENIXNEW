@@ -128,8 +128,22 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       const insights: ActionableInsight[] = [];
 
       // Get recent audit history
-      const auditHistory = await userDataService.getAuditHistory(user.id, 5);
-      const recentActivity = await userDataService.getRecentActivity(user.id, 10);
+      let auditHistory = [];
+      let recentActivity = [];
+      
+      try {
+        auditHistory = await userDataService.getAuditHistory(user.id, 5);
+      } catch (error) {
+        console.error('Error loading audit history:', error);
+        auditHistory = [];
+      }
+      
+      try {
+        recentActivity = await userDataService.getRecentActivity(user.id, 10);
+      } catch (error) {
+        console.error('Error loading recent activity:', error);
+        recentActivity = [];
+      }
 
       // 1. No websites configured
       if (!userProfile.websites || userProfile.websites.length === 0) {
@@ -165,35 +179,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
       // 3. Low audit scores
       if (auditHistory.length > 0) {
-        const latest = auditHistory[0];
-        const scoreDiff = latest.overall_score - previous.overall_score;
-        const baselineDiff = latest.overall_score - baseline;
-
-        // Detect sudden score drops
-        if (scoreDiff <= -alertThresholds.scoreChangeThreshold) {
-          newAlerts.push({
-            id: `score_drop_${latest.id}`,
-            type: 'anomaly',
-            title: '🚨 Significant Score Drop Detected',
-            message: `Your AI visibility score dropped by ${Math.abs(scoreDiff)} points (${previous.overall_score} → ${latest.overall_score}). This requires immediate attention.`,
-            severity: scoreDiff <= -20 ? 'critical' : 'high',
-            actionUrl: 'audit',
-            actionLabel: 'Investigate Issues',
-            data: { scoreDiff, latest, previous, type: 'score_drop' },
-            createdAt: latest.created_at,
-            read: false,
-            confidence: 95,
-            impact: scoreDiff <= -20 ? 'high' : 'medium',
-            timeframe: 'immediate'
-          });
-        }
-
-        if (latest.overall_score < 60) {
+        const latestAudit = auditHistory[0];
+        if (latestAudit.overall_score < 60) {
           insights.push({
             id: 'low-score',
             type: 'urgent',
             title: 'Critical: Low AI Visibility Score',
-            description: `Your latest score is ${latest.overall_score}/100. Use Content Optimizer to improve immediately.`,
+            description: `Your latest score is ${latestAudit.overall_score}/100. Use Content Optimizer to improve immediately.`,
             action: 'Optimize Content',
             actionUrl: 'optimizer',
             icon: AlertTriangle,
@@ -201,12 +193,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             contextualTip: 'Scores below 60 indicate significant issues with AI comprehension. Content optimization can quickly improve your visibility and citation likelihood.',
             learnMoreLink: 'https://docs.seogenix.com/optimization/content-optimizer'
           });
-        } else if (latest.overall_score < 75) {
+        } else if (latestAudit.overall_score < 75) {
           insights.push({
             id: 'medium-score',
             type: 'opportunity',
             title: 'Improve Your AI Visibility Score',
-            description: `Score: ${latest.overall_score}/100. Add structured data with Schema Generator for quick wins.`,
+            description: `Score: ${latestAudit.overall_score}/100. Add structured data with Schema Generator for quick wins.`,
             action: 'Generate Schema',
             actionUrl: 'schema',
             icon: TrendingUp,
@@ -217,12 +209,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         }
 
         // Check for specific subscore issues
-        if (latest.content_structure < 70) {
+        if (latestAudit.content_structure < 70) {
           insights.push({
             id: 'structure-issue',
             type: 'opportunity',
             title: 'Content Structure Needs Work',
-            description: `Structure score: ${latest.content_structure}/100. Generate FAQ content to improve organization.`,
+            description: `Structure score: ${latestAudit.content_structure}/100. Generate FAQ content to improve organization.`,
             action: 'Generate Content',
             actionUrl: 'generator',
             icon: Zap,
@@ -232,12 +224,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           });
         }
 
-        if (latest.citation_likelihood < 70) {
+        if (latestAudit.citation_likelihood < 70) {
           insights.push({
             id: 'citation-issue',
             type: 'opportunity',
             title: 'Low Citation Likelihood',
-            description: `Citation score: ${latest.citation_likelihood}/100. Track current mentions and optimize content.`,
+            description: `Citation score: ${latestAudit.citation_likelihood}/100. Track current mentions and optimize content.`,
             action: 'Track Citations',
             actionUrl: 'citations',
             icon: Target,
@@ -320,6 +312,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       setActionableInsights(insights.slice(0, 3)); // Show top 3 insights
     } catch (error) {
       console.error('Error generating actionable insights:', error);
+      // Set a default insight if there's an error
+      setActionableInsights([{
+        id: 'welcome',
+        type: 'suggestion',
+        title: 'Welcome to SEOGENIX',
+        description: 'Explore the dashboard to discover AI visibility tools and features.',
+        action: 'Take Tour',
+        icon: Target,
+        color: 'from-blue-500 to-blue-600',
+        contextualTip: 'The dashboard tour will help you understand how to use the platform effectively.',
+      }]);
     }
   };
 
@@ -370,22 +373,21 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         } else {
           console.log('No profile found for user - this is expected for new users');
         }
+        
+        // Set loading to false regardless of profile existence
+        setLoading(false);
+        
+        // Generate insights after profile is loaded
+        await generateActionableInsights();
+        
       } catch (error) {
         console.error('Error loading user profile:', error);
-      } finally {
         setLoading(false);
       }
     };
 
     loadUserProfile();
   }, [user]);
-
-  // Generate insights when profile loads
-  useEffect(() => {
-    if (userProfile && user) {
-      generateActionableInsights();
-    }
-  }, [userProfile, user, userPlan]);
 
   // Track page visits
   useEffect(() => {
