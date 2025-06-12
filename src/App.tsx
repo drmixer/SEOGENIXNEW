@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { supabase, isSupabaseConfigured, resetAuth } from './lib/supabase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
@@ -110,22 +110,42 @@ function App() {
       } catch (error) {
         console.error('Error in initializeAuth:', error);
         
-        // Provide more specific error messages based on the error type
-        let errorMessage = 'Authentication initialization failed.';
-        
-        if (error instanceof Error) {
-          if (error.message.includes('timeout') || error.message.includes('timed out')) {
-            errorMessage = 'Connection to authentication service timed out. Please check your internet connection and try refreshing the page.';
-          } else if (error.message.includes('network') || error.message.includes('fetch')) {
-            errorMessage = 'Network error connecting to authentication service. Please check your internet connection.';
-          } else if (error.message.includes('Invalid API key') || error.message.includes('unauthorized')) {
-            errorMessage = 'Authentication service configuration error. Please contact support.';
-          } else {
-            errorMessage = `Authentication error: ${error.message}`;
+        // Check for specific refresh token error
+        if (error instanceof Error && 
+            (error.message.includes('Invalid Refresh Token: Refresh Token Not Found') ||
+             error.message.includes('refresh_token_not_found'))) {
+          console.log('Invalid refresh token detected, clearing auth state...');
+          
+          try {
+            // Reset auth state to clear stale tokens
+            await resetAuth();
+            console.log('Auth state cleared, user needs to re-authenticate');
+            
+            // Set a user-friendly error message
+            setAuthError('Your session has expired. Please sign in again.');
+          } catch (resetError) {
+            console.error('Error resetting auth state:', resetError);
+            setAuthError('Session expired and could not be cleared. Please refresh the page and try again.');
           }
+        } else {
+          // Provide more specific error messages based on the error type
+          let errorMessage = 'Authentication initialization failed.';
+          
+          if (error instanceof Error) {
+            if (error.message.includes('timeout') || error.message.includes('timed out')) {
+              errorMessage = 'Connection to authentication service timed out. Please check your internet connection and try refreshing the page.';
+            } else if (error.message.includes('network') || error.message.includes('fetch')) {
+              errorMessage = 'Network error connecting to authentication service. Please check your internet connection.';
+            } else if (error.message.includes('Invalid API key') || error.message.includes('unauthorized')) {
+              errorMessage = 'Authentication service configuration error. Please contact support.';
+            } else {
+              errorMessage = `Authentication error: ${error.message}`;
+            }
+          }
+          
+          setAuthError(errorMessage);
         }
         
-        setAuthError(errorMessage);
         setLoading(false);
         setAuthInitialized(true);
         authInitializedRef.current = true;
@@ -231,7 +251,22 @@ function App() {
         }
       } catch (error) {
         console.error('Error in auth state change handler:', error);
-        // Don't set authError here as it might interfere with normal operation
+        
+        // Check for refresh token errors in auth state changes too
+        if (error instanceof Error && 
+            (error.message.includes('Invalid Refresh Token: Refresh Token Not Found') ||
+             error.message.includes('refresh_token_not_found'))) {
+          console.log('Invalid refresh token detected in auth state change, clearing auth state...');
+          
+          try {
+            await resetAuth();
+            setAuthError('Your session has expired. Please sign in again.');
+            setUser(null);
+            setCurrentView('landing');
+          } catch (resetError) {
+            console.error('Error resetting auth state in auth change handler:', resetError);
+          }
+        }
         
         // Ensure we're not stuck in loading state
         setLoading(false);
@@ -465,7 +500,7 @@ function App() {
     }
   };
 
-  const handleRetryAuth = () => {
+  const handleRetryAuth = async () => {
     console.log('Retrying authentication initialization...');
     setAuthError(null);
     setAuthInitialized(false);
@@ -477,6 +512,14 @@ function App() {
     if (authTimeoutRef.current) {
       clearTimeout(authTimeoutRef.current);
       authTimeoutRef.current = null;
+    }
+    
+    // Clear any stale auth state first
+    try {
+      await resetAuth();
+      console.log('Auth state cleared before retry');
+    } catch (resetError) {
+      console.error('Error clearing auth state before retry:', resetError);
     }
     
     // Use a safer approach than full page reload
@@ -544,7 +587,24 @@ function App() {
       }
     } catch (error) {
       console.error('Error in re-initialization:', error);
-      setAuthError(`Authentication error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Check for refresh token errors during re-initialization
+      if (error instanceof Error && 
+          (error.message.includes('Invalid Refresh Token: Refresh Token Not Found') ||
+           error.message.includes('refresh_token_not_found'))) {
+        console.log('Invalid refresh token detected during re-initialization');
+        
+        try {
+          await resetAuth();
+          setAuthError('Your session has expired. Please sign in again.');
+        } catch (resetError) {
+          console.error('Error resetting auth state during re-initialization:', resetError);
+          setAuthError('Session expired and could not be cleared. Please refresh the page and try again.');
+        }
+      } else {
+        setAuthError(`Authentication error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+      
       setLoading(false);
       setAuthInitialized(true);
       authInitializedRef.current = true;
