@@ -104,12 +104,6 @@ const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // For debugging - only in development
-  const handleResetAuth = async () => {
-    await resetAuth();
-    setError('Auth state has been reset. You can try again now.');
-  };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md my-8">
@@ -218,16 +212,6 @@ const AuthModal: React.FC<AuthModalProps> = ({
                 <span>{isLogin ? 'Sign In' : 'Create Account'}</span>
               )}
             </button>
-
-            {process.env.NODE_ENV === 'development' && (
-              <button
-                type="button"
-                onClick={handleResetAuth}
-                className="w-full mt-2 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg text-sm"
-              >
-                Reset Auth State (Debug)
-              </button>
-            )}
           </form>
 
           <div className="mt-6 text-center">
