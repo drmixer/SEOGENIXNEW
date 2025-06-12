@@ -55,7 +55,7 @@ export const supabase = hasValidCredentials
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false, // CRITICAL: Set to false to prevent navigation errors in web containers
         storageKey: 'seogenix-auth-token',
         flowType: 'pkce'
       },

@@ -99,6 +99,10 @@ export interface FingerprintPhrase {
 const profileCache = new Map<string, {profile: UserProfile, timestamp: number}>();
 const CACHE_TTL = 60000; // 1 minute cache TTL
 
+// Activity tracking throttling
+const activityThrottleMap = new Map<string, number>();
+const ACTIVITY_THROTTLE_MS = 5000; // 5 seconds between identical activities
+
 export const userDataService = {
   // User Profile Management
   async getUserProfile(userId: string): Promise<UserProfile | null> {
@@ -618,7 +622,7 @@ export const userDataService = {
     }
   },
 
-  // User Activity Tracking
+  // User Activity Tracking with throttling
   async trackActivity(activity: Partial<UserActivity>): Promise<void> {
     if (!activity.user_id) {
       console.error('trackActivity called with empty user_id');
@@ -626,7 +630,22 @@ export const userDataService = {
     }
     
     try {
+      // Create a throttle key based on user_id, activity_type, and tool_id
+      const throttleKey = `${activity.user_id}:${activity.activity_type}:${activity.tool_id || ''}`;
+      const now = Date.now();
+      
+      // Check if we've recently tracked this exact activity
+      const lastTracked = activityThrottleMap.get(throttleKey);
+      if (lastTracked && (now - lastTracked < ACTIVITY_THROTTLE_MS)) {
+        // Skip tracking if too recent
+        console.log('Throttling activity tracking:', throttleKey);
+        return;
+      }
+      
       console.log('Tracking activity:', activity);
+      
+      // Update throttle map
+      activityThrottleMap.set(throttleKey, now);
       
       const { error } = await supabase
         .from('user_activity')

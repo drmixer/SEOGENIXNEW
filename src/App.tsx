@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
@@ -18,10 +18,23 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  
+  // Use refs to track initialization state and prevent race conditions
+  const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const authInitializedRef = useRef(false);
+  const authInProgressRef = useRef(false);
 
   useEffect(() => {
     // Get initial session
     const initializeAuth = async () => {
+      // Prevent multiple simultaneous initialization attempts
+      if (authInProgressRef.current) {
+        console.log('Auth initialization already in progress, skipping');
+        return;
+      }
+      
+      authInProgressRef.current = true;
+      
       try {
         console.log('Initializing authentication...');
         setLoading(true);
@@ -33,64 +46,65 @@ function App() {
           setAuthError('Application is running in demo mode. Please configure Supabase credentials.');
           setLoading(false);
           setAuthInitialized(true);
+          authInitializedRef.current = true;
+          authInProgressRef.current = false;
           return;
         }
         
-        // Clear any existing timeout to prevent race conditions
-        let timeoutId: NodeJS.Timeout | null = null;
-        let sessionPromise: Promise<any> | null = null;
+        // Clear any existing timeout
+        if (authTimeoutRef.current) {
+          clearTimeout(authTimeoutRef.current);
+          authTimeoutRef.current = null;
+        }
         
-        try {
-          // Set a longer timeout to prevent premature failures
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(() => {
-              console.log('Auth initialization timed out after 10 seconds');
-              reject(new Error('Authentication initialization timed out. This may be due to network connectivity issues or incorrect Supabase configuration. Please check your internet connection and verify your Supabase credentials.'));
-            }, 10000); // Increased to 10 seconds
-          });
-          
-          // Get session promise with better error handling
-          sessionPromise = supabase.auth.getSession().catch(error => {
-            console.error('Supabase getSession error:', error);
-            throw new Error(`Failed to connect to authentication service: ${error.message}`);
-          });
-          
-          // Race the promises
-          const { data: { session }, error } = await Promise.race([
-            sessionPromise,
-            timeoutPromise
-          ]);
-          
-          // Clear the timeout since we got a response
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
-          }
-          
-          if (error) {
-            console.error('Error getting initial session:', error);
-            throw new Error(`Authentication error: ${error.message}`);
-          }
-          
-          console.log('Initial session:', session ? 'Valid session exists' : 'No session');
-          
-          if (session?.user) {
-            console.log('Setting user from initial session');
-            setUser(session.user);
-            
-            // Fetch user profile to get plan - use a separate function to avoid nesting
-            await fetchUserProfile(session.user.id);
-          } else {
-            console.log('No user in session, staying on landing page');
+        // Set a new timeout
+        authTimeoutRef.current = setTimeout(() => {
+          // Only set error if we're still initializing
+          if (!authInitializedRef.current) {
+            console.log('Auth initialization timed out after 10 seconds');
+            setAuthError('Authentication initialization timed out. This may be due to network connectivity issues or incorrect Supabase configuration. Please check your internet connection and verify your Supabase credentials.');
             setLoading(false);
             setAuthInitialized(true);
+            authInitializedRef.current = true;
           }
-        } catch (raceError) {
-          // Clean up timeout if it exists
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
-          throw raceError;
+        }, 10000);
+        
+        // Get session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        // Clear the timeout since we got a response
+        if (authTimeoutRef.current) {
+          clearTimeout(authTimeoutRef.current);
+          authTimeoutRef.current = null;
+        }
+        
+        if (error) {
+          console.error('Error getting initial session:', error);
+          setAuthError('Failed to initialize authentication: ' + error.message);
+          setLoading(false);
+          setAuthInitialized(true);
+          authInitializedRef.current = true;
+          authInProgressRef.current = false;
+          return;
+        }
+        
+        console.log('Initial session:', session ? 'Valid session exists' : 'No session');
+        
+        if (session?.user) {
+          console.log('Setting user from initial session');
+          setUser(session.user);
+          
+          // Mark as initialized before profile fetch to prevent timeout
+          setAuthInitialized(true);
+          authInitializedRef.current = true;
+          
+          // Fetch user profile to get plan - use a separate function to avoid nesting
+          await fetchUserProfile(session.user.id);
+        } else {
+          console.log('No user in session, staying on landing page');
+          setLoading(false);
+          setAuthInitialized(true);
+          authInitializedRef.current = true;
         }
       } catch (error) {
         console.error('Error in initializeAuth:', error);
@@ -113,6 +127,9 @@ function App() {
         setAuthError(errorMessage);
         setLoading(false);
         setAuthInitialized(true);
+        authInitializedRef.current = true;
+      } finally {
+        authInProgressRef.current = false;
       }
     };
 
@@ -152,13 +169,11 @@ function App() {
         
         // Important: Set loading and authInitialized here to ensure they're set after profile fetch
         setLoading(false);
-        setAuthInitialized(true);
       } catch (profileError) {
         console.error('Error in profile fetch:', profileError);
         // Continue with default plan and show onboarding
         setShowOnboarding(true);
         setLoading(false);
-        setAuthInitialized(true);
       }
     };
 
@@ -171,6 +186,12 @@ function App() {
       console.log('Auth state changed:', event, 'Session:', session?.user ? 'User present' : 'No user');
       
       try {
+        // Clear any existing timeout when auth state changes
+        if (authTimeoutRef.current) {
+          clearTimeout(authTimeoutRef.current);
+          authTimeoutRef.current = null;
+        }
+        
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (session?.user) {
             console.log('Setting user from auth change:', session.user.id);
@@ -179,6 +200,7 @@ function App() {
             
             // Set authInitialized to true here as well to prevent timeout
             setAuthInitialized(true);
+            authInitializedRef.current = true;
             
             // Fetch user profile to get plan - use a separate function to avoid nesting
             await fetchUserProfile(session.user.id);
@@ -191,6 +213,7 @@ function App() {
           setShowOnboarding(false);
           setLoading(false);
           setAuthInitialized(true);
+          authInitializedRef.current = true;
           setAuthError(null);
         }
       } catch (error) {
@@ -201,6 +224,11 @@ function App() {
 
     return () => {
       console.log('Cleaning up auth subscription');
+      // Clear any timeout on unmount
+      if (authTimeoutRef.current) {
+        clearTimeout(authTimeoutRef.current);
+        authTimeoutRef.current = null;
+      }
       subscription.unsubscribe();
     };
   }, []); // CRITICAL: Empty dependency array to ensure this runs only once
@@ -421,10 +449,84 @@ function App() {
     console.log('Retrying authentication initialization...');
     setAuthError(null);
     setAuthInitialized(false);
+    authInitializedRef.current = false;
     setLoading(true);
     
-    // Trigger a re-initialization by forcing a component re-mount
-    window.location.reload();
+    // Clear any existing timeout
+    if (authTimeoutRef.current) {
+      clearTimeout(authTimeoutRef.current);
+      authTimeoutRef.current = null;
+    }
+    
+    // Use a safer approach than full page reload
+    // This will trigger the useEffect to run again
+    setTimeout(() => {
+      initializeAuth();
+    }, 100);
+  };
+  
+  // Separate function to re-initialize auth (called by handleRetryAuth)
+  const initializeAuth = async () => {
+    if (authInProgressRef.current) {
+      console.log('Auth initialization already in progress, skipping');
+      return;
+    }
+    
+    authInProgressRef.current = true;
+    
+    try {
+      console.log('Re-initializing authentication...');
+      setLoading(true);
+      setAuthError(null);
+      
+      // Clear any existing timeout
+      if (authTimeoutRef.current) {
+        clearTimeout(authTimeoutRef.current);
+      }
+      
+      // Set a new timeout
+      authTimeoutRef.current = setTimeout(() => {
+        if (!authInitializedRef.current) {
+          console.log('Auth re-initialization timed out after 10 seconds');
+          setAuthError('Authentication initialization timed out. Please try again or refresh the page.');
+          setLoading(false);
+          setAuthInitialized(true);
+          authInitializedRef.current = true;
+        }
+      }, 10000);
+      
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      // Clear the timeout
+      if (authTimeoutRef.current) {
+        clearTimeout(authTimeoutRef.current);
+        authTimeoutRef.current = null;
+      }
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (session?.user) {
+        setUser(session.user);
+        setAuthInitialized(true);
+        authInitializedRef.current = true;
+        
+        await fetchUserProfile(session.user.id);
+      } else {
+        setLoading(false);
+        setAuthInitialized(true);
+        authInitializedRef.current = true;
+      }
+    } catch (error) {
+      console.error('Error in re-initialization:', error);
+      setAuthError(`Authentication error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setLoading(false);
+      setAuthInitialized(true);
+      authInitializedRef.current = true;
+    } finally {
+      authInProgressRef.current = false;
+    }
   };
 
   // Don't render anything until auth is initialized to prevent flashing

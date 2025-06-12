@@ -57,7 +57,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const { toasts, addToast, removeToast } = useToast();
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [profileFetchAttempted, setProfileFetchAttempted] = useState(false);
+  
+  // Use refs to prevent duplicate fetches and track component mount state
   const profileFetchedRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const activityTrackedRef = useRef(false);
 
   // Extract first name from user data
   const getFirstName = () => {
@@ -268,6 +272,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     }
   }, [user, userProfile, userPlan]);
 
+  // Track component mount/unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Load user profile and set up dashboard
   useEffect(() => {
     const loadUserProfile = async () => {
@@ -291,6 +303,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         
         const profile = await userDataService.getUserProfile(user.id);
         console.log('Loaded profile:', profile);
+        
+        // Only update state if component is still mounted
+        if (!isMountedRef.current) return;
         
         if (profile) {
           setUserProfile(profile);
@@ -335,9 +350,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         console.error('Error loading user profile:', error);
         setDashboardError('Failed to load user profile. Please refresh the page.');
       } finally {
-        setLoading(false);
-        setLoadingProfile(false);
-        setProfileFetchAttempted(true);
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setLoading(false);
+          setLoadingProfile(false);
+          setProfileFetchAttempted(true);
+        }
       }
     };
 
@@ -359,16 +377,24 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Track page visits - only once when section changes
   useEffect(() => {
     const trackPageVisit = async () => {
+      // Only track once per section change and if user exists
+      if (activityTrackedRef.current || !user?.id) return;
+      
+      activityTrackedRef.current = true;
+      
       try {
-        if (user && user.id) {
-          await userDataService.trackActivity({
-            user_id: user.id,
-            activity_type: 'page_visited',
-            activity_data: { section: activeSection }
-          });
-        }
+        await userDataService.trackActivity({
+          user_id: user.id,
+          activity_type: 'page_visited',
+          activity_data: { section: activeSection }
+        });
       } catch (error) {
         console.error('Error tracking page visit:', error);
+      } finally {
+        // Reset the tracking flag after a delay to allow for future tracking
+        setTimeout(() => {
+          activityTrackedRef.current = false;
+        }, 5000);
       }
     };
 
@@ -478,6 +504,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
   // Force a reload of the dashboard to try again
   const handleReloadDashboard = () => {
+    // Reset all refs and state before reload
+    profileFetchedRef.current = false;
+    activityTrackedRef.current = false;
+    setProfileFetchAttempted(false);
+    setDashboardError(null);
+    
+    // Reload the page
     window.location.reload();
   };
 
