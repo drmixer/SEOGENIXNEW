@@ -3,6 +3,20 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
+// Global error handler for navigation errors in web containers
+window.addEventListener('error', (event) => {
+  // Check if it's a navigation error in web container
+  if (event.message && event.message.includes('Cannot navigate to URL')) {
+    console.warn('Navigation error detected in web container environment:', event.message);
+    
+    // Prevent the error from showing in console
+    event.preventDefault();
+    
+    // If needed, you could dispatch a custom event to notify components
+    window.dispatchEvent(new CustomEvent('webcontainer-navigation-error'));
+  }
+});
+
 // Use a self-invoking function to handle any errors during initialization
 (function() {
   try {

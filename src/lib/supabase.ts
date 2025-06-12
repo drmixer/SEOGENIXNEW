@@ -50,12 +50,14 @@ const createMockClient = () => ({
   }
 });
 
+// CRITICAL FIX: Configure Supabase client with options that work in web containers
 export const supabase = hasValidCredentials 
   ? createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false, // CRITICAL: Set to false to prevent navigation errors in web containers
+        // CRITICAL: Disable URL detection to prevent navigation errors in web containers
+        detectSessionInUrl: false,
         storageKey: 'seogenix-auth-token',
         flowType: 'pkce'
       },
@@ -64,6 +66,7 @@ export const supabase = hasValidCredentials
           'x-application-name': 'seogenix'
         },
       },
+      // Disable realtime subscriptions in web containers to prevent WebSocket issues
       realtime: {
         params: {
           eventsPerSecond: 10
