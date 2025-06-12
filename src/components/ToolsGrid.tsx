@@ -57,6 +57,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [showToolModal, setShowToolModal] = useState<string | null>(null);
   const [selectedCompetitor, setSelectedCompetitor] = useState<string>('');
   const [activeSite, setActiveSite] = useState<string>(selectedWebsite || '');
+  const [schemaType, setSchemaType] = useState<'article' | 'product' | 'organization' | 'person' | 'faq' | 'howto'>('article');
 
   // Enable all tools for development/testing
   const isDevelopment = true;
@@ -187,7 +188,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   }, [userProfile]);
 
   const runTool = async (toolId: string) => {
-    if (!activeSite && !selectedCompetitor && toolId !== 'generator' && toolId !== 'prompts') {
+    if (!activeSite && !selectedCompetitor && toolId !== 'generator' && toolId !== 'prompts' && toolId !== 'schema') {
       alert('Please select a website first');
       return;
     }
@@ -243,7 +244,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           break;
 
         case 'schema':
-          result = await apiService.generateSchema(websiteUrl, 'article');
+          result = await apiService.generateSchema(websiteUrl, schemaType);
           break;
 
         case 'citations':
@@ -410,9 +411,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                   <Copy className="w-4 h-4" />
                 </button>
               </div>
-              <pre className="text-sm text-gray-700 bg-white p-3 rounded border overflow-x-auto max-h-60">
-                {result.schema?.substring(0, 300)}...
-              </pre>
+              <div className="max-h-60 overflow-y-auto">
+                <pre className="text-sm text-gray-700 bg-white p-3 rounded border overflow-x-auto">
+                  {result.schema}
+                </pre>
+              </div>
               <p className="text-xs text-gray-600 mt-2">{result.instructions}</p>
             </div>
           </div>
@@ -439,15 +442,17 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             {result.citations && result.citations.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-medium text-gray-900">Recent Citations:</h4>
-                {result.citations.slice(0, 3).map((citation: any, index: number) => (
-                  <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">{citation.source}</span>
-                      <span className="text-sm text-gray-500">{citation.type}</span>
+                <div className="max-h-60 overflow-y-auto">
+                  {result.citations.slice(0, 3).map((citation: any, index: number) => (
+                    <div key={index} className="bg-gray-50 p-3 rounded-lg mb-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{citation.source}</span>
+                        <span className="text-sm text-gray-500">{citation.type}</span>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">{citation.snippet?.substring(0, 100)}...</p>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">{citation.snippet?.substring(0, 100)}...</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -474,17 +479,19 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             {result.results && result.results.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-medium text-gray-900">Assistant Responses:</h4>
-                {result.results.map((voiceResult: any, index: number) => (
-                  <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">{voiceResult.assistant}</span>
-                      <span className={`text-sm px-2 py-1 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                        {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
-                      </span>
+                <div className="max-h-60 overflow-y-auto">
+                  {result.results.map((voiceResult: any, index: number) => (
+                    <div key={index} className="bg-gray-50 p-3 rounded-lg mb-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{voiceResult.assistant}</span>
+                        <span className={`text-sm px-2 py-1 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                          {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">{voiceResult.response}</p>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">{voiceResult.response}</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -495,33 +502,35 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           <div className="mt-4">
             <div className="bg-gray-50 p-4 rounded-lg">
               <h4 className="font-medium text-gray-900 mb-2">AI-Optimized Summary</h4>
-              <p className="text-gray-700 mb-3">{result.summary}</p>
-              
-              {result.entities && result.entities.length > 0 && (
-                <div className="mb-3">
-                  <h5 className="font-medium text-gray-800 mb-1">Key Entities:</h5>
-                  <div className="flex flex-wrap gap-1">
-                    {result.entities.slice(0, 5).map((entity: string, index: number) => (
-                      <span key={index} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                        {entity.split(':')[0]}
-                      </span>
-                    ))}
+              <div className="max-h-60 overflow-y-auto">
+                <p className="text-gray-700 mb-3">{result.summary}</p>
+                
+                {result.entities && result.entities.length > 0 && (
+                  <div className="mb-3">
+                    <h5 className="font-medium text-gray-800 mb-1">Key Entities:</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {result.entities.slice(0, 5).map((entity: string, index: number) => (
+                        <span key={index} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                          {entity.split(':')[0]}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-              
-              {result.topics && result.topics.length > 0 && (
-                <div>
-                  <h5 className="font-medium text-gray-800 mb-1">Main Topics:</h5>
-                  <div className="flex flex-wrap gap-1">
-                    {result.topics.slice(0, 5).map((topic: string, index: number) => (
-                      <span key={index} className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                        {topic}
-                      </span>
-                    ))}
+                )}
+                
+                {result.topics && result.topics.length > 0 && (
+                  <div>
+                    <h5 className="font-medium text-gray-800 mb-1">Main Topics:</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {result.topics.slice(0, 5).map((topic: string, index: number) => (
+                        <span key={index} className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         );
@@ -547,15 +556,17 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             {result.missingEntities && result.missingEntities.length > 0 && (
               <div className="bg-yellow-50 p-4 rounded-lg">
                 <h4 className="font-medium text-yellow-900 mb-2">Missing Important Entities:</h4>
-                <div className="space-y-2">
-                  {result.missingEntities.slice(0, 5).map((entity: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-yellow-800">{entity.name}</span>
-                      <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded">
-                        {entity.type} - {entity.importance}
-                      </span>
-                    </div>
-                  ))}
+                <div className="max-h-60 overflow-y-auto">
+                  <div className="space-y-2">
+                    {result.missingEntities.slice(0, 5).map((entity: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <span className="text-yellow-800">{entity.name}</span>
+                        <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded">
+                          {entity.type} - {entity.importance}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -577,17 +588,19 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 </button>
               </div>
               
-              {result.generatedContent?.faqs && (
-                <div className="space-y-2">
-                  <h5 className="font-medium text-gray-800">Generated FAQs:</h5>
-                  {result.generatedContent.faqs.slice(0, 3).map((faq: any, index: number) => (
-                    <div key={index} className="bg-white p-3 rounded border">
-                      <div className="font-medium text-gray-900">{faq.question}</div>
-                      <div className="text-gray-700 text-sm mt-1">{faq.answer}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="max-h-60 overflow-y-auto">
+                {result.generatedContent?.faqs && (
+                  <div className="space-y-2">
+                    <h5 className="font-medium text-gray-800">Generated FAQs:</h5>
+                    {result.generatedContent.faqs.slice(0, 3).map((faq: any, index: number) => (
+                      <div key={index} className="bg-white p-3 rounded border">
+                        <div className="font-medium text-gray-900">{faq.question}</div>
+                        <div className="text-gray-700 text-sm mt-1">{faq.answer}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               
               <div className="mt-3 text-xs text-gray-600">
                 Word count: {result.wordCount} | Generated: {new Date(result.generatedAt).toLocaleString()}
@@ -616,19 +629,23 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             
             <div className="bg-gray-50 p-4 rounded-lg">
               <h4 className="font-medium text-gray-900 mb-2">Optimized Content:</h4>
-              <div className="bg-white p-3 rounded border text-sm text-gray-700">
-                {result.optimizedContent?.substring(0, 200)}...
+              <div className="max-h-60 overflow-y-auto">
+                <div className="bg-white p-3 rounded border text-sm text-gray-700">
+                  {result.optimizedContent}
+                </div>
               </div>
             </div>
             
             {result.improvements && result.improvements.length > 0 && (
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h4 className="font-medium text-blue-900 mb-2">Improvements Made:</h4>
-                <ul className="text-sm text-blue-800 space-y-1">
-                  {result.improvements.slice(0, 3).map((improvement: string, index: number) => (
-                    <li key={index}>• {improvement}</li>
-                  ))}
-                </ul>
+                <div className="max-h-40 overflow-y-auto">
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    {result.improvements.map((improvement: string, index: number) => (
+                      <li key={index}>• {improvement}</li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             )}
           </div>
@@ -655,18 +672,20 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             {result.promptSuggestions && result.promptSuggestions.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-medium text-gray-900">Top Prompt Suggestions:</h4>
-                {result.promptSuggestions.slice(0, 5).map((prompt: any, index: number) => (
-                  <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">{prompt.category}</span>
-                      <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                        {prompt.likelihood}% likely
-                      </span>
+                <div className="max-h-60 overflow-y-auto">
+                  {result.promptSuggestions.map((prompt: any, index: number) => (
+                    <div key={index} className="bg-gray-50 p-3 rounded-lg mb-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{prompt.category}</span>
+                        <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          {prompt.likelihood}% likely
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 mt-1">"{prompt.prompt}"</p>
+                      <p className="text-xs text-gray-600 mt-1">{prompt.optimization}</p>
                     </div>
-                    <p className="text-sm text-gray-700 mt-1">"{prompt.prompt}"</p>
-                    <p className="text-xs text-gray-600 mt-1">{prompt.optimization}</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -693,22 +712,24 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             {result.competitorAnalyses && result.competitorAnalyses.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-medium text-gray-900">Competitor Analysis:</h4>
-                {result.competitorAnalyses.slice(0, 3).map((competitor: any, index: number) => (
-                  <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">{competitor.name}</span>
-                      <span className="text-sm bg-gray-200 text-gray-800 px-2 py-1 rounded">
-                        {competitor.overallScore}/100
-                      </span>
+                <div className="max-h-60 overflow-y-auto">
+                  {result.competitorAnalyses.map((competitor: any, index: number) => (
+                    <div key={index} className="bg-gray-50 p-3 rounded-lg mb-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{competitor.name}</span>
+                        <span className="text-sm bg-gray-200 text-gray-800 px-2 py-1 rounded">
+                          {competitor.overallScore}/100
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 mt-2 text-xs">
+                        <div>AI: {competitor.subscores?.aiUnderstanding}</div>
+                        <div>Citation: {competitor.subscores?.citationLikelihood}</div>
+                        <div>Voice: {competitor.subscores?.conversationalReadiness}</div>
+                        <div>Structure: {competitor.subscores?.contentStructure}</div>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 mt-2 text-xs">
-                      <div>AI: {competitor.subscores?.aiUnderstanding}</div>
-                      <div>Citation: {competitor.subscores?.citationLikelihood}</div>
-                      <div>Voice: {competitor.subscores?.conversationalReadiness}</div>
-                      <div>Structure: {competitor.subscores?.contentStructure}</div>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -735,31 +756,33 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             {result.competitorSuggestions && result.competitorSuggestions.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-medium text-gray-900">New Competitors Discovered:</h4>
-                {result.competitorSuggestions.slice(0, 5).map((competitor: any, index: number) => (
-                  <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">{competitor.name}</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                          {competitor.type}
-                        </span>
-                        <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">
-                          {competitor.relevanceScore}% relevant
-                        </span>
+                <div className="max-h-60 overflow-y-auto">
+                  {result.competitorSuggestions.map((competitor: any, index: number) => (
+                    <div key={index} className="bg-gray-50 p-3 rounded-lg mb-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{competitor.name}</span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                            {competitor.type}
+                          </span>
+                          <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">
+                            {competitor.relevanceScore}% relevant
+                          </span>
+                        </div>
                       </div>
+                      <p className="text-sm text-gray-600 mt-1">{competitor.reason}</p>
+                      <a 
+                        href={competitor.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1 mt-1"
+                      >
+                        <span>{competitor.url}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">{competitor.reason}</p>
-                    <a 
-                      href={competitor.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1 mt-1"
-                    >
-                      <span>{competitor.url}</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -768,9 +791,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       default:
         return (
           <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <pre className="text-sm text-gray-700 overflow-x-auto">
-              {JSON.stringify(result, null, 2)}
-            </pre>
+            <div className="max-h-60 overflow-y-auto">
+              <pre className="text-sm text-gray-700 overflow-x-auto">
+                {JSON.stringify(result, null, 2)}
+              </pre>
+            </div>
           </div>
         );
     }
@@ -801,6 +826,35 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           </select>
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
         </div>
+      </div>
+    );
+  };
+
+  // Schema type selector component
+  const SchemaTypeSelector = () => {
+    return (
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Schema Type
+        </label>
+        <div className="relative">
+          <select
+            value={schemaType}
+            onChange={(e) => setSchemaType(e.target.value as any)}
+            className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          >
+            <option value="article">Article</option>
+            <option value="product">Product</option>
+            <option value="organization">Organization</option>
+            <option value="person">Person</option>
+            <option value="faq">FAQ Page</option>
+            <option value="howto">How-To Guide</option>
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          Select the type of schema markup you want to generate
+        </p>
       </div>
     );
   };
@@ -873,8 +927,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           </div>
           
           <div className="p-6 overflow-y-auto flex-1">
+            {/* Tool-specific configuration */}
+            {toolId === 'schema' && <SchemaTypeSelector />}
+            
             {/* Site Selector */}
-            <SiteSelector />
+            {toolId !== 'schema' && <SiteSelector />}
             
             {toolId === 'competitive' && userProfile?.competitors?.length > 0 && (
               <div className="mb-4">
