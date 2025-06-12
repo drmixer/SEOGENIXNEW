@@ -165,7 +165,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   useEffect(() => {
     if (selectedTool) {
       setExpandedTool(selectedTool);
-      // Don't automatically run the tool when it's selected
     }
   }, [selectedTool]);
 
