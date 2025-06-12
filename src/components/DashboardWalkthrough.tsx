@@ -250,14 +250,16 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
       </div>
       
       {/* CSS for highlighting */}
-      <style jsx>{`
+      <style>
+        {`
         .walkthrough-highlight {
           position: relative;
           z-index: 51 !important;
           box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.3), 0 0 20px rgba(139, 92, 246, 0.2) !important;
           border-radius: 8px !important;
         }
-      `}</style>
+        `}
+      </style>
     </>
   );
 };

@@ -36,14 +36,27 @@ Deno.serve(async (req: Request) => {
     let pageContent = content;
     if (url && !content) {
       try {
+        console.log(`Attempting to fetch content from URL: ${url}`);
         const response = await fetch(url, {
           headers: {
-            'User-Agent': 'SEOGENIX AI Visibility Audit Bot 1.0'
+            // Use a standard browser user agent to avoid being blocked
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36'
           }
         });
+        
         if (response.ok) {
           pageContent = await response.text();
+          console.log(`Successfully fetched content from ${url}, length: ${pageContent.length} characters`);
+          
+          // Log a sample of the content to verify it's complete
+          console.log(`Content sample: ${pageContent.substring(0, 200)}...`);
+          
+          // Check if we only got the head section
+          if (pageContent.includes('</head>') && !pageContent.includes('</body>')) {
+            console.warn('Warning: Content may only include the head section');
+          }
         } else {
+          console.error(`Failed to fetch URL: ${url}, status: ${response.status}, statusText: ${response.statusText}`);
           pageContent = `Sample content for ${url}`;
         }
       } catch (error) {
