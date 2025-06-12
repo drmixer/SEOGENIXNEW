@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Mail, Lock, User, Loader } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, resetAuth } from '../lib/supabase';
 
 interface AuthModalProps {
   onClose: () => void;
@@ -32,7 +32,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
         
         if (error) throw error;
         
-        console.log('Login successful:', data);
+        console.log('Login successful:', data.user?.id);
         
         // For login, session should be immediately available
         if (data.session && data.user) {
@@ -57,7 +57,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
         
         if (error) throw error;
         
-        console.log('Signup response:', data);
+        console.log('Signup response:', data.user?.id);
         
         // Check if email confirmation is required
         if (data.user && !data.session) {
@@ -94,6 +94,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
     } finally {
       setLoading(false);
     }
+  };
+
+  // For debugging - only in development
+  const handleResetAuth = async () => {
+    await resetAuth();
+    setError('Auth state has been reset. You can try again now.');
   };
 
   return (
@@ -211,6 +217,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
                 <span>{isLogin ? 'Sign In' : 'Create Account'}</span>
               )}
             </button>
+
+            {process.env.NODE_ENV === 'development' && (
+              <button
+                type="button"
+                onClick={handleResetAuth}
+                className="w-full mt-2 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg text-sm"
+              >
+                Reset Auth State (Debug)
+              </button>
+            )}
           </form>
 
           <div className="mt-6 text-center">

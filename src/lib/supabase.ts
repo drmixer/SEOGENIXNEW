@@ -7,7 +7,38 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables. Please check your .env file.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+console.log('Initializing Supabase client with:', { 
+  hasUrl: !!supabaseUrl, 
+  hasKey: !!supabaseAnonKey,
+  urlStart: supabaseUrl?.substring(0, 10) + '...' || 'missing'
+});
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
+
+// Helper function to reset auth state - useful for debugging
+export const resetAuth = async () => {
+  try {
+    localStorage.removeItem('supabase.auth.token');
+    sessionStorage.removeItem('supabase.auth.token');
+    
+    // Sign out current session if any
+    await supabase.auth.signOut({
+      scope: 'local'
+    });
+    
+    console.log('Auth state has been reset');
+    return true;
+  } catch (e) {
+    console.error('Error resetting auth state:', e);
+    return false;
+  }
+};
 
 // Helper function to log session info for debugging
 export const logSessionDebug = async () => {

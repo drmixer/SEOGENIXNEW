@@ -24,7 +24,19 @@ function App() {
       try {
         console.log('Initializing authentication...');
         setLoading(true);
+        
+        // Set a timeout to prevent hanging indefinitely
+        const timeoutId = setTimeout(() => {
+          console.log('Auth initialization timed out after 5 seconds');
+          setLoading(false);
+          setAuthInitialized(true);
+          setAuthError('Authentication initialization timed out. Please refresh the page.');
+        }, 5000);
+        
         const { data: { session }, error } = await supabase.auth.getSession();
+        
+        // Clear the timeout since we got a response
+        clearTimeout(timeoutId);
         
         if (error) {
           console.error('Error getting initial session:', error);
@@ -34,27 +46,33 @@ function App() {
           return;
         }
         
-        console.log('Initial session:', session);
+        console.log('Initial session:', session ? 'Valid session exists' : 'No session');
         
         if (session?.user) {
-          console.log('Setting user from initial session:', session.user);
+          console.log('Setting user from initial session');
           setUser(session.user);
           
           // Fetch user profile to get plan
           try {
-            const { data: profiles } = await supabase
+            const { data: profiles, error: profileError } = await supabase
               .from('user_profiles')
               .select('*')
               .eq('user_id', session.user.id)
               .order('created_at', { ascending: false })
               .limit(1);
+            
+            if (profileError) {
+              console.error('Error fetching user profile:', profileError);
+              // Continue with default values
+            }
               
             if (profiles && profiles.length > 0) {
-              console.log('User profile found:', profiles[0]);
+              console.log('User profile found:', profiles[0].id);
               setUserPlan(profiles[0].plan as any || 'free');
               
               // If onboarding is completed, go to dashboard
               if (profiles[0].onboarding_completed_at) {
+                console.log('Onboarding completed, going to dashboard');
                 setCurrentView('dashboard');
               } else {
                 // If onboarding is not completed, show onboarding modal
@@ -67,17 +85,18 @@ function App() {
               setShowOnboarding(true);
             }
           } catch (profileError) {
-            console.error('Error fetching user profile:', profileError);
+            console.error('Error in profile fetch try/catch:', profileError);
+            // Continue with default plan and show onboarding
+            setShowOnboarding(true);
           }
         } else {
-          console.log('No initial session found');
+          console.log('No user in session, staying on landing page');
         }
-        
-        setLoading(false);
-        setAuthInitialized(true);
       } catch (error) {
         console.error('Error in initializeAuth:', error);
         setAuthError('Authentication initialization failed: ' + (error as Error).message);
+      } finally {
+        console.log('Auth initialization complete');
         setLoading(false);
         setAuthInitialized(true);
       }
@@ -93,20 +112,25 @@ function App() {
       
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session?.user) {
-          console.log('Setting user from auth change:', session.user);
+          console.log('Setting user from auth change:', session.user.id);
           setUser(session.user);
           
           // Fetch user profile to get plan
           try {
-            const { data: profiles } = await supabase
+            const { data: profiles, error: profileError } = await supabase
               .from('user_profiles')
               .select('*')
               .eq('user_id', session.user.id)
               .order('created_at', { ascending: false })
               .limit(1);
+            
+            if (profileError) {
+              console.error('Error fetching profile after auth change:', profileError);
+              // Continue with defaults
+            }
               
             if (profiles && profiles.length > 0) {
-              console.log('User profile found after auth change:', profiles[0]);
+              console.log('User profile found after auth change:', profiles[0].id);
               setUserPlan(profiles[0].plan as any || 'free');
               
               // Check if onboarding is completed
@@ -114,6 +138,7 @@ function App() {
                 console.log('Onboarding not completed, showing onboarding modal');
                 setShowOnboarding(true);
               } else {
+                console.log('Onboarding already completed, going to dashboard');
                 setCurrentView('dashboard');
               }
             } else {
@@ -122,7 +147,9 @@ function App() {
               setShowOnboarding(true);
             }
           } catch (profileError) {
-            console.error('Error fetching user profile after auth change:', profileError);
+            console.error('Error in profile fetch after auth change:', profileError);
+            // Continue with default plan and show onboarding
+            setShowOnboarding(true);
           }
         }
       } else if (event === 'SIGNED_OUT') {
@@ -130,12 +157,14 @@ function App() {
         setUser(null);
         setUserPlan('free');
         setCurrentView('landing');
+        setShowOnboarding(false);
       }
-      
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      console.log('Cleaning up auth subscription');
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleNavigateToDashboard = () => {
@@ -195,19 +224,25 @@ function App() {
     }
     
     // Set user from session
+    console.log('Setting user after auth success:', session.user.id);
     setUser(session.user);
     
     // Fetch user profile to get plan
     try {
-      const { data: profiles } = await supabase
+      const { data: profiles, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false })
         .limit(1);
+      
+      if (profileError) {
+        console.error('Error fetching profile after auth success:', profileError);
+        // Continue with the flow using defaults
+      }
         
       if (profiles && profiles.length > 0) {
-        console.log('User profile found after auth success:', profiles[0]);
+        console.log('User profile found after auth success:', profiles[0].id);
         setUserPlan(profiles[0].plan as any || 'free');
         
         // If onboarding is already completed, go directly to dashboard
@@ -218,7 +253,8 @@ function App() {
         }
       }
     } catch (profileError) {
-      console.error('Error fetching user profile after auth success:', profileError);
+      console.error('Error in profile fetch after auth success:', profileError);
+      // Continue with the flow using defaults
     }
     
     // Now proceed with the flow
@@ -227,30 +263,34 @@ function App() {
       setUserPlan(selectedPlan);
       setShowOnboarding(true);
     } else {
-      // For login, check if they need onboarding
+      // For login, check if they need onboarding (determined above)
       console.log('Going to dashboard for login');
       setCurrentView('dashboard');
     }
   };
 
   const handleOnboardingComplete = async () => {
+    console.log('Onboarding completed in App.tsx');
     setShowOnboarding(false);
-    
-    console.log('Onboarding completed in App.tsx - setting walkthrough trigger and navigating to dashboard');
     
     // Update user profile with selected plan if needed
     if (user) {
       try {
-        const { data: existingProfiles } = await supabase
+        const { data: existingProfiles, error } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(1);
           
+        if (error) {
+          console.error('Error checking for existing profiles:', error);
+        }
+          
         if (existingProfiles && existingProfiles.length > 0) {
           // Update existing profile
-          await supabase
+          console.log('Updating existing profile:', existingProfiles[0].id);
+          const { error: updateError } = await supabase
             .from('user_profiles')
             .update({ 
               plan: userPlan,
@@ -258,9 +298,14 @@ function App() {
               updated_at: new Date().toISOString()
             })
             .eq('id', existingProfiles[0].id);
+            
+          if (updateError) {
+            console.error('Error updating profile after onboarding:', updateError);
+          }
         } else {
           // Create new profile if none exists
-          await supabase
+          console.log('Creating new profile for user:', user.id);
+          const { error: insertError } = await supabase
             .from('user_profiles')
             .insert({
               user_id: user.id,
@@ -269,6 +314,10 @@ function App() {
               websites: [],
               competitors: []
             });
+            
+          if (insertError) {
+            console.error('Error creating profile after onboarding:', insertError);
+          }
         }
       } catch (error) {
         console.error('Error updating user profile after onboarding:', error);
@@ -284,11 +333,16 @@ function App() {
 
   const handleSignOut = async () => {
     console.log('Signing out user');
-    await supabase.auth.signOut();
-    setUser(null);
-    setCurrentView('landing');
-    setSelectedPlan('free');
-    setUserPlan('free');
+    try {
+      await supabase.auth.signOut();
+      console.log('Sign out successful');
+      setUser(null);
+      setCurrentView('landing');
+      setSelectedPlan('free');
+      setUserPlan('free');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   // Don't render anything until auth is initialized to prevent flashing
@@ -298,6 +352,9 @@ function App() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Initializing application...</p>
+          {authError && (
+            <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{authError}</p>
+          )}
         </div>
       </div>
     );
@@ -348,7 +405,7 @@ function App() {
           />
         )}
 
-        {showOnboarding && (
+        {showOnboarding && user && (
           <OnboardingModal
             userPlan={userPlan}
             onComplete={handleOnboardingComplete}
