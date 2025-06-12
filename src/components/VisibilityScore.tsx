@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TrendingUp, TrendingDown, Target, Brain, MessageSquare, FileText, RefreshCw } from 'lucide-react';
 import { apiService, type AuditResult } from '../services/api';
 import { userDataService } from '../services/userDataService';
@@ -15,6 +15,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
   const [error, setError] = useState<string | null>(null);
   const [hasRunAudit, setHasRunAudit] = useState(false);
   const [weeklyChange, setWeeklyChange] = useState(0);
+  const auditInProgressRef = useRef(false);
 
   // Enable subscores for all users during development
   const isDevelopment = true; // Set to false for production
@@ -32,30 +33,22 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
   };
 
   const runRealAudit = async () => {
+    // Prevent multiple simultaneous audit runs
+    if (auditInProgressRef.current) {
+      console.log('Audit already in progress, skipping');
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
+    auditInProgressRef.current = true;
     
     try {
       // Use selected website or fallback to example
       const urlToAudit = selectedWebsite || 'https://example.com';
       
-      // Fetch real content from the website
-      let websiteContent = '';
-      try {
-        const response = await fetch(urlToAudit, {
-          headers: {
-            'User-Agent': 'SEOGENIX AI Visibility Audit Bot 1.0'
-          }
-        });
-        if (response.ok) {
-          websiteContent = await response.text();
-        }
-      } catch (fetchError) {
-        console.warn('Could not fetch website content, using URL only');
-      }
-      
       // Run real audit using Gemini API
-      const result = await apiService.runAudit(urlToAudit, websiteContent);
+      const result = await apiService.runAudit(urlToAudit);
       setAuditData(result);
       setHasRunAudit(true);
       localStorage.setItem('seogenix_audit_run', 'true');
@@ -97,6 +90,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
       console.error('Audit error:', err);
     } finally {
       setIsLoading(false);
+      auditInProgressRef.current = false;
     }
   };
 
@@ -212,7 +206,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
               {hasSubscores && (
                 <button
                   onClick={runRealAudit}
-                  disabled={isLoading}
+                  disabled={isLoading || auditInProgressRef.current}
                   className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
                   title="Run new audit"
                 >
@@ -268,7 +262,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
               </p>
               <button
                 onClick={runRealAudit}
-                disabled={isLoading}
+                disabled={isLoading || auditInProgressRef.current}
                 className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50"
               >
                 {isLoading ? 'Running Audit...' : 'Run First Audit'}
@@ -332,7 +326,7 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
               <p className="text-gray-600 mb-4">Run an audit to see detailed breakdown</p>
               <button
                 onClick={runRealAudit}
-                disabled={isLoading}
+                disabled={isLoading || auditInProgressRef.current}
                 className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50"
               >
                 {isLoading ? 'Running Audit...' : 'Run Audit'}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Calendar, BarChart3, Target, FileText, Search, Mic, Globe, Users, Zap, Lightbulb, Filter, SortAsc, SortDesc, ExternalLink, Eye } from 'lucide-react';
+import { TrendingUp, TrendingDown, Calendar, BarChart3, Target, FileText, Search, Mic, Globe, Users, Zap, Lightbulb, Filter, SortAsc, SortDesc, ExternalLink, Eye, X } from 'lucide-react';
 import { userDataService, type AuditHistoryEntry, type UserActivity, type Report } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 
@@ -30,6 +30,7 @@ const HistoricalPerformance: React.FC<HistoricalPerformanceProps> = ({ userPlan,
   const [sortBy, setSortBy] = useState<'date' | 'score'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedEntry, setSelectedEntry] = useState<ActivityEntry | null>(null);
+  const [dataFetched, setDataFetched] = useState(false);
 
   const getToolIcon = (toolId: string) => {
     const iconMap: Record<string, React.ComponentType<any>> = {
@@ -64,131 +65,135 @@ const HistoricalPerformance: React.FC<HistoricalPerformanceProps> = ({ userPlan,
   };
 
   useEffect(() => {
-    const loadAllData = async () => {
-      setLoading(true);
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+    // Only load data once to prevent redundant fetches
+    if (!dataFetched) {
+      loadAllData();
+    }
+  }, [selectedWebsite, dataFetched]);
 
-        const entries: ActivityEntry[] = [];
+  const loadAllData = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-        // Load audit history
-        let auditHistory: AuditHistoryEntry[];
-        if (selectedWebsite) {
-          auditHistory = await userDataService.getAuditHistoryForWebsite(user.id, selectedWebsite);
-        } else {
-          auditHistory = await userDataService.getAuditHistory(user.id);
-        }
+      const entries: ActivityEntry[] = [];
 
-        auditHistory.forEach(audit => {
+      // Load audit history - use a single fetch with the largest limit we'll need
+      let auditHistory: AuditHistoryEntry[];
+      if (selectedWebsite) {
+        auditHistory = await userDataService.getAuditHistoryForWebsite(user.id, selectedWebsite);
+      } else {
+        auditHistory = await userDataService.getAuditHistory(user.id);
+      }
+
+      auditHistory.forEach(audit => {
+        entries.push({
+          id: audit.id,
+          type: 'audit',
+          title: 'AI Visibility Audit',
+          description: `Overall score: ${audit.overall_score}/100`,
+          score: audit.overall_score,
+          icon: FileText,
+          color: 'text-blue-600',
+          date: audit.created_at,
+          data: audit,
+          website_url: audit.website_url
+        });
+      });
+
+      // Load user activity (tool usage)
+      const activities = await userDataService.getRecentActivity(user.id, 100);
+      
+      activities.forEach(activity => {
+        if (activity.tool_id && activity.activity_type === 'tool_used') {
+          // Filter by website if selected
+          if (selectedWebsite && activity.website_url && activity.website_url !== selectedWebsite) {
+            return;
+          }
+
+          const toolIcon = getToolIcon(activity.tool_id);
+          const toolColor = getToolColor(activity.tool_id);
+          
           entries.push({
-            id: audit.id,
-            type: 'audit',
-            title: 'AI Visibility Audit',
-            description: `Overall score: ${audit.overall_score}/100`,
-            score: audit.overall_score,
+            id: activity.id,
+            type: 'activity',
+            title: `${activity.tool_id.charAt(0).toUpperCase() + activity.tool_id.slice(1)} Tool`,
+            description: `Tool executed successfully`,
+            icon: toolIcon,
+            color: toolColor,
+            date: activity.created_at,
+            data: activity,
+            website_url: activity.website_url
+          });
+        } else if (activity.activity_type === 'audit_run') {
+          // Filter by website if selected
+          if (selectedWebsite && activity.activity_data?.url && activity.activity_data.url !== selectedWebsite) {
+            return;
+          }
+
+          entries.push({
+            id: activity.id,
+            type: 'activity',
+            title: 'Audit Completed',
+            description: `Score: ${activity.activity_data?.score || 'N/A'}/100`,
+            score: activity.activity_data?.score,
             icon: FileText,
             color: 'text-blue-600',
-            date: audit.created_at,
-            data: audit,
-            website_url: audit.website_url
+            date: activity.created_at,
+            data: activity,
+            website_url: activity.activity_data?.url
           });
-        });
-
-        // Load user activity (tool usage)
-        const activities = await userDataService.getRecentActivity(user.id, 100);
-        
-        activities.forEach(activity => {
-          if (activity.tool_id && activity.activity_type === 'tool_used') {
-            // Filter by website if selected
-            if (selectedWebsite && activity.website_url && activity.website_url !== selectedWebsite) {
-              return;
-            }
-
-            const toolIcon = getToolIcon(activity.tool_id);
-            const toolColor = getToolColor(activity.tool_id);
-            
-            entries.push({
-              id: activity.id,
-              type: 'activity',
-              title: `${activity.tool_id.charAt(0).toUpperCase() + activity.tool_id.slice(1)} Tool`,
-              description: `Tool executed successfully`,
-              icon: toolIcon,
-              color: toolColor,
-              date: activity.created_at,
-              data: activity,
-              website_url: activity.website_url
-            });
-          } else if (activity.activity_type === 'audit_run') {
-            // Filter by website if selected
-            if (selectedWebsite && activity.activity_data?.url && activity.activity_data.url !== selectedWebsite) {
-              return;
-            }
-
-            entries.push({
-              id: activity.id,
-              type: 'activity',
-              title: 'Audit Completed',
-              description: `Score: ${activity.activity_data?.score || 'N/A'}/100`,
-              score: activity.activity_data?.score,
-              icon: FileText,
-              color: 'text-blue-600',
-              date: activity.created_at,
-              data: activity,
-              website_url: activity.activity_data?.url
-            });
-          } else if (activity.activity_type === 'content_optimized') {
-            entries.push({
-              id: activity.id,
-              type: 'activity',
-              title: 'Content Optimized',
-              description: `Improved by +${activity.activity_data?.improvement || 0} points`,
-              score: activity.activity_data?.optimizedScore,
-              icon: TrendingUp,
-              color: 'text-orange-600',
-              date: activity.created_at,
-              data: activity
-            });
-          } else if (activity.activity_type === 'content_generated') {
-            entries.push({
-              id: activity.id,
-              type: 'activity',
-              title: 'Content Generated',
-              description: `${activity.activity_data?.contentType || 'Content'} created`,
-              icon: Zap,
-              color: 'text-yellow-600',
-              date: activity.created_at,
-              data: activity
-            });
-          }
-        });
-
-        // Load reports
-        const reports = await userDataService.getUserReports(user.id);
-        
-        reports.forEach(report => {
+        } else if (activity.activity_type === 'content_optimized') {
           entries.push({
-            id: report.id,
-            type: 'report',
-            title: report.report_name,
-            description: `${report.report_type.charAt(0).toUpperCase() + report.report_type.slice(1)} report generated`,
-            icon: BarChart3,
-            color: 'text-indigo-600',
-            date: report.created_at,
-            data: report
+            id: activity.id,
+            type: 'activity',
+            title: 'Content Optimized',
+            description: `Improved by +${activity.activity_data?.improvement || 0} points`,
+            score: activity.activity_data?.optimizedScore,
+            icon: TrendingUp,
+            color: 'text-orange-600',
+            date: activity.created_at,
+            data: activity
           });
+        } else if (activity.activity_type === 'content_generated') {
+          entries.push({
+            id: activity.id,
+            type: 'activity',
+            title: 'Content Generated',
+            description: `${activity.activity_data?.contentType || 'Content'} created`,
+            icon: Zap,
+            color: 'text-yellow-600',
+            date: activity.created_at,
+            data: activity
+          });
+        }
+      });
+
+      // Load reports
+      const reports = await userDataService.getUserReports(user.id);
+      
+      reports.forEach(report => {
+        entries.push({
+          id: report.id,
+          type: 'report',
+          title: report.report_name,
+          description: `${report.report_type.charAt(0).toUpperCase() + report.report_type.slice(1)} report generated`,
+          icon: BarChart3,
+          color: 'text-indigo-600',
+          date: report.created_at,
+          data: report
         });
+      });
 
-        setAllEntries(entries);
-      } catch (error) {
-        console.error('Error loading historical data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadAllData();
-  }, [selectedWebsite]);
+      setAllEntries(entries);
+      setDataFetched(true);
+    } catch (error) {
+      console.error('Error loading historical data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter and sort entries
   useEffect(() => {

@@ -63,6 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const isMountedRef = useRef(true);
   const activityTrackedRef = useRef(false);
   const insightsGeneratedRef = useRef(false);
+  const auditHistoryFetchedRef = useRef(false);
 
   // Extract first name from user data
   const getFirstName = () => {
@@ -101,7 +102,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     try {
       const insights: ActionableInsight[] = [];
 
-      // Get recent audit history
+      // Get recent audit history - use cached data if available
       const auditHistory = await userDataService.getAuditHistory(user.id, 5);
       const recentActivity = await userDataService.getRecentActivity(user.id, 10);
 
@@ -388,6 +389,30 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     }
   }, [userProfile, user?.id, userPlan, generateActionableInsights]);
 
+  // Centralized audit history fetching to prevent duplicate requests
+  useEffect(() => {
+    const fetchAuditHistory = async () => {
+      if (!user?.id || !isMountedRef.current || auditHistoryFetchedRef.current) return;
+      
+      auditHistoryFetchedRef.current = true;
+      
+      try {
+        // Fetch with the largest limit we'll need (20) once
+        await userDataService.getAuditHistory(user.id, 20);
+        console.log('Centralized audit history fetch completed');
+      } catch (error) {
+        console.error('Error in centralized audit history fetch:', error);
+      } finally {
+        // Reset the flag after a delay to allow for future fetches if needed
+        setTimeout(() => {
+          auditHistoryFetchedRef.current = false;
+        }, 30000); // 30 second cooldown
+      }
+    };
+    
+    fetchAuditHistory();
+  }, [user?.id]);
+
   // Track page visits - only once when section changes
   useEffect(() => {
     const trackPageVisit = async () => {
@@ -525,6 +550,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     profileFetchedRef.current = false;
     activityTrackedRef.current = false;
     insightsGeneratedRef.current = false;
+    auditHistoryFetchedRef.current = false;
     setProfileFetchAttempted(false);
     setDashboardError(null);
     
@@ -567,6 +593,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           {dashboardError && (
             <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{dashboardError}</p>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (dashboardLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
         </div>
       </div>
     );
