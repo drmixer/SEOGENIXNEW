@@ -53,43 +53,8 @@ function App() {
           console.log('Setting user from initial session');
           setUser(session.user);
           
-          // Fetch user profile to get plan
-          try {
-            const { data: profiles, error: profileError } = await supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('user_id', session.user.id)
-              .order('created_at', { ascending: false })
-              .limit(1);
-            
-            if (profileError) {
-              console.error('Error fetching user profile:', profileError);
-              // Continue with default values
-            }
-              
-            if (profiles && profiles.length > 0) {
-              console.log('User profile found:', profiles[0].id);
-              setUserPlan(profiles[0].plan as any || 'free');
-              
-              // If onboarding is completed, go to dashboard
-              if (profiles[0].onboarding_completed_at) {
-                console.log('Onboarding completed, going to dashboard');
-                setCurrentView('dashboard');
-              } else {
-                // If onboarding is not completed, show onboarding modal
-                console.log('Onboarding not completed, showing onboarding modal');
-                setShowOnboarding(true);
-              }
-            } else {
-              // No profile found, show onboarding
-              console.log('No profile found, showing onboarding');
-              setShowOnboarding(true);
-            }
-          } catch (profileError) {
-            console.error('Error in profile fetch try/catch:', profileError);
-            // Continue with default plan and show onboarding
-            setShowOnboarding(true);
-          }
+          // Fetch user profile to get plan - use a separate function to avoid nesting
+          await fetchUserProfile(session.user.id);
         } else {
           console.log('No user in session, staying on landing page');
         }
@@ -100,6 +65,46 @@ function App() {
         console.log('Auth initialization complete');
         setLoading(false);
         setAuthInitialized(true);
+      }
+    };
+
+    // Separate function to fetch user profile to reduce nesting
+    const fetchUserProfile = async (userId: string) => {
+      try {
+        const { data: profiles, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (profileError) {
+          console.error('Error fetching user profile:', profileError);
+          // Continue with default values
+        }
+          
+        if (profiles && profiles.length > 0) {
+          console.log('User profile found:', profiles[0].id);
+          setUserPlan(profiles[0].plan as any || 'free');
+          
+          // If onboarding is completed, go to dashboard
+          if (profiles[0].onboarding_completed_at) {
+            console.log('Onboarding completed, going to dashboard');
+            setCurrentView('dashboard');
+          } else {
+            // If onboarding is not completed, show onboarding modal
+            console.log('Onboarding not completed, showing onboarding modal');
+            setShowOnboarding(true);
+          }
+        } else {
+          // No profile found, show onboarding
+          console.log('No profile found, showing onboarding');
+          setShowOnboarding(true);
+        }
+      } catch (profileError) {
+        console.error('Error in profile fetch:', profileError);
+        // Continue with default plan and show onboarding
+        setShowOnboarding(true);
       }
     };
 
@@ -116,42 +121,8 @@ function App() {
           console.log('Setting user from auth change:', session.user.id);
           setUser(session.user);
           
-          // Fetch user profile to get plan
-          try {
-            const { data: profiles, error: profileError } = await supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('user_id', session.user.id)
-              .order('created_at', { ascending: false })
-              .limit(1);
-            
-            if (profileError) {
-              console.error('Error fetching profile after auth change:', profileError);
-              // Continue with defaults
-            }
-              
-            if (profiles && profiles.length > 0) {
-              console.log('User profile found after auth change:', profiles[0].id);
-              setUserPlan(profiles[0].plan as any || 'free');
-              
-              // Check if onboarding is completed
-              if (!profiles[0].onboarding_completed_at) {
-                console.log('Onboarding not completed, showing onboarding modal');
-                setShowOnboarding(true);
-              } else {
-                console.log('Onboarding already completed, going to dashboard');
-                setCurrentView('dashboard');
-              }
-            } else {
-              // No profile found, show onboarding
-              console.log('No profile found after auth change, showing onboarding');
-              setShowOnboarding(true);
-            }
-          } catch (profileError) {
-            console.error('Error in profile fetch after auth change:', profileError);
-            // Continue with default plan and show onboarding
-            setShowOnboarding(true);
-          }
+          // Fetch user profile to get plan - use a separate function to avoid nesting
+          await fetchUserProfile(session.user.id);
         }
       } else if (event === 'SIGNED_OUT') {
         console.log('User signed out, clearing user state');
@@ -173,7 +144,7 @@ function App() {
       setDashboardLoading(true);
       console.log('Navigating to dashboard for user:', user.id);
       setCurrentView('dashboard');
-      setTimeout(() => setDashboardLoading(false), 500);
+      setTimeout(() => setDashboardLoading(false), 300); // Reduced timeout for faster rendering
     } else {
       setAuthModalMode('login');
       setShowAuthModal(true);
@@ -231,7 +202,7 @@ function App() {
     console.log('Setting user after auth success:', session.user.id);
     setUser(session.user);
     
-    // Fetch user profile to get plan
+    // Fetch user profile to get plan - use a separate function to avoid nesting
     try {
       const { data: profiles, error: profileError } = await supabase
         .from('user_profiles')

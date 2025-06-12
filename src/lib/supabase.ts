@@ -22,14 +22,32 @@ const createMockClient = () => ({
     signOut: () => Promise.resolve({ error: null }),
     signUp: () => Promise.resolve({ data: { user: null, session: null }, error: { message: 'Supabase not configured' } }),
     signInWithPassword: () => Promise.resolve({ data: { user: null, session: null }, error: { message: 'Supabase not configured' } }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } })
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    updateUser: () => Promise.resolve({ data: { user: null }, error: null })
   },
   from: () => ({
-    select: () => Promise.resolve({ data: [], error: { message: 'Supabase not configured' } }),
-    insert: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
-    update: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
-    delete: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } })
-  })
+    select: () => ({
+      eq: () => ({
+        order: () => ({
+          limit: () => Promise.resolve({ data: [], error: null })
+        })
+      }),
+      single: () => Promise.resolve({ data: null, error: null })
+    }),
+    insert: () => Promise.resolve({ data: null, error: null }),
+    update: () => ({
+      eq: () => Promise.resolve({ data: null, error: null })
+    }),
+    delete: () => ({
+      eq: () => Promise.resolve({ data: null, error: null })
+    })
+  }),
+  storage: {
+    from: () => ({
+      upload: () => Promise.resolve({ data: null, error: null }),
+      getPublicUrl: () => ({ data: { publicUrl: '' } })
+    })
+  }
 });
 
 export const supabase = hasValidCredentials 

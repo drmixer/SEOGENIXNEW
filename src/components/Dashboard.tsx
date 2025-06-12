@@ -49,14 +49,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
   const [actionableInsights, setActionableInsights] = useState<ActionableInsight[]>([]);
   const { toasts, addToast, removeToast } = useToast();
   const [dashboardError, setDashboardError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
   const [profileFetchAttempted, setProfileFetchAttempted] = useState(false);
 
   // Extract first name from user data
@@ -311,8 +310,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
               setTimeout(() => {
                 console.log('Starting immediate walkthrough...');
                 setShowWalkthrough(true);
-              }, 1500);
+              }, 1000); // Reduced from 1500ms for faster rendering
             }
+          }
+          
+          // Check if user has run tools before
+          const toolsRun = localStorage.getItem('seogenix_tools_run');
+          if (toolsRun) {
+            setHasRunTools(true);
           }
           
           setLoading(false);
@@ -320,13 +325,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           setProfileFetchAttempted(true);
         } else {
           console.log('No profile found for user - this is expected for new users');
-          // Retry profile load if this is the first attempt (could be a timing issue)
-          if (retryCount < 2) {
-            console.log(`Retrying profile load (attempt ${retryCount + 1})`);
-            setRetryCount(retryCount + 1);
-            setTimeout(loadUserProfile, 1000);
-            return;
-          }
           setLoading(false);
           setLoadingProfile(false);
           setProfileFetchAttempted(true);
@@ -346,7 +344,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       setLoading(false);
       setLoadingProfile(false);
     }
-  }, [user, retryCount, profileFetchAttempted]);
+  }, [user, profileFetchAttempted]);
 
   // Generate insights when profile loads
   useEffect(() => {
@@ -373,38 +371,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
     trackPageVisit();
   }, [activeSection, user]);
-
-  // Check for walkthrough trigger on dashboard load
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    const initializeDashboard = async () => {
-      // Set tools run state
-      const toolsRun = localStorage.getItem('seogenix_tools_run');
-      if (toolsRun) {
-        setHasRunTools(true);
-      }
-
-      // Check for immediate walkthrough trigger (from onboarding)
-      const immediateWalkthrough = localStorage.getItem('seogenix_immediate_walkthrough');
-      const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
-      
-      // Always check for immediate walkthrough first
-      if (immediateWalkthrough) {
-        localStorage.removeItem('seogenix_immediate_walkthrough');
-        
-        // Use a longer delay to ensure dashboard is fully rendered
-        setTimeout(() => {
-          setShowWalkthrough(true);
-        }, 2000);
-        return;
-      }
-    };
-
-    initializeDashboard();
-  }, [user]);
 
   // Handle tool launch from Genie
   const handleToolLaunch = async (toolId: string) => {
@@ -436,6 +402,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         duration: 4000,
         onClose: () => {}
       });
+      
+      // Mark that tools have been run
+      localStorage.setItem('seogenix_tools_run', 'true');
+      setHasRunTools(true);
       
       // Regenerate insights after tool completion
       setTimeout(() => {

@@ -95,11 +95,22 @@ export interface FingerprintPhrase {
   created_at: string;
 }
 
+// Cache for user profiles to reduce database calls
+const profileCache = new Map<string, {profile: UserProfile, timestamp: number}>();
+const CACHE_TTL = 60000; // 1 minute cache TTL
+
 export const userDataService = {
   // User Profile Management
   async getUserProfile(userId: string): Promise<UserProfile | null> {
     try {
       console.log('Fetching user profile for userId:', userId);
+      
+      // Check cache first
+      const cachedData = profileCache.get(userId);
+      if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
+        console.log('Returning cached profile for user:', userId);
+        return cachedData.profile;
+      }
       
       const { data, error } = await supabase
         .from('user_profiles')
@@ -119,6 +130,13 @@ export const userDataService = {
       }
 
       console.log('Successfully fetched user profile:', data[0]);
+      
+      // Cache the result
+      profileCache.set(userId, {
+        profile: data[0],
+        timestamp: Date.now()
+      });
+      
       return data[0];
     } catch (error) {
       console.error('Error in getUserProfile:', error);
@@ -153,6 +171,13 @@ export const userDataService = {
       }
 
       console.log('Successfully created user profile:', data);
+      
+      // Update cache
+      profileCache.set(profile.user_id as string, {
+        profile: data,
+        timestamp: Date.now()
+      });
+      
       return data;
     } catch (error) {
       console.error('Error in createUserProfile:', error);
@@ -192,6 +217,13 @@ export const userDataService = {
       }
 
       console.log('Successfully updated user profile:', data);
+      
+      // Update cache
+      profileCache.set(userId, {
+        profile: data,
+        timestamp: Date.now()
+      });
+      
       return data;
     } catch (error) {
       console.error('Error in updateUserProfile:', error);

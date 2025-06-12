@@ -183,7 +183,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
     setLoadingTool(toolId);
     setExpandedTool(toolId);
-    setShowToolModal(toolId);
 
     try {
       let result: any = {};
