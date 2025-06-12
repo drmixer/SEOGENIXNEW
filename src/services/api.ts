@@ -25,6 +25,16 @@ const apiCall = async (url: string, options: RequestInit) => {
     throw error;
   }
 };
+
+// Add request deduplication
+const pendingApiRequests = new Map<string, Promise<any>>();
+
+// Create a function to generate a cache key for API requests
+const generateCacheKey = (url: string, body: any): string => {
+  const bodyKey = body ? JSON.stringify(body) : '';
+  return `${url}:${bodyKey}`;
+};
+
 export interface AuditResult {
   overallScore: number;
   subscores: {
@@ -57,56 +67,146 @@ export interface VoiceTestResult {
 export const apiService = {
   // AI Visibility Audit
   async runAudit(url: string, content?: string): Promise<AuditResult> {
-    return await apiCall(`${API_BASE_URL}/ai-visibility-audit`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/ai-visibility-audit`, { url, content });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Audit request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const auditPromise = apiCall(`${API_BASE_URL}/ai-visibility-audit`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, content })
     });
+    
+    pendingApiRequests.set(cacheKey, auditPromise);
+    
+    auditPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return auditPromise;
   },
 
   // Enhanced Audit Insights
   async getEnhancedAuditInsights(url: string, content: string, previousScore?: number) {
-    return await apiCall(`${API_BASE_URL}/enhanced-audit-insights`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/enhanced-audit-insights`, { url, content, previousScore });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Enhanced audit insights request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const insightsPromise = apiCall(`${API_BASE_URL}/enhanced-audit-insights`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, content, previousScore })
     });
+    
+    pendingApiRequests.set(cacheKey, insightsPromise);
+    
+    insightsPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return insightsPromise;
   },
 
   // Schema Generator
   async generateSchema(url: string, contentType: string, content?: string) {
-    return await apiCall(`${API_BASE_URL}/schema-generator`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/schema-generator`, { url, contentType, content });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Schema generator request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const schemaPromise = apiCall(`${API_BASE_URL}/schema-generator`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, contentType, content })
     });
+    
+    pendingApiRequests.set(cacheKey, schemaPromise);
+    
+    schemaPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return schemaPromise;
   },
 
   // Citation Tracker
   async trackCitations(domain: string, keywords: string[]) {
-    return await apiCall(`${API_BASE_URL}/citation-tracker`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/citation-tracker`, { domain, keywords });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Citation tracker request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const citationsPromise = apiCall(`${API_BASE_URL}/citation-tracker`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ domain, keywords })
     });
+    
+    pendingApiRequests.set(cacheKey, citationsPromise);
+    
+    citationsPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return citationsPromise;
   },
 
   // Content Optimizer
   async optimizeContent(content: string, targetKeywords: string[], contentType: string) {
-    return await apiCall(`${API_BASE_URL}/content-optimizer`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/content-optimizer`, { content, targetKeywords, contentType });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Content optimizer request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const optimizePromise = apiCall(`${API_BASE_URL}/content-optimizer`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ content, targetKeywords, contentType })
     });
+    
+    pendingApiRequests.set(cacheKey, optimizePromise);
+    
+    optimizePromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return optimizePromise;
   },
 
   // Voice Assistant Tester
   async testVoiceAssistants(query: string, assistants: string[]): Promise<{ results: VoiceTestResult[] }> {
-    return await apiCall(`${API_BASE_URL}/voice-assistant-tester`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/voice-assistant-tester`, { query, assistants });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Voice assistant test request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const voicePromise = apiCall(`${API_BASE_URL}/voice-assistant-tester`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ query, assistants })
     });
+    
+    pendingApiRequests.set(cacheKey, voicePromise);
+    
+    voicePromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return voicePromise;
   },
 
   // Genie Chatbot (Enhanced with user data)
@@ -117,6 +217,7 @@ export const apiService = {
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     userData?: any
   ) {
+    // Don't cache chat requests as they should always be unique
     return await apiCall(`${API_BASE_URL}/genie-chatbot`, {
       method: 'POST',
       headers,
@@ -126,20 +227,50 @@ export const apiService = {
 
   // LLM Site Summaries
   async generateLLMSummary(url: string, summaryType: 'overview' | 'technical' | 'business' | 'audience', content?: string) {
-    return await apiCall(`${API_BASE_URL}/llm-site-summaries`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/llm-site-summaries`, { url, summaryType, content });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('LLM summary request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const summaryPromise = apiCall(`${API_BASE_URL}/llm-site-summaries`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, summaryType, content })
     });
+    
+    pendingApiRequests.set(cacheKey, summaryPromise);
+    
+    summaryPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return summaryPromise;
   },
 
   // Entity Coverage Analyzer
   async analyzeEntityCoverage(url: string, content?: string, industry?: string, competitors?: string[]) {
-    return await apiCall(`${API_BASE_URL}/entity-coverage-analyzer`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/entity-coverage-analyzer`, { url, content, industry, competitors });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Entity coverage analysis request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const entityPromise = apiCall(`${API_BASE_URL}/entity-coverage-analyzer`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, content, industry, competitors })
     });
+    
+    pendingApiRequests.set(cacheKey, entityPromise);
+    
+    entityPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return entityPromise;
   },
 
   // AI Content Generator
@@ -152,7 +283,16 @@ export const apiService = {
     targetAudience?: string,
     contentLength?: 'short' | 'medium' | 'long'
   ) {
-    return await apiCall(`${API_BASE_URL}/ai-content-generator`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/ai-content-generator`, { 
+      contentType, topic, targetKeywords, tone, industry, targetAudience, contentLength 
+    });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('AI content generator request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const contentPromise = apiCall(`${API_BASE_URL}/ai-content-generator`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ 
@@ -165,6 +305,14 @@ export const apiService = {
         contentLength 
       })
     });
+    
+    pendingApiRequests.set(cacheKey, contentPromise);
+    
+    contentPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return contentPromise;
   },
 
   // Prompt Match Suggestions
@@ -175,11 +323,28 @@ export const apiService = {
     contentType?: 'article' | 'product' | 'service' | 'faq' | 'guide',
     userIntent?: 'informational' | 'transactional' | 'navigational' | 'commercial'
   ) {
-    return await apiCall(`${API_BASE_URL}/prompt-match-suggestions`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/prompt-match-suggestions`, { 
+      topic, industry, targetAudience, contentType, userIntent 
+    });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Prompt suggestions request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const promptsPromise = apiCall(`${API_BASE_URL}/prompt-match-suggestions`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ topic, industry, targetAudience, contentType, userIntent })
     });
+    
+    pendingApiRequests.set(cacheKey, promptsPromise);
+    
+    promptsPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return promptsPromise;
   },
 
   // Competitive Analysis
@@ -189,11 +354,28 @@ export const apiService = {
     industry?: string,
     analysisType?: 'basic' | 'detailed' | 'comprehensive'
   ) {
-    return await apiCall(`${API_BASE_URL}/competitive-analysis`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/competitive-analysis`, { 
+      primaryUrl, competitorUrls, industry, analysisType 
+    });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Competitive analysis request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const analysisPromise = apiCall(`${API_BASE_URL}/competitive-analysis`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ primaryUrl, competitorUrls, industry, analysisType })
     });
+    
+    pendingApiRequests.set(cacheKey, analysisPromise);
+    
+    analysisPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return analysisPromise;
   },
 
   // Competitor Discovery
@@ -204,20 +386,38 @@ export const apiService = {
     existingCompetitors?: string[],
     analysisDepth?: 'basic' | 'comprehensive'
   ) {
-    return await apiCall(`${API_BASE_URL}/competitor-discovery`, {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/competitor-discovery`, { 
+      url, industry, businessDescription, existingCompetitors, analysisDepth 
+    });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Competitor discovery request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const discoveryPromise = apiCall(`${API_BASE_URL}/competitor-discovery`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url, industry, businessDescription, existingCompetitors, analysisDepth })
     });
+    
+    pendingApiRequests.set(cacheKey, discoveryPromise);
+    
+    discoveryPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return discoveryPromise;
   },
 
   // Report Generator
   async generateReport(
-    reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive',
+    reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive' | 'roi_focused',
     reportData: any,
     reportName: string,
     format: 'pdf' | 'csv' | 'json' = 'pdf'
   ) {
+    // Don't cache report generation as each report should be unique
     return await apiCall(`${API_BASE_URL}/generate-report`, {
       method: 'POST',
       headers,
@@ -306,5 +506,11 @@ export const apiService = {
       headers,
       body: JSON.stringify({ action: 'disconnect' })
     });
+  },
+  
+  // Clear pending requests cache
+  clearPendingRequests() {
+    pendingApiRequests.clear();
+    console.log('Cleared all pending API requests');
   }
 };
