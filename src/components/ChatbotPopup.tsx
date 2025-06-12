@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Sparkles, Loader, ExternalLink } from 'lucide-react';
 import { apiService } from '../services/api';
 import { userDataService } from '../services/userDataService';
@@ -35,6 +35,7 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [userData, setUserData] = useState<any>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load user data for personalization
   useEffect(() => {
@@ -64,6 +65,15 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
     loadUserData();
   }, [type]);
 
+  // Scroll to bottom of messages when new messages are added
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
 
@@ -76,6 +86,7 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsLoading(true);
+    scrollToBottom();
 
     // Track user activity
     if (type === 'dashboard') {
@@ -116,6 +127,7 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
       };
 
       setMessages(prev => [...prev, botMessage]);
+      scrollToBottom();
 
       // Add proactive suggestions if any
       if (response.proactiveSuggestions && response.proactiveSuggestions.length > 0) {
@@ -126,6 +138,7 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
             timestamp: new Date()
           };
           setMessages(prev => [...prev, suggestionMessage]);
+          scrollToBottom();
         }, 2000);
       }
 
@@ -137,6 +150,7 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
+      scrollToBottom();
     } finally {
       setIsLoading(false);
     }
@@ -218,6 +232,7 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
         
         <div className="p-4 border-t border-gray-200">
