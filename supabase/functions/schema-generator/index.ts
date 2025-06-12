@@ -50,6 +50,8 @@ Deno.serve(async (req: Request) => {
               3. Use appropriate Schema.org vocabulary
               4. Ensure the markup will help AI systems understand the content better
               5. Include structured data that enhances AI visibility and citation likelihood
+              6. DO NOT include any comments in the JSON (no // comments)
+              7. Make sure the JSON is valid and can be parsed with JSON.parse()
               
               For ${contentType} type, include relevant properties like:
               ${contentType === 'article' ? '- headline, author, datePublished, dateModified, publisher, mainEntityOfPage' : ''}
@@ -59,7 +61,7 @@ Deno.serve(async (req: Request) => {
               ${contentType === 'faq' ? '- mainEntity with Question and Answer types' : ''}
               ${contentType === 'howto' ? '- name, description, step, totalTime, tool, supply' : ''}
 
-              Return ONLY the JSON-LD markup, properly formatted and valid.`
+              Return ONLY the JSON-LD markup, properly formatted and valid. Do not include any comments or explanations.`
             }]
           }],
           generationConfig: {
@@ -91,28 +93,34 @@ Deno.serve(async (req: Request) => {
       .replace(/```\n?/g, '')
       .replace(/^[^{]*/, '')
       .replace(/[^}]*$/, '')
+      .replace(/\/\/.*$/gm, '')  // Remove any comments
+      .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
       .trim();
 
     // Validate JSON
+    let validatedSchema;
     try {
-      JSON.parse(cleanedSchema);
+      validatedSchema = JSON.parse(cleanedSchema);
       console.log('Generated valid JSON schema');
+      
+      // Convert back to string with proper formatting
+      const formattedSchema = JSON.stringify(validatedSchema, null, 2);
+      
+      return new Response(
+        JSON.stringify({ 
+          schema: formattedSchema,
+          instructions: 'Add this JSON-LD script tag to your page head section to improve AI understanding',
+          implementation: `<script type="application/ld+json">\n${formattedSchema}\n</script>`,
+          contentType,
+          url
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     } catch (e) {
       console.error('Generated schema is not valid JSON:', cleanedSchema);
       console.error('Error:', e);
       return generateFallbackSchema(contentType, url);
     }
-
-    return new Response(
-      JSON.stringify({ 
-        schema: cleanedSchema,
-        instructions: 'Add this JSON-LD script tag to your page head section to improve AI understanding',
-        implementation: `<script type="application/ld+json">\n${cleanedSchema}\n</script>`,
-        contentType,
-        url
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
 
   } catch (error) {
     console.error('Schema generation error:', error);
