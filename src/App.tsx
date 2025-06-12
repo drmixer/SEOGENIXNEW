@@ -345,6 +345,7 @@ function App() {
       localStorage.removeItem('seogenix_immediate_walkthrough');
       localStorage.removeItem('seogenix_tools_run');
       localStorage.removeItem('seogenix_onboarding');
+      localStorage.removeItem('seogenix-auth-token');
       
       // Perform the sign out
       const { error } = await supabase.auth.signOut({ scope: 'global' });
@@ -362,6 +363,9 @@ function App() {
       setUserPlan('free');
       setShowOnboarding(false);
       setShowAuthModal(false);
+      
+      // Force reload the page to clear any lingering state
+      window.location.reload();
     } catch (error) {
       console.error('Error signing out:', error);
       alert('There was a problem signing out. Please try again or refresh the page.');

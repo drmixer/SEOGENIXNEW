@@ -122,7 +122,7 @@ export const userDataService = {
       return data[0];
     } catch (error) {
       console.error('Error in getUserProfile:', error);
-      return null;
+      throw error; // Re-throw to allow caller to handle
     }
   },
 
@@ -156,7 +156,7 @@ export const userDataService = {
       return data;
     } catch (error) {
       console.error('Error in createUserProfile:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -195,7 +195,7 @@ export const userDataService = {
       return data;
     } catch (error) {
       console.error('Error in updateUserProfile:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -438,7 +438,7 @@ export const userDataService = {
       return data;
     } catch (error) {
       console.error('Error in saveAuditResult:', error);
-      return null;
+      throw error;
     }
   },
 

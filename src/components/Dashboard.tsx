@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardHeader from './DashboardHeader';
 import Sidebar from './Sidebar';
 import VisibilityScore from './VisibilityScore';
@@ -86,7 +86,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   };
 
   // Generate actionable insights based on user data
-  const generateActionableInsights = async () => {
+  const generateActionableInsights = useCallback(async () => {
     if (!user || !userProfile) return;
 
     try {
@@ -266,7 +266,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       console.error('Error generating actionable insights:', error);
       setDashboardError('Failed to generate insights. Please refresh the page.');
     }
-  };
+  }, [user, userProfile, userPlan]);
 
   // Load user profile and set up dashboard
   useEffect(() => {
@@ -353,7 +353,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     if (userProfile && user) {
       generateActionableInsights();
     }
-  }, [userProfile, user, userPlan]);
+  }, [userProfile, user, userPlan, generateActionableInsights]);
 
   // Track page visits
   useEffect(() => {

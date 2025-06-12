@@ -18,7 +18,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storageKey: 'seogenix-auth-token'
+    storageKey: 'seogenix-auth-token',
+    flowType: 'pkce'
   },
   global: {
     headers: {
