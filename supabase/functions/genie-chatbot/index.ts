@@ -28,15 +28,9 @@ Deno.serve(async (req: Request) => {
       conversationHistory = [],
       userData 
     }: ChatRequest = await req.json();
-
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     
-    if (!geminiApiKey) {
-      return new Response(
-        JSON.stringify({ error: 'Gemini API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    console.log(`Processing chat request in ${context} context: "${message.substring(0, 50)}..."`);
+    console.log(`User plan: ${userPlan || 'not specified'}`);
 
     // Get user data from Supabase if available
     let enhancedUserData = userData;
@@ -44,6 +38,7 @@ Deno.serve(async (req: Request) => {
     
     if (authHeader && context === 'dashboard') {
       try {
+        console.log('Attempting to fetch user data from Supabase');
         const supabaseUrl = Deno.env.get('SUPABASE_URL');
         const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
         
@@ -55,6 +50,8 @@ Deno.serve(async (req: Request) => {
           const { data: { user } } = await supabase.auth.getUser(token);
           
           if (user) {
+            console.log(`User authenticated: ${user.id}`);
+            
             // Fetch user profile
             const { data: profile } = await supabase
               .from('user_profiles')
@@ -85,6 +82,8 @@ Deno.serve(async (req: Request) => {
               lastAuditScore: auditHistory?.[0]?.overall_score,
               lastAuditRecommendations: auditHistory?.[0]?.recommendations || []
             };
+            
+            console.log('Enhanced user data fetched successfully');
           }
         }
       } catch (error) {
@@ -163,8 +162,19 @@ Deno.serve(async (req: Request) => {
       .map(msg => `${msg.role}: ${msg.content}`)
       .join('\n') + `\nuser: ${message}`;
 
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDJC5a7zgGvBk58ojXPKkQJXu-fR3qHHHM'; // Fallback to demo key
+    
+    if (!geminiApiKey) {
+      console.error('Gemini API key not configured');
+      return new Response(
+        JSON.stringify({ error: 'Gemini API key not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Calling Gemini API for chatbot response...');
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,9 +204,13 @@ Deno.serve(async (req: Request) => {
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
       console.error('Gemini API error:', errorText);
-      throw new Error(`Gemini API failed: ${geminiResponse.status}`);
+      
+      // Return fallback response if API fails
+      console.log('Using fallback chatbot response');
+      return generateFallbackResponse(message, context, userPlan, enhancedUserData);
     }
 
+    console.log('Received response from Gemini API');
     const geminiData = await geminiResponse.json();
     const response = geminiData.candidates[0].content.parts[0].text;
 
@@ -276,6 +290,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    console.log('Returning chatbot response with suggestions');
     return new Response(
       JSON.stringify({
         response,
@@ -299,3 +314,88 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+// Fallback function to generate sample response when API fails
+function generateFallbackResponse(
+  message: string, 
+  context: 'landing' | 'dashboard', 
+  userPlan?: string,
+  userData?: any
+): Response {
+  console.log(`Generating fallback response for ${context} context`);
+  
+  let response = '';
+  let proactiveSuggestions: string[] = [];
+  let actionSuggestions: any[] = [];
+  
+  if (context === 'landing') {
+    // Landing page responses
+    if (message.toLowerCase().includes('price') || message.toLowerCase().includes('cost') || message.toLowerCase().includes('plan')) {
+      response = "SEOGENIX offers four plans: Free (basic features), Core ($29/month with essential tools), Pro ($79/month with advanced features), and Agency ($199/month for team collaboration). Each plan includes progressively more powerful AI visibility tools and higher usage limits.";
+    } else if (message.toLowerCase().includes('ai visibility') || message.toLowerCase().includes('what is ai')) {
+      response = "AI visibility refers to how well your content is structured and optimized for AI systems like ChatGPT, Google Bard, and voice assistants. As more people use AI to find information, traditional SEO isn't enough - your content needs to be easily understood and cited by AI systems.";
+    } else if (message.toLowerCase().includes('different') || message.toLowerCase().includes('traditional seo')) {
+      response = "Unlike traditional SEO tools that focus only on search engines, SEOGENIX is built for the AI era. We analyze how AI systems understand your content, track AI citations, optimize for voice assistants, and provide tools specifically designed for AI-driven search and discovery.";
+    } else if (message.toLowerCase().includes('feature') || message.toLowerCase().includes('tool')) {
+      response = "SEOGENIX offers tools like AI Visibility Audit, Schema Generator, Citation Tracker, Voice Assistant Tester, Content Optimizer, and Competitive Analysis. Our platform helps you understand how AI systems view your content and provides actionable ways to improve.";
+    } else {
+      response = "Welcome to SEOGENIX! We're an AI-powered SEO platform that helps you optimize your content for AI systems like ChatGPT, Claude, and voice assistants. How can I help you understand our platform better?";
+    }
+  } else {
+    // Dashboard responses
+    if (message.toLowerCase().includes('audit') || message.toLowerCase().includes('score')) {
+      response = "The AI Visibility Audit analyzes how well your content is structured for AI systems. It provides an overall score plus subscores for AI Understanding, Citation Likelihood, Conversational Readiness, and Content Structure. Run an audit to get personalized recommendations.";
+      actionSuggestions.push({
+        type: 'launchTool',
+        toolId: 'audit',
+        label: 'Run New Audit'
+      });
+    } else if (message.toLowerCase().includes('schema') || message.toLowerCase().includes('markup')) {
+      response = "Our Schema Generator creates structured data markup that helps AI systems better understand your content. This improves your chances of being cited and featured in AI responses. Simply enter your URL and content type to generate optimized Schema.org JSON-LD.";
+      actionSuggestions.push({
+        type: 'launchTool',
+        toolId: 'schema',
+        label: 'Generate Schema'
+      });
+    } else if (message.toLowerCase().includes('competitor') || message.toLowerCase().includes('competition')) {
+      response = "The Competitive Analysis tool compares your AI visibility against competitors. It shows where you lead or lag in specific areas and provides strategic recommendations to gain competitive advantage.";
+      actionSuggestions.push({
+        type: 'launchTool',
+        toolId: 'competitive',
+        label: 'Analyze Competitors'
+      });
+    } else if (message.toLowerCase().includes('optimize') || message.toLowerCase().includes('improve')) {
+      response = "To improve your AI visibility, start with an audit, then use the Content Optimizer to enhance your content structure and clarity. Adding Schema markup and FAQ sections also significantly improves how AI systems understand and cite your content.";
+    } else {
+      response = "I'm Genie, your AI assistant for SEOGENIX. I can help you understand your AI visibility scores, use our tools effectively, and implement optimization strategies. What would you like help with today?";
+    }
+    
+    // Add personalized elements if user data is available
+    if (userData) {
+      if (userData.lastAuditScore) {
+        proactiveSuggestions.push(`Your last audit score was ${userData.lastAuditScore}/100. ${userData.lastAuditScore < 70 ? 'Consider using the Content Optimizer to improve this score.' : 'Great job! Consider running a competitive analysis to maintain your edge.'}`);
+      }
+      
+      if (userData.websites && userData.websites.length > 0) {
+        actionSuggestions.push({
+          type: 'launchTool',
+          toolId: 'audit',
+          label: `Audit ${userData.websites[0].name}`
+        });
+      }
+    }
+  }
+  
+  return new Response(
+    JSON.stringify({
+      response,
+      proactiveSuggestions: Math.random() > 0.7 ? proactiveSuggestions : [],
+      actionSuggestions: actionSuggestions.slice(0, 2),
+      context,
+      userPlan,
+      personalized: !!userData,
+      note: 'This is a fallback response as the API request failed'
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}

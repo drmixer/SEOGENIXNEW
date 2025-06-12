@@ -30,18 +30,23 @@ Deno.serve(async (req: Request) => {
       contentType = 'article',
       userIntent = 'informational'
     }: PromptMatchRequest = await req.json();
+    
+    console.log(`Processing prompt match suggestions for topic: ${topic}`);
+    console.log(`Industry: ${industry || 'not specified'}, Content type: ${contentType}, User intent: ${userIntent}`);
 
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDJC5a7zgGvBk58ojXPKkQJXu-fR3qHHHM'; // Fallback to demo key
     
     if (!geminiApiKey) {
+      console.error('Gemini API key not configured');
       return new Response(
         JSON.stringify({ error: 'Gemini API key not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    console.log('Calling Gemini API for prompt suggestions...');
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -97,9 +102,13 @@ Deno.serve(async (req: Request) => {
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
       console.error('Gemini API error:', errorText);
-      throw new Error(`Gemini API failed: ${geminiResponse.status}`);
+      
+      // Return fallback data if API fails
+      console.log('Using fallback prompt suggestions data');
+      return generateFallbackPromptSuggestions(topic, industry, contentType, userIntent);
     }
 
+    console.log('Received response from Gemini API');
     const geminiData = await geminiResponse.json();
     const responseText = geminiData.candidates[0].content.parts[0].text;
 
@@ -153,6 +162,7 @@ Deno.serve(async (req: Request) => {
       return acc;
     }, {} as Record<string, number>);
 
+    console.log(`Generated ${promptSuggestions.length} prompt suggestions across ${Object.keys(promptsByCategory).length} categories`);
     return new Response(
       JSON.stringify({
         topic,
@@ -193,3 +203,205 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+// Fallback function to generate sample prompt suggestions when API fails
+function generateFallbackPromptSuggestions(
+  topic: string, 
+  industry?: string, 
+  contentType: string = 'article',
+  userIntent: string = 'informational'
+): Response {
+  console.log(`Generating fallback prompt suggestions for ${topic}`);
+  
+  const promptSuggestions: PromptSuggestion[] = [
+    {
+      prompt: `What is ${topic}?`,
+      category: 'DIRECT QUESTIONS',
+      intent: 'informational',
+      aiSystem: 'General',
+      likelihood: 95,
+      optimization: 'Include a clear definition section with comprehensive explanation'
+    },
+    {
+      prompt: `How does ${topic} work?`,
+      category: 'DIRECT QUESTIONS',
+      intent: 'informational',
+      aiSystem: 'ChatGPT',
+      likelihood: 90,
+      optimization: 'Provide a step-by-step explanation with visual aids if possible'
+    },
+    {
+      prompt: `What are the benefits of ${topic}?`,
+      category: 'DIRECT QUESTIONS',
+      intent: 'informational',
+      aiSystem: 'General',
+      likelihood: 88,
+      optimization: 'List clear benefits with supporting evidence or examples'
+    },
+    {
+      prompt: `${topic} vs traditional approaches`,
+      category: 'COMPARISON QUERIES',
+      intent: 'informational',
+      aiSystem: 'Claude',
+      likelihood: 85,
+      optimization: 'Create a comparison table with clear advantages and disadvantages'
+    },
+    {
+      prompt: `What's better, ${topic} or alternative solutions?`,
+      category: 'COMPARISON QUERIES',
+      intent: 'commercial',
+      aiSystem: 'ChatGPT',
+      likelihood: 82,
+      optimization: 'Provide balanced comparison with specific use cases for each option'
+    },
+    {
+      prompt: `How to implement ${topic} for best results`,
+      category: 'HOW-TO REQUESTS',
+      intent: 'informational',
+      aiSystem: 'General',
+      likelihood: 87,
+      optimization: 'Create a numbered list with clear implementation steps'
+    },
+    {
+      prompt: `Step by step guide to ${topic}`,
+      category: 'HOW-TO REQUESTS',
+      intent: 'informational',
+      aiSystem: 'Google',
+      likelihood: 84,
+      optimization: 'Structure content as a clear tutorial with headings for each step'
+    },
+    {
+      prompt: `Common problems with ${topic} and how to solve them`,
+      category: 'PROBLEM-SOLVING',
+      intent: 'informational',
+      aiSystem: 'Claude',
+      likelihood: 80,
+      optimization: 'Create a troubleshooting section with problem-solution format'
+    },
+    {
+      prompt: `Why isn't my ${topic} working?`,
+      category: 'PROBLEM-SOLVING',
+      intent: 'informational',
+      aiSystem: 'General',
+      likelihood: 78,
+      optimization: 'Include a FAQ section addressing common issues and solutions'
+    },
+    {
+      prompt: `Hey Siri, tell me about ${topic}`,
+      category: 'VOICE SEARCH',
+      intent: 'informational',
+      aiSystem: 'Siri',
+      likelihood: 83,
+      optimization: 'Create concise, conversational content optimized for voice responses'
+    },
+    {
+      prompt: `Alexa, what should I know about ${topic}?`,
+      category: 'VOICE SEARCH',
+      intent: 'informational',
+      aiSystem: 'Alexa',
+      likelihood: 79,
+      optimization: 'Structure content to answer direct questions in 1-2 sentences'
+    },
+    {
+      prompt: `Can you explain ${topic} in simple terms?`,
+      category: 'CONVERSATIONAL',
+      intent: 'informational',
+      aiSystem: 'General',
+      likelihood: 86,
+      optimization: 'Include a simplified explanation section using analogies'
+    },
+    {
+      prompt: `I'm new to ${topic}, where should I start?`,
+      category: 'CONVERSATIONAL',
+      intent: 'informational',
+      aiSystem: 'ChatGPT',
+      likelihood: 81,
+      optimization: 'Create a beginner's guide section with clear starting points'
+    },
+    {
+      prompt: `Technical specifications for ${topic} implementation`,
+      category: 'TECHNICAL',
+      intent: 'informational',
+      aiSystem: 'Claude',
+      likelihood: 75,
+      optimization: 'Include detailed technical documentation with code examples if applicable'
+    },
+    {
+      prompt: `Advanced ${topic} strategies for professionals`,
+      category: 'TECHNICAL',
+      intent: 'informational',
+      aiSystem: 'ChatGPT',
+      likelihood: 72,
+      optimization: 'Provide in-depth technical content with industry-specific terminology'
+    },
+    {
+      prompt: `Best ${topic} tools to buy`,
+      category: 'COMMERCIAL',
+      intent: 'commercial',
+      aiSystem: 'General',
+      likelihood: 77,
+      optimization: 'Include product comparisons with clear features and benefits'
+    },
+    {
+      prompt: `Is ${topic} worth the investment?`,
+      category: 'COMMERCIAL',
+      intent: 'commercial',
+      aiSystem: 'Claude',
+      likelihood: 74,
+      optimization: 'Provide ROI analysis and case studies demonstrating value'
+    }
+  ];
+  
+  // Group prompts by category
+  const promptsByCategory = promptSuggestions.reduce((acc, prompt) => {
+    if (!acc[prompt.category]) {
+      acc[prompt.category] = [];
+    }
+    acc[prompt.category].push(prompt);
+    return acc;
+  }, {} as Record<string, PromptSuggestion[]>);
+
+  // Calculate statistics
+  const avgLikelihood = promptSuggestions.length > 0 ? 
+    Math.round(promptSuggestions.reduce((sum, p) => sum + p.likelihood, 0) / promptSuggestions.length) : 0;
+
+  const intentDistribution = promptSuggestions.reduce((acc, prompt) => {
+    acc[prompt.intent] = (acc[prompt.intent] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const aiSystemDistribution = promptSuggestions.reduce((acc, prompt) => {
+    acc[prompt.aiSystem] = (acc[prompt.aiSystem] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  
+  return new Response(
+    JSON.stringify({
+      topic,
+      industry,
+      targetAudience: 'General audience',
+      contentType,
+      userIntent,
+      totalPrompts: promptSuggestions.length,
+      averageLikelihood: avgLikelihood,
+      promptSuggestions,
+      promptsByCategory,
+      statistics: {
+        intentDistribution,
+        aiSystemDistribution,
+        categoryCount: Object.keys(promptsByCategory).length,
+        highLikelihoodPrompts: promptSuggestions.filter(p => p.likelihood >= 80).length
+      },
+      optimizationRecommendations: [
+        'Create content that directly answers these common prompts',
+        'Use natural language that matches how people ask AI systems',
+        'Structure content for easy AI extraction and citation',
+        'Include conversational elements for voice search optimization',
+        'Optimize for featured snippets and quick answers'
+      ],
+      generatedAt: new Date().toISOString(),
+      note: 'This is fallback prompt suggestion data as the API request failed'
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}

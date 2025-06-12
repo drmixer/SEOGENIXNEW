@@ -15,10 +15,14 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { reportType, reportData, reportName, format }: ReportRequest = await req.json();
+    
+    console.log(`Processing report generation request for ${reportType} report: "${reportName}"`);
+    console.log(`Format: ${format}`);
 
     // Get user from auth header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error('Authorization header missing');
       throw new Error('Authorization header required');
     }
 
@@ -26,16 +30,20 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
     if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Supabase configuration missing');
       throw new Error('Supabase configuration missing');
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user } } = await supabase.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     
-    if (!user) {
+    if (userError || !user) {
+      console.error('Invalid authentication:', userError);
       throw new Error('Invalid authentication');
     }
+    
+    console.log(`User authenticated: ${user.id}`);
 
     // Generate report content based on type and format
     let reportContent = '';
@@ -43,14 +51,17 @@ Deno.serve(async (req: Request) => {
     let fileExtension = 'json';
 
     if (format === 'csv') {
+      console.log('Generating CSV report');
       contentType = 'text/csv';
       fileExtension = 'csv';
       reportContent = generateCSVReport(reportType, reportData);
     } else if (format === 'pdf') {
-      contentType = 'application/pdf';
-      fileExtension = 'pdf';
+      console.log('Generating PDF report (HTML format for demo)');
+      contentType = 'text/html'; // In a real implementation, this would be application/pdf
+      fileExtension = 'html'; // In a real implementation, this would be pdf
       reportContent = generatePDFReport(reportType, reportData, reportName);
     } else {
+      console.log('Generating JSON report');
       reportContent = JSON.stringify(reportData, null, 2);
     }
 
@@ -61,6 +72,8 @@ Deno.serve(async (req: Request) => {
     // Create a storage path for the user
     const storagePath = `reports/${user.id}/${fileName}`;
     
+    console.log(`Uploading report to storage: ${storagePath}`);
+    
     // Upload the file to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('reports')
@@ -70,6 +83,7 @@ Deno.serve(async (req: Request) => {
       });
     
     if (uploadError) {
+      console.error('Failed to upload report:', uploadError);
       throw new Error(`Failed to upload report: ${uploadError.message}`);
     }
     
@@ -79,8 +93,10 @@ Deno.serve(async (req: Request) => {
       .getPublicUrl(storagePath);
     
     const downloadUrl = urlData.publicUrl;
+    console.log(`Report uploaded successfully. Download URL: ${downloadUrl}`);
 
     // Save report metadata to the database
+    console.log('Saving report metadata to database');
     const { data: reportRecord, error: dbError } = await supabase
       .from('reports')
       .insert({
@@ -123,6 +139,7 @@ Deno.serve(async (req: Request) => {
 });
 
 function generateCSVReport(reportType: string, data: any): string {
+  console.log(`Generating CSV content for ${reportType} report`);
   let csv = '';
   
   if (reportType === 'audit' && data.auditHistory) {
@@ -158,6 +175,8 @@ function generateCSVReport(reportType: string, data: any): string {
 }
 
 function generatePDFReport(reportType: string, data: any, reportName: string): string {
+  console.log(`Generating HTML content for ${reportType} report`);
+  
   // In a real implementation, you would use a PDF generation library
   // For now, return HTML that could be converted to PDF
   
