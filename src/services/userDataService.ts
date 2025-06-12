@@ -622,7 +622,7 @@ export const userDataService = {
     }
   },
 
-  // User Activity Tracking with throttling
+  // User Activity Tracking with throttling and debouncing
   async trackActivity(activity: Partial<UserActivity>): Promise<void> {
     if (!activity.user_id) {
       console.error('trackActivity called with empty user_id');
@@ -631,7 +631,7 @@ export const userDataService = {
     
     try {
       // Create a throttle key based on user_id, activity_type, and tool_id
-      const throttleKey = `${activity.user_id}:${activity.activity_type}:${activity.tool_id || ''}`;
+      const throttleKey = `${activity.user_id}:${activity.activity_type}:${activity.tool_id || ''}:${activity.website_url || ''}`;
       const now = Date.now();
       
       // Check if we've recently tracked this exact activity
@@ -647,18 +647,24 @@ export const userDataService = {
       // Update throttle map
       activityThrottleMap.set(throttleKey, now);
       
-      const { error } = await supabase
-        .from('user_activity')
-        .insert(activity);
+      // Use a try-catch block specifically for the database operation
+      try {
+        const { error } = await supabase
+          .from('user_activity')
+          .insert(activity);
 
-      if (error) {
-        console.error('Error tracking user activity:', error);
-        throw error;
+        if (error) {
+          console.error('Error tracking user activity:', error);
+        } else {
+          console.log('Successfully tracked activity');
+        }
+      } catch (dbError) {
+        console.error('Database error in trackActivity:', dbError);
+        // Don't rethrow - we want to fail silently for activity tracking
       }
-
-      console.log('Successfully tracked activity');
     } catch (error) {
       console.error('Error in trackActivity:', error);
+      // Don't rethrow - we want to fail silently for activity tracking
     }
   },
 
