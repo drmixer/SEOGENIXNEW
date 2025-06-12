@@ -410,12 +410,12 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                     <span>Add Another Competitor</span>
                   </button>
                 )}
-              </div>
-            )}
-            
-            {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-600 text-sm">{error}</p>
+                
+                {error && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-600 text-sm">{error}</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

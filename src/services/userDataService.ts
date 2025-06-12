@@ -130,6 +130,17 @@ export const userDataService = {
     try {
       console.log('Creating user profile:', profile);
       
+      // First check if a profile already exists
+      const { data: existingProfiles } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', profile.user_id as string);
+        
+      if (existingProfiles && existingProfiles.length > 0) {
+        console.log('Profile already exists, updating instead of creating');
+        return this.updateUserProfile(profile.user_id as string, profile);
+      }
+      
       const { data, error } = await supabase
         .from('user_profiles')
         .insert(profile)
@@ -153,10 +164,25 @@ export const userDataService = {
     try {
       console.log('Updating user profile for userId:', userId, 'with updates:', updates);
       
+      // Get the profile ID first
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+        
+      if (!profiles || profiles.length === 0) {
+        console.log('No profile found to update, creating new one');
+        return this.createUserProfile({ user_id: userId, ...updates });
+      }
+      
+      const profileId = profiles[0].id;
+      
       const { data, error } = await supabase
         .from('user_profiles')
         .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('user_id', userId)
+        .eq('id', profileId)
         .select()
         .single();
 
