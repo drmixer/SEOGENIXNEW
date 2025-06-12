@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
@@ -25,54 +25,92 @@ function App() {
       try {
         console.log('Initializing authentication...');
         setLoading(true);
+        setAuthError(null);
         
-        // Clear any existing timeout to prevent race conditions
-        let timeoutId: NodeJS.Timeout | null = null;
-        
-        // Set a timeout to prevent hanging indefinitely
-        const timeoutPromise = new Promise<void>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            console.log('Auth initialization timed out after 5 seconds');
-            reject(new Error('Authentication initialization timed out. Please refresh the page.'));
-          }, 5000);
-        });
-        
-        // Get session promise
-        const sessionPromise = supabase.auth.getSession();
-        
-        // Race the promises
-        const { data: { session }, error } = await Promise.race([
-          sessionPromise,
-          timeoutPromise.then(() => { throw new Error('Timeout'); })
-        ]);
-        
-        // Clear the timeout since we got a response
-        if (timeoutId) clearTimeout(timeoutId);
-        
-        if (error) {
-          console.error('Error getting initial session:', error);
-          setAuthError('Failed to initialize authentication: ' + error.message);
+        // Check if Supabase is properly configured first
+        if (!isSupabaseConfigured()) {
+          console.warn('Supabase is not properly configured, running in demo mode');
+          setAuthError('Application is running in demo mode. Please configure Supabase credentials.');
           setLoading(false);
           setAuthInitialized(true);
           return;
         }
         
-        console.log('Initial session:', session ? 'Valid session exists' : 'No session');
+        // Clear any existing timeout to prevent race conditions
+        let timeoutId: NodeJS.Timeout | null = null;
+        let sessionPromise: Promise<any> | null = null;
         
-        if (session?.user) {
-          console.log('Setting user from initial session');
-          setUser(session.user);
+        try {
+          // Set a longer timeout to prevent premature failures
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              console.log('Auth initialization timed out after 10 seconds');
+              reject(new Error('Authentication initialization timed out. This may be due to network connectivity issues or incorrect Supabase configuration. Please check your internet connection and verify your Supabase credentials.'));
+            }, 10000); // Increased to 10 seconds
+          });
           
-          // Fetch user profile to get plan - use a separate function to avoid nesting
-          await fetchUserProfile(session.user.id);
-        } else {
-          console.log('No user in session, staying on landing page');
-          setLoading(false);
-          setAuthInitialized(true);
+          // Get session promise with better error handling
+          sessionPromise = supabase.auth.getSession().catch(error => {
+            console.error('Supabase getSession error:', error);
+            throw new Error(`Failed to connect to authentication service: ${error.message}`);
+          });
+          
+          // Race the promises
+          const { data: { session }, error } = await Promise.race([
+            sessionPromise,
+            timeoutPromise
+          ]);
+          
+          // Clear the timeout since we got a response
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          
+          if (error) {
+            console.error('Error getting initial session:', error);
+            throw new Error(`Authentication error: ${error.message}`);
+          }
+          
+          console.log('Initial session:', session ? 'Valid session exists' : 'No session');
+          
+          if (session?.user) {
+            console.log('Setting user from initial session');
+            setUser(session.user);
+            
+            // Fetch user profile to get plan - use a separate function to avoid nesting
+            await fetchUserProfile(session.user.id);
+          } else {
+            console.log('No user in session, staying on landing page');
+            setLoading(false);
+            setAuthInitialized(true);
+          }
+        } catch (raceError) {
+          // Clean up timeout if it exists
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+          throw raceError;
         }
       } catch (error) {
         console.error('Error in initializeAuth:', error);
-        setAuthError('Authentication initialization failed: ' + (error as Error).message);
+        
+        // Provide more specific error messages based on the error type
+        let errorMessage = 'Authentication initialization failed.';
+        
+        if (error instanceof Error) {
+          if (error.message.includes('timeout') || error.message.includes('timed out')) {
+            errorMessage = 'Connection to authentication service timed out. Please check your internet connection and try refreshing the page.';
+          } else if (error.message.includes('network') || error.message.includes('fetch')) {
+            errorMessage = 'Network error connecting to authentication service. Please check your internet connection.';
+          } else if (error.message.includes('Invalid API key') || error.message.includes('unauthorized')) {
+            errorMessage = 'Authentication service configuration error. Please contact support.';
+          } else {
+            errorMessage = `Authentication error: ${error.message}`;
+          }
+        }
+        
+        setAuthError(errorMessage);
         setLoading(false);
         setAuthInitialized(true);
       }
@@ -126,31 +164,38 @@ function App() {
 
     initializeAuth();
 
-    // Listen for auth changes
+    // Listen for auth changes with better error handling
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, 'Session:', session?.user ? 'User present' : 'No user');
       
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (session?.user) {
-          console.log('Setting user from auth change:', session.user.id);
-          setUser(session.user);
-          
-          // Set authInitialized to true here as well to prevent timeout
+      try {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            console.log('Setting user from auth change:', session.user.id);
+            setUser(session.user);
+            setAuthError(null); // Clear any previous errors
+            
+            // Set authInitialized to true here as well to prevent timeout
+            setAuthInitialized(true);
+            
+            // Fetch user profile to get plan - use a separate function to avoid nesting
+            await fetchUserProfile(session.user.id);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          console.log('User signed out, clearing user state');
+          setUser(null);
+          setUserPlan('free');
+          setCurrentView('landing');
+          setShowOnboarding(false);
+          setLoading(false);
           setAuthInitialized(true);
-          
-          // Fetch user profile to get plan - use a separate function to avoid nesting
-          await fetchUserProfile(session.user.id);
+          setAuthError(null);
         }
-      } else if (event === 'SIGNED_OUT') {
-        console.log('User signed out, clearing user state');
-        setUser(null);
-        setUserPlan('free');
-        setCurrentView('landing');
-        setShowOnboarding(false);
-        setLoading(false);
-        setAuthInitialized(true);
+      } catch (error) {
+        console.error('Error in auth state change handler:', error);
+        // Don't set authError here as it might interfere with normal operation
       }
     });
 
@@ -204,64 +249,69 @@ function App() {
     setShowAuthModal(false);
     setAuthError(null);
     
-    // Get current session to ensure we have the latest user data
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
-    if (error) {
-      console.error('Error getting session after auth success:', error);
-      setAuthError('Failed to get session: ' + error.message);
-      return;
-    }
-    
-    if (!session?.user) {
-      console.error('No user in session after auth success');
-      setAuthError('Authentication succeeded but no user was found');
-      return;
-    }
-    
-    // Set user from session
-    console.log('Setting user after auth success:', session.user.id);
-    setUser(session.user);
-    
-    // Fetch user profile to get plan - use a separate function to avoid nesting
     try {
-      const { data: profiles, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1);
+      // Get current session to ensure we have the latest user data
+      const { data: { session }, error } = await supabase.auth.getSession();
       
-      if (profileError) {
-        console.error('Error fetching profile after auth success:', profileError);
+      if (error) {
+        console.error('Error getting session after auth success:', error);
+        setAuthError('Failed to get session: ' + error.message);
+        return;
+      }
+      
+      if (!session?.user) {
+        console.error('No user in session after auth success');
+        setAuthError('Authentication succeeded but no user was found');
+        return;
+      }
+      
+      // Set user from session
+      console.log('Setting user after auth success:', session.user.id);
+      setUser(session.user);
+      
+      // Fetch user profile to get plan - use a separate function to avoid nesting
+      try {
+        const { data: profiles, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (profileError) {
+          console.error('Error fetching profile after auth success:', profileError);
+          // Continue with the flow using defaults
+        }
+          
+        if (profiles && profiles.length > 0) {
+          console.log('User profile found after auth success:', profiles[0].id);
+          setUserPlan(profiles[0].plan as any || 'free');
+          
+          // If onboarding is already completed, go directly to dashboard
+          if (profiles[0].onboarding_completed_at) {
+            console.log('Onboarding already completed, going to dashboard');
+            setCurrentView('dashboard');
+            return;
+          }
+        }
+      } catch (profileError) {
+        console.error('Error in profile fetch after auth success:', profileError);
         // Continue with the flow using defaults
       }
-        
-      if (profiles && profiles.length > 0) {
-        console.log('User profile found after auth success:', profiles[0].id);
-        setUserPlan(profiles[0].plan as any || 'free');
-        
-        // If onboarding is already completed, go directly to dashboard
-        if (profiles[0].onboarding_completed_at) {
-          console.log('Onboarding already completed, going to dashboard');
-          setCurrentView('dashboard');
-          return;
-        }
+      
+      // Now proceed with the flow
+      if (authModalMode === 'signup') {
+        console.log('Showing onboarding for new signup');
+        setUserPlan(selectedPlan);
+        setShowOnboarding(true);
+      } else {
+        // For login, check if they need onboarding (determined above)
+        console.log('Going to dashboard for login');
+        setCurrentView('dashboard');
       }
-    } catch (profileError) {
-      console.error('Error in profile fetch after auth success:', profileError);
-      // Continue with the flow using defaults
-    }
-    
-    // Now proceed with the flow
-    if (authModalMode === 'signup') {
-      console.log('Showing onboarding for new signup');
-      setUserPlan(selectedPlan);
-      setShowOnboarding(true);
-    } else {
-      // For login, check if they need onboarding (determined above)
-      console.log('Going to dashboard for login');
-      setCurrentView('dashboard');
+    } catch (error) {
+      console.error('Error in handleAuthSuccess:', error);
+      setAuthError('Authentication succeeded but there was an error loading your profile. Please try refreshing the page.');
     }
   };
 
@@ -355,6 +405,7 @@ function App() {
       setUserPlan('free');
       setShowOnboarding(false);
       setShowAuthModal(false);
+      setAuthError(null);
       
       // Force reload the page to clear any lingering state
       window.location.reload();
@@ -366,15 +417,33 @@ function App() {
     }
   };
 
+  const handleRetryAuth = () => {
+    console.log('Retrying authentication initialization...');
+    setAuthError(null);
+    setAuthInitialized(false);
+    setLoading(true);
+    
+    // Trigger a re-initialization by forcing a component re-mount
+    window.location.reload();
+  };
+
   // Don't render anything until auth is initialized to prevent flashing
   if (!authInitialized) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md mx-auto px-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Initializing application...</p>
+          <p className="text-gray-600 mb-4">Initializing application...</p>
           {authError && (
-            <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{authError}</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <p className="text-red-700 text-sm mb-3">{authError}</p>
+              <button
+                onClick={handleRetryAuth}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors"
+              >
+                Retry Connection
+              </button>
+            </div>
           )}
         </div>
       </div>
