@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   FileText, 
   Shield, 
@@ -21,7 +21,8 @@ import {
   Download,
   Copy,
   RefreshCw,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { userDataService } from '../services/userDataService';
@@ -55,6 +56,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [expandedTool, setExpandedTool] = useState<string | null>(selectedTool || null);
   const [showToolModal, setShowToolModal] = useState<string | null>(null);
   const [selectedCompetitor, setSelectedCompetitor] = useState<string>('');
+  const [activeSite, setActiveSite] = useState<string>(selectedWebsite || '');
 
   // Enable all tools for development/testing
   const isDevelopment = true;
@@ -168,6 +170,15 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     }
   }, [selectedTool]);
 
+  // Set initial site selection
+  useEffect(() => {
+    if (selectedWebsite) {
+      setActiveSite(selectedWebsite);
+    } else if (userProfile?.websites?.length > 0) {
+      setActiveSite(userProfile.websites[0].url);
+    }
+  }, [selectedWebsite, userProfile]);
+
   // Set initial competitor if available
   useEffect(() => {
     if (userProfile?.competitors?.length > 0) {
@@ -176,7 +187,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   }, [userProfile]);
 
   const runTool = async (toolId: string) => {
-    if (!selectedWebsite && !selectedCompetitor && toolId !== 'generator' && toolId !== 'prompts') {
+    if (!activeSite && !selectedCompetitor && toolId !== 'generator' && toolId !== 'prompts') {
       alert('Please select a website first');
       return;
     }
@@ -186,7 +197,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
     try {
       let result: any = {};
-      const websiteUrl = selectedWebsite || 'https://example.com';
+      const websiteUrl = activeSite || 'https://example.com';
       const competitorUrl = selectedCompetitor || '';
 
       // Track tool usage
@@ -765,6 +776,35 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     }
   };
 
+  // Site selector component
+  const SiteSelector = () => {
+    if (!userProfile?.websites || userProfile.websites.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Select Website to Analyze
+        </label>
+        <div className="relative">
+          <select
+            value={activeSite}
+            onChange={(e) => setActiveSite(e.target.value)}
+            className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          >
+            {userProfile.websites.map((website: any, index: number) => (
+              <option key={index} value={website.url}>
+                {website.name} ({website.url})
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+        </div>
+      </div>
+    );
+  };
+
   if (showPreview) {
     return (
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
@@ -833,10 +873,13 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           </div>
           
           <div className="p-6 overflow-y-auto flex-1">
+            {/* Site Selector */}
+            <SiteSelector />
+            
             {toolId === 'competitive' && userProfile?.competitors?.length > 0 && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Website to Analyze
+                  Select Competitor to Analyze
                 </label>
                 <select
                   value={selectedCompetitor}
@@ -916,6 +959,13 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
   return (
     <div className="space-y-8">
+      {/* Site Selector at the top level */}
+      {!showPreview && userProfile?.websites && userProfile.websites.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+          <SiteSelector />
+        </div>
+      )}
+      
       {categories.map(category => (
         <div key={category} className="space-y-4">
           <h3 className="text-xl font-semibold text-gray-900">{category} Tools</h3>
@@ -959,7 +1009,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                       
                       <div className="flex items-center justify-between">
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
                             if (tool.available) {
                               setShowToolModal(tool.id);
                             }

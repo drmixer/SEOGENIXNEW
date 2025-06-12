@@ -450,7 +450,7 @@ function App() {
             onNavigateToDashboard={handleNavigateToDashboard}
             onPlanSelect={handlePlanSelect}
             user={user}
-            onShowSignup={handleShowPricing}
+            onShowSignup={handleShowSignup}
             onShowLogin={handleShowLogin}
             onSignOut={handleSignOut}
             initialView={currentView}
@@ -470,6 +470,7 @@ function App() {
             onClose={() => setShowAuthModal(false)}
             onSuccess={handleAuthSuccess}
             initialMode={authModalMode}
+            selectedPlan={selectedPlan}
           />
         )}
 

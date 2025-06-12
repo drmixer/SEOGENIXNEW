@@ -48,6 +48,18 @@ const LandingPage: React.FC<LandingPageProps> = ({
     }
   }, [initialView]);
 
+  // Handler for plan selection that passes the selected plan
+  const handlePlanSelect = (plan: 'free' | 'core' | 'pro' | 'agency') => {
+    onPlanSelect(plan);
+    if (user) {
+      // If user is logged in, just handle the plan selection
+      onPlanSelect(plan);
+    } else {
+      // If user is not logged in, show signup with the selected plan
+      onShowSignup();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <Header 
@@ -69,7 +81,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
           <HowItWorks />
         </>
       )}
-      <Pricing onPlanSelect={onPlanSelect} />
+      <Pricing onPlanSelect={handlePlanSelect} />
       {currentSection === 'landing' && (
         <>
           <FAQ />

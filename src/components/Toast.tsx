@@ -13,6 +13,8 @@ export interface ToastProps {
 const Toast: React.FC<ToastProps> = ({ id, type, title, message, duration = 5000, onClose }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [progress, setProgress] = useState(100);
+  const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
     // Trigger entrance animation
@@ -21,13 +23,31 @@ const Toast: React.FC<ToastProps> = ({ id, type, title, message, duration = 5000
   }, []);
 
   useEffect(() => {
-    if (duration > 0) {
-      const timer = setTimeout(() => {
-        handleClose();
-      }, duration);
-      return () => clearTimeout(timer);
+    if (duration > 0 && !isPaused) {
+      // Set up progress bar animation
+      const startTime = Date.now();
+      const endTime = startTime + duration;
+      
+      const updateProgress = () => {
+        if (isPaused) return;
+        
+        const now = Date.now();
+        const remaining = Math.max(0, endTime - now);
+        const newProgress = (remaining / duration) * 100;
+        
+        setProgress(newProgress);
+        
+        if (newProgress <= 0) {
+          handleClose();
+        } else {
+          requestAnimationFrame(updateProgress);
+        }
+      };
+      
+      const animationId = requestAnimationFrame(updateProgress);
+      return () => cancelAnimationFrame(animationId);
     }
-  }, [duration]);
+  }, [duration, isPaused]);
 
   const handleClose = () => {
     setIsLeaving(true);
@@ -75,8 +95,10 @@ const Toast: React.FC<ToastProps> = ({ id, type, title, message, duration = 5000
         w-full shadow-lg rounded-lg pointer-events-auto overflow-hidden
         ${getStyles()}
       `}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
     >
-      <div className="p-4">
+      <div className="p-4 relative">
         <div className="flex items-start">
           <div className="flex-shrink-0">
             {getIcon()}
@@ -100,6 +122,20 @@ const Toast: React.FC<ToastProps> = ({ id, type, title, message, duration = 5000
             </button>
           </div>
         </div>
+        
+        {/* Progress bar */}
+        {duration > 0 && (
+          <div className="absolute bottom-0 left-0 h-1 bg-gray-200 w-full">
+            <div 
+              className={`h-full transition-all duration-300 ease-linear ${
+                type === 'success' ? 'bg-green-500' :
+                type === 'error' ? 'bg-red-500' :
+                type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+              }`}
+              style={{ width: `${progress}%` }}
+            ></div>
+          </div>
+        )}
       </div>
     </div>
   );

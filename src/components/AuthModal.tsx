@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, Loader } from 'lucide-react';
 import { supabase, resetAuth } from '../lib/supabase';
 
@@ -6,16 +6,27 @@ interface AuthModalProps {
   onClose: () => void;
   onSuccess: () => void;
   initialMode?: 'login' | 'signup';
+  selectedPlan?: 'free' | 'core' | 'pro' | 'agency';
 }
 
-const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode = 'login' }) => {
+const AuthModal: React.FC<AuthModalProps> = ({ 
+  onClose, 
+  onSuccess, 
+  initialMode = 'login',
+  selectedPlan = 'free'
+}) => {
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
+  const [planChoice, setPlanChoice] = useState<'free' | 'core' | 'pro' | 'agency'>(selectedPlan);
+
+  // Set initial plan when selectedPlan changes
+  useEffect(() => {
+    setPlanChoice(selectedPlan);
+  }, [selectedPlan]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +61,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
           options: {
             data: {
               full_name: name,
-              plan: selectedPlan // Store the selected plan in user metadata
+              plan: planChoice // Store the selected plan in user metadata
             },
           },
         });
@@ -176,16 +187,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
             {!isLogin && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Select Plan
+                  Selected Plan
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {(['free', 'core', 'pro', 'agency'] as const).map((plan) => (
                     <button
                       key={plan}
                       type="button"
-                      onClick={() => setSelectedPlan(plan)}
+                      onClick={() => setPlanChoice(plan)}
                       className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                        selectedPlan === plan
+                        planChoice === plan
                           ? 'bg-purple-600 text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
@@ -247,7 +258,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode =
           {!isLogin && (
             <div className="mt-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-blue-800 text-sm">
-                By creating an account, you'll start with our {selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} plan. You can upgrade or downgrade anytime.
+                By creating an account, you'll start with our {planChoice.charAt(0).toUpperCase() + planChoice.slice(1)} plan. You can upgrade or downgrade anytime.
               </p>
             </div>
           )}
