@@ -87,7 +87,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
   // Generate actionable insights based on user data
   const generateActionableInsights = useCallback(async () => {
-    if (!user || !userProfile) return;
+    if (!user || !user.id || !userProfile) return;
 
     try {
       const insights: ActionableInsight[] = [];
@@ -351,10 +351,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
   // Generate insights when profile loads
   useEffect(() => {
-    if (userProfile && user) {
+    if (userProfile && user && user.id) {
       generateActionableInsights();
     }
-  }, [userProfile, user, userPlan, generateActionableInsights]);
+  }, [userProfile, user?.id, userPlan, generateActionableInsights]);
 
   // Track page visits - only once when section changes
   useEffect(() => {

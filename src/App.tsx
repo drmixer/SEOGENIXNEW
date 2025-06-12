@@ -26,18 +26,28 @@ function App() {
         console.log('Initializing authentication...');
         setLoading(true);
         
-        // Set a timeout to prevent hanging indefinitely
-        const timeoutId = setTimeout(() => {
-          console.log('Auth initialization timed out after 5 seconds');
-          setLoading(false);
-          setAuthInitialized(true);
-          setAuthError('Authentication initialization timed out. Please refresh the page.');
-        }, 5000);
+        // Clear any existing timeout to prevent race conditions
+        let timeoutId: NodeJS.Timeout | null = null;
         
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // Set a timeout to prevent hanging indefinitely
+        const timeoutPromise = new Promise<void>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            console.log('Auth initialization timed out after 5 seconds');
+            reject(new Error('Authentication initialization timed out. Please refresh the page.'));
+          }, 5000);
+        });
+        
+        // Get session promise
+        const sessionPromise = supabase.auth.getSession();
+        
+        // Race the promises
+        const { data: { session }, error } = await Promise.race([
+          sessionPromise,
+          timeoutPromise.then(() => { throw new Error('Timeout'); })
+        ]);
         
         // Clear the timeout since we got a response
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
         
         if (error) {
           console.error('Error getting initial session:', error);
@@ -148,7 +158,7 @@ function App() {
       console.log('Cleaning up auth subscription');
       subscription.unsubscribe();
     };
-  }, []);
+  }, []); // CRITICAL: Empty dependency array to ensure this runs only once
 
   const handleNavigateToDashboard = () => {
     if (user) {
