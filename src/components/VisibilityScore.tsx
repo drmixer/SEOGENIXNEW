@@ -363,3 +363,5 @@ const VisibilityScore: React.FC<VisibilityScoreProps> = ({ userPlan, selectedWeb
 };
 
 export default VisibilityScore;
+
+export default VisibilityScore
