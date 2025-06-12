@@ -48,16 +48,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
     }
   }, [initialView]);
 
-  // Handler for plan selection that passes the selected plan
+  // Handler for plan selection that shows signup modal
   const handlePlanSelect = (plan: 'free' | 'core' | 'pro' | 'agency') => {
+    // Pass the selected plan to parent component
     onPlanSelect(plan);
-    if (user) {
-      // If user is logged in, just handle the plan selection
-      onPlanSelect(plan);
-    } else {
-      // If user is not logged in, show signup with the selected plan
-      onShowSignup();
-    }
+    
+    // Show signup modal
+    onShowSignup();
   };
 
   return (

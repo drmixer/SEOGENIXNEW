@@ -8,7 +8,7 @@ interface ToastContainerProps {
 
 const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onRemoveToast }) => {
   return (
-    <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm max-h-screen overflow-hidden pointer-events-none">
+    <div className="fixed top-4 right-4 z-50 max-w-sm pointer-events-none">
       <div className="flex flex-col items-end space-y-2 max-h-[calc(100vh-32px)] overflow-y-auto pointer-events-auto pr-1">
         {toasts.map((toast) => (
           <Toast
