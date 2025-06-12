@@ -23,6 +23,7 @@ function App() {
   const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const authInitializedRef = useRef(false);
   const authInProgressRef = useRef(false);
+  const profileFetchedRef = useRef(false);
 
   useEffect(() => {
     // Get initial session
@@ -135,6 +136,11 @@ function App() {
 
     // Separate function to fetch user profile to reduce nesting
     const fetchUserProfile = async (userId: string) => {
+      if (profileFetchedRef.current) {
+        console.log('Profile already fetched, skipping duplicate fetch');
+        return;
+      }
+      
       try {
         const { data: profiles, error: profileError } = await supabase
           .from('user_profiles')
@@ -163,11 +169,12 @@ function App() {
           }
         } else {
           // No profile found, show onboarding
-          console.log('No profile found, showing onboarding');
+          console.log('No profile found for user:', userId);
           setShowOnboarding(true);
         }
         
-        // Important: Set loading and authInitialized here to ensure they're set after profile fetch
+        // Important: Set loading and mark profile as fetched
+        profileFetchedRef.current = true;
         setLoading(false);
       } catch (profileError) {
         console.error('Error in profile fetch:', profileError);
@@ -202,6 +209,9 @@ function App() {
             setAuthInitialized(true);
             authInitializedRef.current = true;
             
+            // Reset profile fetched flag to ensure we get fresh data
+            profileFetchedRef.current = false;
+            
             // Fetch user profile to get plan - use a separate function to avoid nesting
             await fetchUserProfile(session.user.id);
           }
@@ -215,10 +225,16 @@ function App() {
           setAuthInitialized(true);
           authInitializedRef.current = true;
           setAuthError(null);
+          
+          // Reset profile fetched flag
+          profileFetchedRef.current = false;
         }
       } catch (error) {
         console.error('Error in auth state change handler:', error);
         // Don't set authError here as it might interfere with normal operation
+        
+        // Ensure we're not stuck in loading state
+        setLoading(false);
       }
     });
 
@@ -435,6 +451,10 @@ function App() {
       setShowAuthModal(false);
       setAuthError(null);
       
+      // Reset refs
+      authInitializedRef.current = false;
+      profileFetchedRef.current = false;
+      
       // Force reload the page to clear any lingering state
       window.location.reload();
     } catch (error) {
@@ -450,6 +470,7 @@ function App() {
     setAuthError(null);
     setAuthInitialized(false);
     authInitializedRef.current = false;
+    profileFetchedRef.current = false;
     setLoading(true);
     
     // Clear any existing timeout
@@ -511,6 +532,9 @@ function App() {
         setUser(session.user);
         setAuthInitialized(true);
         authInitializedRef.current = true;
+        
+        // Reset profile fetched flag
+        profileFetchedRef.current = false;
         
         await fetchUserProfile(session.user.id);
       } else {
