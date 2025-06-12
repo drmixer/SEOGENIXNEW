@@ -95,13 +95,21 @@ export interface FingerprintPhrase {
   created_at: string;
 }
 
-// Cache for user profiles to reduce database calls
+// Enhanced cache for user profiles to reduce database calls
 const profileCache = new Map<string, {profile: UserProfile, timestamp: number}>();
-const CACHE_TTL = 60000; // 1 minute cache TTL
+const auditHistoryCache = new Map<string, {data: AuditHistoryEntry[], timestamp: number}>();
+const activityCache = new Map<string, {data: UserActivity[], timestamp: number}>();
+const reportsCache = new Map<string, {data: Report[], timestamp: number}>();
+
+// Longer cache TTL to reduce database calls
+const CACHE_TTL = 300000; // 5 minutes cache TTL
 
 // Activity tracking throttling
 const activityThrottleMap = new Map<string, number>();
-const ACTIVITY_THROTTLE_MS = 5000; // 5 seconds between identical activities
+const ACTIVITY_THROTTLE_MS = 10000; // 10 seconds between identical activities
+
+// Request in progress tracking to prevent duplicate calls
+const pendingRequests = new Map<string, Promise<any>>();
 
 export const userDataService = {
   // User Profile Management
@@ -112,6 +120,15 @@ export const userDataService = {
     }
     
     try {
+      // Generate a unique request key
+      const requestKey = `profile:${userId}`;
+      
+      // Check if there's already a pending request for this profile
+      if (pendingRequests.has(requestKey)) {
+        console.log('Request already in progress for profile, returning existing promise');
+        return pendingRequests.get(requestKey);
+      }
+      
       console.log('Fetching user profile for userId:', userId);
       
       // Check cache first
@@ -121,32 +138,45 @@ export const userDataService = {
         return cachedData.profile;
       }
       
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1);
+      // Create a promise for this request
+      const profilePromise = (async () => {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-      if (error) {
-        console.error('Error fetching user profile:', error);
-        throw error;
-      }
+        if (error) {
+          console.error('Error fetching user profile:', error);
+          throw error;
+        }
 
-      if (!data || data.length === 0) {
-        console.log('No profile found for user:', userId);
-        return null;
-      }
+        if (!data || data.length === 0) {
+          console.log('No profile found for user:', userId);
+          return null;
+        }
 
-      console.log('Successfully fetched user profile:', data[0]);
+        console.log('Successfully fetched user profile:', data[0].id);
+        
+        // Cache the result
+        profileCache.set(userId, {
+          profile: data[0],
+          timestamp: Date.now()
+        });
+        
+        return data[0];
+      })();
       
-      // Cache the result
-      profileCache.set(userId, {
-        profile: data[0],
-        timestamp: Date.now()
+      // Store the promise in the pending requests map
+      pendingRequests.set(requestKey, profilePromise);
+      
+      // Clean up the pending request after it completes
+      profilePromise.finally(() => {
+        pendingRequests.delete(requestKey);
       });
       
-      return data[0];
+      return profilePromise;
     } catch (error) {
       console.error('Error in getUserProfile:', error);
       throw error; // Re-throw to allow caller to handle
@@ -556,6 +586,17 @@ export const userDataService = {
       }
 
       console.log('Successfully saved audit result:', data);
+      
+      // Invalidate audit history cache for this user
+      const cacheKey = `audit:${auditResult.user_id}`;
+      auditHistoryCache.delete(cacheKey);
+      
+      // Also invalidate website-specific cache if applicable
+      if (auditResult.website_url) {
+        const websiteCacheKey = `audit:${auditResult.user_id}:${auditResult.website_url}`;
+        auditHistoryCache.delete(websiteCacheKey);
+      }
+      
       return data;
     } catch (error) {
       console.error('Error in saveAuditResult:', error);
@@ -570,22 +611,60 @@ export const userDataService = {
     }
     
     try {
+      // Generate a unique request key
+      const requestKey = `audit:${userId}:${limit}`;
+      
+      // Check if there's already a pending request for this audit history
+      if (pendingRequests.has(requestKey)) {
+        console.log('Request already in progress for audit history, returning existing promise');
+        return pendingRequests.get(requestKey);
+      }
+      
+      // Check cache first
+      const cacheKey = `audit:${userId}`;
+      const cachedData = auditHistoryCache.get(cacheKey);
+      if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
+        console.log('Returning cached audit history for user:', userId);
+        // Return a slice of the cached data based on the requested limit
+        return cachedData.data.slice(0, limit);
+      }
+      
       console.log('Fetching audit history for userId:', userId, 'limit:', limit);
       
-      const { data, error } = await supabase
-        .from('audit_history')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      // Create a promise for this request
+      const auditPromise = (async () => {
+        const { data, error } = await supabase
+          .from('audit_history')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(limit);
 
-      if (error) {
-        console.error('Error fetching audit history:', error);
-        throw error;
-      }
+        if (error) {
+          console.error('Error fetching audit history:', error);
+          throw error;
+        }
 
-      console.log('Successfully fetched audit history:', data?.length || 0, 'entries');
-      return data || [];
+        console.log('Successfully fetched audit history:', data?.length || 0, 'entries');
+        
+        // Cache the full result
+        auditHistoryCache.set(cacheKey, {
+          data: data || [],
+          timestamp: Date.now()
+        });
+        
+        return data || [];
+      })();
+      
+      // Store the promise in the pending requests map
+      pendingRequests.set(requestKey, auditPromise);
+      
+      // Clean up the pending request after it completes
+      auditPromise.finally(() => {
+        pendingRequests.delete(requestKey);
+      });
+      
+      return auditPromise;
     } catch (error) {
       console.error('Error in getAuditHistory:', error);
       return [];
@@ -599,23 +678,61 @@ export const userDataService = {
     }
     
     try {
+      // Generate a unique request key
+      const requestKey = `audit:${userId}:${websiteUrl}:${limit}`;
+      
+      // Check if there's already a pending request for this website audit history
+      if (pendingRequests.has(requestKey)) {
+        console.log('Request already in progress for website audit history, returning existing promise');
+        return pendingRequests.get(requestKey);
+      }
+      
+      // Check cache first
+      const cacheKey = `audit:${userId}:${websiteUrl}`;
+      const cachedData = auditHistoryCache.get(cacheKey);
+      if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
+        console.log('Returning cached website audit history for user:', userId, 'website:', websiteUrl);
+        // Return a slice of the cached data based on the requested limit
+        return cachedData.data.slice(0, limit);
+      }
+      
       console.log('Fetching audit history for userId:', userId, 'website:', websiteUrl, 'limit:', limit);
       
-      const { data, error } = await supabase
-        .from('audit_history')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('website_url', websiteUrl)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      // Create a promise for this request
+      const websiteAuditPromise = (async () => {
+        const { data, error } = await supabase
+          .from('audit_history')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('website_url', websiteUrl)
+          .order('created_at', { ascending: false })
+          .limit(limit);
 
-      if (error) {
-        console.error('Error fetching website audit history:', error);
-        throw error;
-      }
+        if (error) {
+          console.error('Error fetching website audit history:', error);
+          throw error;
+        }
 
-      console.log('Successfully fetched website audit history:', data?.length || 0, 'entries');
-      return data || [];
+        console.log('Successfully fetched website audit history:', data?.length || 0, 'entries');
+        
+        // Cache the full result
+        auditHistoryCache.set(cacheKey, {
+          data: data || [],
+          timestamp: Date.now()
+        });
+        
+        return data || [];
+      })();
+      
+      // Store the promise in the pending requests map
+      pendingRequests.set(requestKey, websiteAuditPromise);
+      
+      // Clean up the pending request after it completes
+      websiteAuditPromise.finally(() => {
+        pendingRequests.delete(requestKey);
+      });
+      
+      return websiteAuditPromise;
     } catch (error) {
       console.error('Error in getAuditHistoryForWebsite:', error);
       return [];
@@ -657,6 +774,10 @@ export const userDataService = {
           console.error('Error tracking user activity:', error);
         } else {
           console.log('Successfully tracked activity');
+          
+          // Invalidate activity cache for this user
+          const cacheKey = `activity:${activity.user_id}`;
+          activityCache.delete(cacheKey);
         }
       } catch (dbError) {
         console.error('Database error in trackActivity:', dbError);
@@ -675,22 +796,60 @@ export const userDataService = {
     }
     
     try {
+      // Generate a unique request key
+      const requestKey = `activity:${userId}:${limit}`;
+      
+      // Check if there's already a pending request for this activity
+      if (pendingRequests.has(requestKey)) {
+        console.log('Request already in progress for recent activity, returning existing promise');
+        return pendingRequests.get(requestKey);
+      }
+      
+      // Check cache first
+      const cacheKey = `activity:${userId}`;
+      const cachedData = activityCache.get(cacheKey);
+      if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
+        console.log('Returning cached recent activity for user:', userId);
+        // Return a slice of the cached data based on the requested limit
+        return cachedData.data.slice(0, limit);
+      }
+      
       console.log('Fetching recent activity for userId:', userId, 'limit:', limit);
       
-      const { data, error } = await supabase
-        .from('user_activity')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      // Create a promise for this request
+      const activityPromise = (async () => {
+        const { data, error } = await supabase
+          .from('user_activity')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(limit);
 
-      if (error) {
-        console.error('Error fetching user activity:', error);
-        throw error;
-      }
+        if (error) {
+          console.error('Error fetching user activity:', error);
+          throw error;
+        }
 
-      console.log('Successfully fetched recent activity:', data?.length || 0, 'entries');
-      return data || [];
+        console.log('Successfully fetched recent activity:', data?.length || 0, 'entries');
+        
+        // Cache the full result
+        activityCache.set(cacheKey, {
+          data: data || [],
+          timestamp: Date.now()
+        });
+        
+        return data || [];
+      })();
+      
+      // Store the promise in the pending requests map
+      pendingRequests.set(requestKey, activityPromise);
+      
+      // Clean up the pending request after it completes
+      activityPromise.finally(() => {
+        pendingRequests.delete(requestKey);
+      });
+      
+      return activityPromise;
     } catch (error) {
       console.error('Error in getRecentActivity:', error);
       return [];
@@ -719,6 +878,11 @@ export const userDataService = {
       }
 
       console.log('Successfully saved report:', data);
+      
+      // Invalidate reports cache for this user
+      const cacheKey = `reports:${report.user_id}`;
+      reportsCache.delete(cacheKey);
+      
       return data;
     } catch (error) {
       console.error('Error in saveReport:', error);
@@ -733,21 +897,58 @@ export const userDataService = {
     }
     
     try {
+      // Generate a unique request key
+      const requestKey = `reports:${userId}`;
+      
+      // Check if there's already a pending request for this user's reports
+      if (pendingRequests.has(requestKey)) {
+        console.log('Request already in progress for user reports, returning existing promise');
+        return pendingRequests.get(requestKey);
+      }
+      
+      // Check cache first
+      const cacheKey = `reports:${userId}`;
+      const cachedData = reportsCache.get(cacheKey);
+      if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
+        console.log('Returning cached reports for user:', userId);
+        return cachedData.data;
+      }
+      
       console.log('Fetching user reports for userId:', userId);
       
-      const { data, error } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+      // Create a promise for this request
+      const reportsPromise = (async () => {
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching user reports:', error);
-        throw error;
-      }
+        if (error) {
+          console.error('Error fetching user reports:', error);
+          throw error;
+        }
 
-      console.log('Successfully fetched user reports:', data?.length || 0, 'reports');
-      return data || [];
+        console.log('Successfully fetched user reports:', data?.length || 0, 'reports');
+        
+        // Cache the result
+        reportsCache.set(cacheKey, {
+          data: data || [],
+          timestamp: Date.now()
+        });
+        
+        return data || [];
+      })();
+      
+      // Store the promise in the pending requests map
+      pendingRequests.set(requestKey, reportsPromise);
+      
+      // Clean up the pending request after it completes
+      reportsPromise.finally(() => {
+        pendingRequests.delete(requestKey);
+      });
+      
+      return reportsPromise;
     } catch (error) {
       console.error('Error in getUserReports:', error);
       return [];
@@ -763,6 +964,13 @@ export const userDataService = {
     try {
       console.log('Deleting report:', reportId);
       
+      // First get the report to know which user it belongs to (for cache invalidation)
+      const { data: reportData } = await supabase
+        .from('reports')
+        .select('user_id')
+        .eq('id', reportId)
+        .single();
+      
       const { error } = await supabase
         .from('reports')
         .delete()
@@ -774,10 +982,46 @@ export const userDataService = {
       }
 
       console.log('Successfully deleted report');
+      
+      // Invalidate reports cache for this user if we found the user_id
+      if (reportData?.user_id) {
+        const cacheKey = `reports:${reportData.user_id}`;
+        reportsCache.delete(cacheKey);
+      }
+      
       return true;
     } catch (error) {
       console.error('Error in deleteReport:', error);
       return false;
+    }
+  },
+  
+  // Cache management utilities
+  clearCache(userId?: string): void {
+    if (userId) {
+      // Clear cache for specific user
+      profileCache.delete(userId);
+      auditHistoryCache.delete(`audit:${userId}`);
+      activityCache.delete(`activity:${userId}`);
+      reportsCache.delete(`reports:${userId}`);
+      
+      // Clear any throttle entries for this user
+      for (const key of activityThrottleMap.keys()) {
+        if (key.startsWith(`${userId}:`)) {
+          activityThrottleMap.delete(key);
+        }
+      }
+      
+      console.log(`Cleared cache for user: ${userId}`);
+    } else {
+      // Clear all caches
+      profileCache.clear();
+      auditHistoryCache.clear();
+      activityCache.clear();
+      reportsCache.clear();
+      activityThrottleMap.clear();
+      pendingRequests.clear();
+      console.log('Cleared all caches');
     }
   }
 };

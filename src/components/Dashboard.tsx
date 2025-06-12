@@ -62,6 +62,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const profileFetchedRef = useRef(false);
   const isMountedRef = useRef(true);
   const activityTrackedRef = useRef(false);
+  const insightsGeneratedRef = useRef(false);
 
   // Extract first name from user data
   const getFirstName = () => {
@@ -92,6 +93,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Generate actionable insights based on user data
   const generateActionableInsights = useCallback(async () => {
     if (!user || !user.id || !userProfile) return;
+    
+    // Prevent duplicate insight generation
+    if (insightsGeneratedRef.current) return;
+    insightsGeneratedRef.current = true;
 
     try {
       const insights: ActionableInsight[] = [];
@@ -264,13 +269,22 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         });
       }
 
-      setActionableInsights(insights.slice(0, 3)); // Show top 3 insights
+      if (isMountedRef.current) {
+        setActionableInsights(insights.slice(0, 3)); // Show top 3 insights
+      }
 
     } catch (error) {
       console.error('Error generating actionable insights:', error);
-      setDashboardError('Failed to generate insights. Please refresh the page.');
+      if (isMountedRef.current) {
+        setDashboardError('Failed to generate insights. Please refresh the page.');
+      }
+    } finally {
+      // Reset the insights generation flag after a delay to allow for future regeneration
+      setTimeout(() => {
+        insightsGeneratedRef.current = false;
+      }, 60000); // 1 minute cooldown
     }
-  }, [user, userProfile, userPlan]);
+  }, [user?.id, userProfile, userPlan]);
 
   // Track component mount/unmount
   useEffect(() => {
@@ -367,9 +381,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     }
   }, [user?.id, profileFetchAttempted]); // Only depend on user.id, not the entire user object
 
-  // Generate insights when profile loads
+  // Generate insights when profile loads - only once
   useEffect(() => {
-    if (userProfile && user && user.id) {
+    if (userProfile && user && user.id && !insightsGeneratedRef.current) {
       generateActionableInsights();
     }
   }, [userProfile, user?.id, userPlan, generateActionableInsights]);
@@ -435,6 +449,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       // Mark that tools have been run
       localStorage.setItem('seogenix_tools_run', 'true');
       setHasRunTools(true);
+      
+      // Reset insights generation flag to allow regeneration
+      insightsGeneratedRef.current = false;
       
       // Regenerate insights after tool completion
       setTimeout(() => {
@@ -507,8 +524,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     // Reset all refs and state before reload
     profileFetchedRef.current = false;
     activityTrackedRef.current = false;
+    insightsGeneratedRef.current = false;
     setProfileFetchAttempted(false);
     setDashboardError(null);
+    
+    // Clear all caches to ensure fresh data
+    userDataService.clearCache(user?.id);
     
     // Reload the page
     window.location.reload();
@@ -851,6 +872,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
               duration: 3000,
               onClose: () => {}
             });
+            
+            // Clear profile cache to ensure fresh data
+            userDataService.clearCache(user.id);
+            
+            // Reset insights generation flag to allow regeneration
+            insightsGeneratedRef.current = false;
+            
             // Regenerate insights after profile update
             setTimeout(() => {
               generateActionableInsights();

@@ -94,14 +94,53 @@ Deno.serve(async (req: Request) => {
           }
         }
         
+        // Third attempt: Try with no-cors mode as a last resort
+        if (!fetchSuccessful) {
+          try {
+            const noCorsResponse = await fetch(url, {
+              mode: 'no-cors',
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36'
+              }
+            });
+            
+            if (noCorsResponse.type === 'opaque') {
+              console.log('Received opaque response with no-cors mode');
+              // We can't read the content of an opaque response, but we can note the attempt
+            }
+          } catch (noCorsError) {
+            console.error(`Error in no-cors fetch attempt: ${noCorsError.message}`);
+          }
+        }
+        
         // If all fetch attempts failed or returned incomplete content
         if (!fetchSuccessful || !pageContent || pageContent.length < 1000) {
           console.warn(`Could not fetch complete content from ${url}, using fallback content`);
+          
+          // Create a more detailed fallback that includes the URL structure
+          const urlObj = new URL(url);
+          const domain = urlObj.hostname;
+          const path = urlObj.pathname;
+          
           pageContent = `
-            This is fallback content for ${url}. 
-            The actual page content could not be fetched completely due to technical limitations.
-            The audit will proceed with limited information, which may affect accuracy.
-            Consider manually providing the full page content for a more accurate audit.
+            Website: ${url}
+            Domain: ${domain}
+            Path: ${path}
+            
+            This is fallback content for analysis since the actual page content could not be fetched completely.
+            The URL structure suggests this is a ${path.includes('blog') ? 'blog post' : 'website page'} on the ${domain} domain.
+            
+            Based on the URL, this appears to be ${
+              path.length <= 1 ? 'a homepage' : 
+              path.includes('about') ? 'an about page' :
+              path.includes('contact') ? 'a contact page' :
+              path.includes('product') ? 'a product page' :
+              path.includes('service') ? 'a service page' :
+              'a content page'
+            }.
+            
+            The audit will proceed with limited information based on the URL structure.
+            For a more accurate audit, consider manually providing the full page content.
           `;
         }
         
