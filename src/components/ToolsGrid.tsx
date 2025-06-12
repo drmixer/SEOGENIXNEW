@@ -55,6 +55,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [expandedTool, setExpandedTool] = useState<string | null>(selectedTool || null);
   const [showToolModal, setShowToolModal] = useState<string | null>(null);
   const [selectedCompetitor, setSelectedCompetitor] = useState<string>('');
+  const [manuallyStarted, setManuallyStarted] = useState<Set<string>>(new Set());
 
   // Enable all tools for development/testing
   const isDevelopment = true;
@@ -165,6 +166,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   useEffect(() => {
     if (selectedTool) {
       setExpandedTool(selectedTool);
+      // Don't automatically run the tool when it's selected
+      // This fixes the issue of tools running without explicit user action
     }
   }, [selectedTool]);
 
@@ -184,6 +187,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     setLoadingTool(toolId);
     setExpandedTool(toolId);
     setShowToolModal(toolId);
+    setManuallyStarted(prev => new Set([...prev, toolId])); // Mark this tool as manually started
 
     try {
       let result: any = {};
@@ -930,6 +934,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 const isExpanded = expandedTool === tool.id;
                 const result = toolResults[tool.id];
                 const hasResult = result && !result.error;
+                const hasBeenManuallyStarted = manuallyStarted.has(tool.id);
 
                 return (
                   <div 
@@ -963,8 +968,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                           onClick={() => {
                             if (tool.available) {
                               setShowToolModal(tool.id);
+                              // Only run the tool if it hasn't been run before or if it's being manually started
                               if (!toolResults[tool.id]) {
-                                runTool(tool.id);
+                                // Don't automatically run the tool when opening the modal
+                                // This prevents tools from running without explicit user action
                               }
                             }
                           }}
