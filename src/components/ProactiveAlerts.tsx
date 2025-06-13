@@ -348,6 +348,22 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
     return 'text-red-600';
   };
 
+  const handleActionClick = (alert: Alert) => {
+    if (alert.actionUrl) {
+      // Mark as read
+      markAsRead(alert.id);
+      
+      // Dispatch a custom event that Dashboard can listen for
+      const event = new CustomEvent('alertAction', { 
+        detail: { 
+          actionUrl: alert.actionUrl,
+          alertId: alert.id
+        } 
+      });
+      window.dispatchEvent(event);
+    }
+  };
+
   return (
     <div className="relative">
       {/* Alert Bell Button */}
@@ -365,7 +381,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
 
       {/* Alerts Dropdown */}
       {showAlerts && (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-96 overflow-hidden">
+        <div className="fixed right-4 top-16 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-[80vh] overflow-hidden">
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Smart Alerts & Insights</h3>
@@ -384,7 +400,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-[calc(80vh-60px)] overflow-y-auto">
             {alerts.length === 0 ? (
               <div className="p-6 text-center text-gray-500">
                 <Brain className="w-8 h-8 mx-auto mb-2 text-gray-300" />
@@ -443,11 +459,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
                             <div className="flex items-center space-x-2">
                               {alert.actionUrl && (
                                 <button
-                                  onClick={() => {
-                                    markAsRead(alert.id);
-                                    // In a real app, navigate to the URL
-                                    console.log('Navigate to:', alert.actionUrl);
-                                  }}
+                                  onClick={() => handleActionClick(alert)}
                                   className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1"
                                 >
                                   <span>{alert.actionLabel}</span>

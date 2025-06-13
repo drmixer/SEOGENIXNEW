@@ -64,6 +64,22 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const insightsGeneratedRef = useRef(false);
   const auditHistoryFetchedRef = useRef(false);
 
+  // Listen for alert actions from ProactiveAlerts component
+  useEffect(() => {
+    const handleAlertAction = (event: CustomEvent) => {
+      const { actionUrl, alertId } = event.detail;
+      if (actionUrl) {
+        setActiveSection(actionUrl);
+      }
+    };
+
+    window.addEventListener('alertAction', handleAlertAction as EventListener);
+    
+    return () => {
+      window.removeEventListener('alertAction', handleAlertAction as EventListener);
+    };
+  }, []);
+
   // Extract first name from user data
   const getFirstName = () => {
     if (!user) {
