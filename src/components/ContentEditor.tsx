@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FileText, Zap, Target, Brain, MessageSquare, Save, Copy, RefreshCw } from 'lucide-react';
+import { FileText, Zap, Target, Brain, MessageSquare, Save, Copy, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
 import { apiService } from '../services/api';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
@@ -21,6 +21,15 @@ interface ContentAnalysis {
   readabilityScore: number;
 }
 
+interface RealTimeSuggestion {
+  type: 'grammar' | 'ai_clarity' | 'keyword' | 'structure' | 'entity';
+  severity: 'error' | 'warning' | 'suggestion';
+  message: string;
+  suggestion: string;
+  position: { start: number; end: number };
+  replacement?: string;
+}
+
 const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
   const [content, setContent] = useState('');
   const [targetKeywords, setTargetKeywords] = useState('');
@@ -30,16 +39,98 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizedContent, setOptimizedContent] = useState('');
   const [showOptimized, setShowOptimized] = useState(false);
+  const [realTimeSuggestions, setRealTimeSuggestions] = useState<RealTimeSuggestion[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<RealTimeSuggestion | null>(null);
+  const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
 
   // Debounced analysis
   const analyzeContent = useCallback(async () => {
     if (!content.trim() || content.length < 50) {
       setAnalysis(null);
+      setRealTimeSuggestions([]);
       return;
     }
 
     setIsAnalyzing(true);
     try {
+      // Generate real-time suggestions
+      const keywords = targetKeywords.split(',').map(k => k.trim()).filter(k => k);
+      
+      // Simulate real-time analysis
+      const suggestions: RealTimeSuggestion[] = [];
+      
+      // Check for passive voice
+      const passivePattern = /\b(is|are|was|were|be|been|being)\s+\w+ed\b/gi;
+      let match;
+      while ((match = passivePattern.exec(content)) !== null) {
+        suggestions.push({
+          type: 'ai_clarity',
+          severity: 'warning',
+          message: 'Passive voice detected',
+          suggestion: 'Use active voice for better AI understanding',
+          position: { start: match.index, end: match.index + match[0].length },
+          replacement: 'Use active voice instead'
+        });
+      }
+      
+      // Check for long sentences
+      const sentences = content.split(/[.!?]+/).filter(s => s.trim());
+      sentences.forEach(sentence => {
+        if (sentence.trim().split(/\s+/).length > 25) {
+          const start = content.indexOf(sentence);
+          if (start !== -1) {
+            suggestions.push({
+              type: 'structure',
+              severity: 'suggestion',
+              message: 'Long sentence detected',
+              suggestion: 'Break into shorter sentences for better AI comprehension',
+              position: { start, end: start + sentence.length }
+            });
+          }
+        }
+      });
+      
+      // Check keyword density
+      keywords.forEach(keyword => {
+        if (keyword) {
+          const regex = new RegExp(keyword, 'gi');
+          const matches = content.match(regex) || [];
+          const words = content.split(/\s+/).length;
+          const density = words > 0 ? (matches.length / words) * 100 : 0;
+          
+          if (density > 3) {
+            suggestions.push({
+              type: 'keyword',
+              severity: 'warning',
+              message: `Keyword "${keyword}" appears too frequently (${density.toFixed(1)}%)`,
+              suggestion: 'Reduce keyword density to avoid appearing spammy to AI systems',
+              position: { start: 0, end: 0 }
+            });
+          } else if (density < 0.5 && content.length > 200) {
+            suggestions.push({
+              type: 'keyword',
+              severity: 'suggestion',
+              message: `Consider using "${keyword}" more frequently`,
+              suggestion: 'Increase keyword presence for better topic relevance',
+              position: { start: 0, end: 0 }
+            });
+          }
+        }
+      });
+      
+      // Check for missing question words for voice search
+      if (!content.match(/\b(who|what|when|where|why|how)\b/i) && content.length > 200) {
+        suggestions.push({
+          type: 'entity',
+          severity: 'suggestion',
+          message: 'Missing question words for voice search',
+          suggestion: 'Include "who, what, when, where, why, how" to match voice queries',
+          position: { start: 0, end: 0 }
+        });
+      }
+      
+      setRealTimeSuggestions(suggestions);
+
       // Simulate real-time analysis using the audit API
       const result = await apiService.runAudit('https://example.com', content);
       
@@ -98,8 +189,10 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
     const density: Record<string, number> = {};
     
     keywordList.forEach(keyword => {
-      const count = words.filter(word => word.includes(keyword)).length;
-      density[keyword] = totalWords > 0 ? (count / totalWords) * 100 : 0;
+      if (keyword) {
+        const count = words.filter(word => word.includes(keyword)).length;
+        density[keyword] = totalWords > 0 ? (count / totalWords) * 100 : 0;
+      }
     });
     
     return density;
@@ -169,7 +262,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
     setOptimizedContent('');
   };
 
-  const getScoreColor = (score: number) => {
+  const getScoreColor = (score?: number) => {
+    if (!score) return 'text-gray-500';
     if (score >= 80) return 'text-green-600';
     if (score >= 60) return 'text-yellow-600';
     return 'text-red-600';
@@ -179,6 +273,41 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
     if (score >= 80) return 'from-green-500 to-green-600';
     if (score >= 60) return 'from-yellow-500 to-yellow-600';
     return 'from-red-500 to-red-600';
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'error': return 'text-red-600 bg-red-50 border-red-200';
+      case 'warning': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'suggestion': return 'text-blue-600 bg-blue-50 border-blue-200';
+      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case 'error': return <AlertCircle className="w-4 h-4" />;
+      case 'warning': return <AlertCircle className="w-4 h-4" />;
+      case 'suggestion': return <Brain className="w-4 h-4" />;
+      default: return <CheckCircle className="w-4 h-4" />;
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: RealTimeSuggestion) => {
+    setSelectedSuggestion(suggestion);
+    setHighlightedText(suggestion.position);
+  };
+
+  const applySuggestion = (suggestion: RealTimeSuggestion) => {
+    if (suggestion.replacement && suggestion.position.start !== suggestion.position.end) {
+      const newContent = 
+        content.substring(0, suggestion.position.start) + 
+        suggestion.replacement + 
+        content.substring(suggestion.position.end);
+      setContent(newContent);
+    }
+    setSelectedSuggestion(null);
+    setHighlightedText(null);
   };
 
   const canUseEditor = userPlan !== 'free';
@@ -256,7 +385,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
           </div>
 
           {/* Main Editor */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 relative">
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-gray-900">Content Editor</h3>
@@ -271,16 +400,100 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
                 </div>
               </div>
             </div>
-            <div className="p-4">
+            <div className="p-4 relative">
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Start writing your content here. AI analysis will appear as you type..."
                 rows={12}
                 className="w-full border-0 resize-none focus:ring-0 focus:outline-none text-gray-900 placeholder-gray-500"
+                style={{
+                  background: 'transparent',
+                  position: 'relative',
+                  zIndex: 1
+                }}
               />
+              
+              {/* Highlight layer for real-time suggestions */}
+              {highlightedText && highlightedText.start !== highlightedText.end && (
+                <div 
+                  className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none"
+                  style={{ zIndex: 0 }}
+                >
+                  <div 
+                    className="absolute bg-yellow-200 opacity-40"
+                    style={{
+                      top: `${Math.floor(highlightedText.start / 80) * 1.5 + 1}rem`,
+                      left: `${(highlightedText.start % 80) * 0.6}rem`,
+                      width: `${(highlightedText.end - highlightedText.start) * 0.6}rem`,
+                      height: '1.5rem'
+                    }}
+                  ></div>
+                </div>
+              )}
+              
+              {/* Suggestion markers */}
+              {realTimeSuggestions.map((suggestion, index) => (
+                suggestion.position.start !== suggestion.position.end && (
+                  <div
+                    key={index}
+                    className="absolute cursor-pointer"
+                    style={{
+                      top: `${Math.floor(suggestion.position.start / 80) * 1.5 + 1}rem`,
+                      left: `${(suggestion.position.start % 80) * 0.6}rem`,
+                    }}
+                    onClick={() => handleSuggestionClick(suggestion)}
+                  >
+                    <div className={`w-2 h-2 rounded-full animate-pulse ${
+                      suggestion.severity === 'error' ? 'bg-red-500' :
+                      suggestion.severity === 'warning' ? 'bg-yellow-500' :
+                      'bg-blue-500'
+                    }`}></div>
+                  </div>
+                )
+              ))}
             </div>
           </div>
+
+          {/* Real-time Suggestions Panel */}
+          {realTimeSuggestions.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+              <h3 className="font-medium text-gray-900 mb-3">Real-time Suggestions</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {realTimeSuggestions.map((suggestion, index) => {
+                  const IconComponent = getSeverityIcon(suggestion.severity);
+                  return (
+                    <div
+                      key={index}
+                      className={`p-2 rounded-lg border cursor-pointer hover:shadow-sm transition-all ${getSeverityColor(suggestion.severity)} ${
+                        selectedSuggestion === suggestion ? 'ring-2 ring-purple-500' : ''
+                      }`}
+                      onClick={() => handleSuggestionClick(suggestion)}
+                    >
+                      <div className="flex items-start space-x-2">
+                        <IconComponent className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{suggestion.message}</p>
+                          <p className="text-xs mt-1 opacity-80">{suggestion.suggestion}</p>
+                          {suggestion.replacement && suggestion.position.start !== suggestion.position.end && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                applySuggestion(suggestion);
+                              }}
+                              className="text-xs mt-2 px-2 py-1 bg-white bg-opacity-50 rounded hover:bg-opacity-75 transition-colors"
+                            >
+                              Apply Fix
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Optimized Content Display */}
           {showOptimized && (
