@@ -361,6 +361,9 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
         } 
       });
       window.dispatchEvent(event);
+      
+      // Close the alerts dropdown
+      setShowAlerts(false);
     }
   };
 
@@ -381,7 +384,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
 
       {/* Alerts Dropdown */}
       {showAlerts && (
-        <div className="fixed right-4 top-16 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-[80vh] overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-[80vh] overflow-hidden">
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Smart Alerts & Insights</h3>

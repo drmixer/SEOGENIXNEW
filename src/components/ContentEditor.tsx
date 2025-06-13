@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { FileText, Zap, Target, Brain, MessageSquare, Save, Copy, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { FileText, Zap, Target, Brain, MessageSquare, Save, Copy, RefreshCw, AlertCircle, CheckCircle, Lightbulb } from 'lucide-react';
 import { apiService } from '../services/api';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
@@ -42,6 +42,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
   const [realTimeSuggestions, setRealTimeSuggestions] = useState<RealTimeSuggestion[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<RealTimeSuggestion | null>(null);
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const analysisTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Debounced analysis
   const analyzeContent = useCallback(async () => {
@@ -172,11 +174,21 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
 
   // Debounce the analysis
   useEffect(() => {
-    const timer = setTimeout(() => {
-      analyzeContent();
+    if (analysisTimeoutRef.current) {
+      clearTimeout(analysisTimeoutRef.current);
+    }
+
+    analysisTimeoutRef.current = setTimeout(() => {
+      if (content.trim()) {
+        analyzeContent();
+      }
     }, 1000);
 
-    return () => clearTimeout(timer);
+    return () => {
+      if (analysisTimeoutRef.current) {
+        clearTimeout(analysisTimeoutRef.current);
+      }
+    };
   }, [analyzeContent]);
 
   const calculateKeywordDensity = (text: string, keywords: string): Record<string, number> => {
@@ -288,7 +300,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
     switch (severity) {
       case 'error': return <AlertCircle className="w-4 h-4" />;
       case 'warning': return <AlertCircle className="w-4 h-4" />;
-      case 'suggestion': return <Brain className="w-4 h-4" />;
+      case 'suggestion': return <Lightbulb className="w-4 h-4" />;
       default: return <CheckCircle className="w-4 h-4" />;
     }
   };
@@ -296,6 +308,13 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
   const handleSuggestionClick = (suggestion: RealTimeSuggestion) => {
     setSelectedSuggestion(suggestion);
     setHighlightedText(suggestion.position);
+    
+    // Scroll to the position in the textarea
+    if (textareaRef.current && suggestion.position.start !== suggestion.position.end) {
+      const textarea = textareaRef.current;
+      textarea.focus();
+      textarea.setSelectionRange(suggestion.position.start, suggestion.position.end);
+    }
   };
 
   const applySuggestion = (suggestion: RealTimeSuggestion) => {
@@ -305,6 +324,11 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
         suggestion.replacement + 
         content.substring(suggestion.position.end);
       setContent(newContent);
+      
+      // Remove this suggestion from the list
+      setRealTimeSuggestions(prev => 
+        prev.filter(s => s !== suggestion)
+      );
     }
     setSelectedSuggestion(null);
     setHighlightedText(null);
@@ -402,6 +426,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
             </div>
             <div className="p-4 relative">
               <textarea
+                ref={textareaRef}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Start writing your content here. AI analysis will appear as you type..."
