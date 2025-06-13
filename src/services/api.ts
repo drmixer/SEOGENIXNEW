@@ -1,15 +1,35 @@
+import { supabase } from '../lib/supabase';
+
 const API_BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
-const headers = {
-  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-  'Content-Type': 'application/json',
-};
-
-// Add error handling wrapper
+// Add error handling wrapper with dynamic authentication
 const apiCall = async (url: string, options: RequestInit) => {
   try {
     console.log(`Making API call to: ${url}`);
-    const response = await fetch(url, options);
+    
+    // Get current user session for authentication
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('Session error:', sessionError);
+      throw new Error('Failed to get user session');
+    }
+    
+    if (!session?.access_token) {
+      throw new Error('User not authenticated. Please log in to continue.');
+    }
+    
+    // Create headers with user's access token
+    const headers = {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      ...((options.headers as Record<string, string>) || {})
+    };
+    
+    const response = await fetch(url, {
+      ...options,
+      headers
+    });
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -76,7 +96,6 @@ export const apiService = {
     
     const auditPromise = apiCall(`${API_BASE_URL}/ai-visibility-audit`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ url, content })
     });
     
@@ -100,7 +119,6 @@ export const apiService = {
     
     const insightsPromise = apiCall(`${API_BASE_URL}/enhanced-audit-insights`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ url, content, previousScore })
     });
     
@@ -124,7 +142,6 @@ export const apiService = {
     
     const schemaPromise = apiCall(`${API_BASE_URL}/schema-generator`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ url, contentType, content })
     });
     
@@ -148,7 +165,6 @@ export const apiService = {
     
     const citationsPromise = apiCall(`${API_BASE_URL}/citation-tracker`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ domain, keywords })
     });
     
@@ -172,7 +188,6 @@ export const apiService = {
     
     const optimizePromise = apiCall(`${API_BASE_URL}/content-optimizer`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ content, targetKeywords, contentType })
     });
     
@@ -196,7 +211,6 @@ export const apiService = {
     
     const voicePromise = apiCall(`${API_BASE_URL}/voice-assistant-tester`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ query, assistants })
     });
     
@@ -220,7 +234,6 @@ export const apiService = {
     // Don't cache chat requests as they should always be unique
     return await apiCall(`${API_BASE_URL}/genie-chatbot`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ message, context, userPlan, conversationHistory, userData })
     });
   },
@@ -236,7 +249,6 @@ export const apiService = {
     
     const summaryPromise = apiCall(`${API_BASE_URL}/llm-site-summaries`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ url, summaryType, content })
     });
     
@@ -260,7 +272,6 @@ export const apiService = {
     
     const entityPromise = apiCall(`${API_BASE_URL}/entity-coverage-analyzer`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ url, content, industry, competitors })
     });
     
@@ -294,7 +305,6 @@ export const apiService = {
     
     const contentPromise = apiCall(`${API_BASE_URL}/ai-content-generator`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ 
         contentType, 
         topic, 
@@ -334,7 +344,6 @@ export const apiService = {
     
     const promptsPromise = apiCall(`${API_BASE_URL}/prompt-match-suggestions`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ topic, industry, targetAudience, contentType, userIntent })
     });
     
@@ -365,7 +374,6 @@ export const apiService = {
     
     const analysisPromise = apiCall(`${API_BASE_URL}/competitive-analysis`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ primaryUrl, competitorUrls, industry, analysisType })
     });
     
@@ -397,7 +405,6 @@ export const apiService = {
     
     const discoveryPromise = apiCall(`${API_BASE_URL}/competitor-discovery`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ url, industry, businessDescription, existingCompetitors, analysisDepth })
     });
     
@@ -420,7 +427,6 @@ export const apiService = {
     // Don't cache report generation as each report should be unique
     return await apiCall(`${API_BASE_URL}/generate-report`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ reportType, reportData, reportName, format })
     });
   },
@@ -429,7 +435,6 @@ export const apiService = {
   async connectWordPress(siteUrl: string, username: string, applicationPassword: string) {
     return await apiCall(`${API_BASE_URL}/wordpress-integration`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ 
         action: 'connect', 
         siteUrl, 
@@ -449,7 +454,6 @@ export const apiService = {
   }) {
     return await apiCall(`${API_BASE_URL}/wordpress-integration`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ 
         action: 'publish', 
         content 
@@ -460,7 +464,6 @@ export const apiService = {
   async connectShopify(shopDomain: string, accessToken: string) {
     return await apiCall(`${API_BASE_URL}/shopify-integration`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ 
         action: 'connect', 
         shopDomain, 
@@ -482,7 +485,6 @@ export const apiService = {
   }) {
     return await apiCall(`${API_BASE_URL}/shopify-integration`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ 
         action: 'publish', 
         product 
@@ -494,7 +496,6 @@ export const apiService = {
     const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
     return await apiCall(`${API_BASE_URL}/${endpoint}`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ action: 'sync' })
     });
   },
@@ -503,7 +504,6 @@ export const apiService = {
     const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
     return await apiCall(`${API_BASE_URL}/${endpoint}`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ action: 'disconnect' })
     });
   },
