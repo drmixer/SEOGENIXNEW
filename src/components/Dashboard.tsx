@@ -6,7 +6,6 @@ import ToolsGrid from './ToolsGrid';
 import HistoricalPerformance from './HistoricalPerformance';
 import ReportGenerator from './ReportGenerator';
 import ContentEditor from './ContentEditor';
-import RealTimeContentEditor from './RealTimeContentEditor';
 import CompetitiveVisualization from './CompetitiveVisualization';
 import CMSIntegrations from './CMSIntegrations';
 import OptimizationPlaybooks from './OptimizationPlaybooks';
@@ -772,9 +771,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       
       case 'editor':
         return <ContentEditor userPlan={userPlan} />;
-      
-      case 'realtime-editor':
-        return <RealTimeContentEditor userPlan={userPlan} />;
       
       case 'competitive-viz':
         return <CompetitiveVisualization userPlan={userPlan} />;

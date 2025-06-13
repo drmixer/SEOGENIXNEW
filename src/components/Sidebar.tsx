@@ -59,7 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'playbooks', label: 'Optimization Playbooks', icon: BookOpen, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
     { id: 'history', label: 'Performance History', icon: History, available: isDevelopment || userPlan !== 'free' },
     { id: 'editor', label: 'Content Editor', icon: Edit3, available: isDevelopment || userPlan !== 'free' },
-    { id: 'realtime-editor', label: 'Real-time Editor', icon: Brain, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
+    // Removed redundant real-time editor
     { id: 'reports', label: 'Reports', icon: Download, available: isDevelopment || userPlan !== 'free' },
     { id: 'competitive-viz', label: 'Competitive Insights', icon: Eye, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'integrations', label: 'CMS Integrations', icon: Layers, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
