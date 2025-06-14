@@ -223,29 +223,62 @@ Deno.serve(async (req: Request) => {
 function generateEnhancedCSVReport(reportType: string, data: any, config: any): string {
   let csv = '';
   
-  if (reportType === 'roi_focused' && data.roiMetrics) {
-    csv = 'Metric,Value,Impact\n';
-    csv += `Traffic Increase,${data.roiMetrics.estimatedTrafficIncrease}%,Monthly\n`;
-    csv += `Revenue Impact,$${data.roiMetrics.estimatedRevenueImpact},Monthly\n`;
-    csv += `Cost Savings,$${data.roiMetrics.costSavingsFromAI},Monthly\n`;
-    csv += `Competitive Advantage,${data.roiMetrics.competitiveAdvantage} points,Above Industry Average\n`;
-    csv += `Payback Period,${data.roiMetrics.paybackPeriod} months,Implementation\n`;
-    csv += `Annual ROI,${data.roiMetrics.totalROI}%,Year 1\n`;
-  } else if (reportType === 'audit' && data.auditHistory) {
+  if (reportType === 'audit' || reportType === 'comprehensive' || reportType === 'roi_focused') {
     csv = 'Date,Website,Overall Score,AI Understanding,Citation Likelihood,Conversational Readiness,Content Structure\n';
     
     data.auditHistory.forEach((audit: any) => {
       csv += `${audit.created_at},${audit.website_url},${audit.overall_score},${audit.ai_understanding},${audit.citation_likelihood},${audit.conversational_readiness},${audit.content_structure}\n`;
     });
-  } else if (reportType === 'competitive' && data.competitiveBenchmarks) {
-    csv = 'Competitor,Score,Trend,Market Position\n';
+  }
+
+  if (reportType === 'comprehensive' || reportType === 'roi_focused') {
+    csv += '\nActivity Summary\n';
+    csv += 'Date,Activity Type,Tool,Website\n';
     
-    data.competitiveBenchmarks.competitorScores.forEach((comp: any) => {
-      csv += `${comp.name},${comp.score},${comp.trend},Competitor\n`;
+    if (data.activity) {
+      data.activity.slice(0, 20).forEach((activity: any) => {
+        csv += `${activity.created_at},${activity.activity_type},${activity.tool_id || ''},${activity.website_url || ''}\n`;
+      });
+    }
+  }
+
+  if (reportType === 'competitive') {
+    csv = 'Competitor,URL,Overall Score,AI Understanding,Citation Likelihood,Conversational Readiness,Content Structure\n';
+    
+    // Add primary site first
+    if (data.primarySiteAnalysis) {
+      csv += `${data.primarySiteAnalysis.name} (You),${data.primaryUrl},${data.primarySiteAnalysis.overallScore},${data.primarySiteAnalysis.subscores.aiUnderstanding},${data.primarySiteAnalysis.subscores.citationLikelihood},${data.primarySiteAnalysis.subscores.conversationalReadiness},${data.primarySiteAnalysis.subscores.contentStructure}\n`;
+    }
+    
+    // Add competitors
+    data.competitorAnalyses.forEach((comp: any) => {
+      csv += `${comp.name},${comp.url},${comp.overallScore},${comp.subscores.aiUnderstanding},${comp.subscores.citationLikelihood},${comp.subscores.conversationalReadiness},${comp.subscores.contentStructure}\n`;
     });
     
-    csv += `Your Site,${data.auditHistory?.[0]?.overall_score || 'N/A'},Current,Position ${data.competitiveBenchmarks.yourRanking}\n`;
-    csv += `Industry Average,${data.competitiveBenchmarks.industryAverage},Benchmark,Average\n`;
+    // Add industry average
+    csv += `Industry Average,,${data.benchmarks?.industryAverage || 0},,,\n`;
+  }
+
+  if (reportType === 'roi_focused' && data.roiMetrics) {
+    csv += '\nROI Analysis\n';
+    csv += 'Metric,Value,Impact\n';
+    csv += `Traffic Increase,${data.roiMetrics.estimatedTrafficIncrease}%,Monthly\n`;
+    csv += `Revenue Impact,$${data.roiMetrics.estimatedRevenueImpact},Monthly\n`;
+    csv += `Cost Savings,$${data.roiMetrics.costSavingsFromAI},Monthly\n`;
+    csv += `Competitive Advantage,${data.roiMetrics.competitiveAdvantage} points,Above Industry Average\n`;
+    csv += `Brand Visibility Score,${data.roiMetrics.brandVisibilityScore},Brand Impact\n`;
+    csv += `Payback Period,${data.roiMetrics.paybackPeriod} months,Implementation\n`;
+    csv += `Annual ROI,${data.roiMetrics.totalROI}%,Year 1\n`;
+  }
+
+  if (reportType === 'citation') {
+    csv = 'Source,URL,Snippet,Date,Type,Confidence Score,Match Type\n';
+    
+    data.citations.forEach((citation: any) => {
+      // Escape quotes in CSV fields
+      const escapedSnippet = citation.snippet.replace(/"/g, '""');
+      csv += `"${citation.source}","${citation.url}","${escapedSnippet}","${citation.date}","${citation.type}",${citation.confidence_score || 0},"${citation.match_type || ''}"\n`;
+    });
   }
   
   return csv;

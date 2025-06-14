@@ -2,7 +2,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 interface ReportRequest {
-  reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive';
+  reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive' | 'roi_focused';
   reportData: any;
   reportName: string;
   format: 'html' | 'csv' | 'json';
@@ -169,6 +169,14 @@ function generateCSVReport(reportType: string, data: any): string {
     csv += `Industry,${data.profile?.industry || 'Not specified'}\n`;
     csv += `Websites,${data.profile?.websites?.length || 0}\n`;
     csv += `Competitors,${data.profile?.competitors?.length || 0}\n`;
+  } else if (reportType === 'roi_focused' && data.roiMetrics) {
+    csv = 'Metric,Value,Impact\n';
+    csv += `Traffic Increase,${data.roiMetrics.estimatedTrafficIncrease}%,Monthly\n`;
+    csv += `Revenue Impact,$${data.roiMetrics.estimatedRevenueImpact},Monthly\n`;
+    csv += `Cost Savings,$${data.roiMetrics.costSavingsFromAI},Monthly\n`;
+    csv += `Competitive Advantage,${data.roiMetrics.competitiveAdvantage} points,Above Industry Average\n`;
+    csv += `Payback Period,${data.roiMetrics.paybackPeriod} months,Implementation\n`;
+    csv += `Annual ROI,${data.roiMetrics.totalROI}%,Year 1\n`;
   }
   
   return csv;
@@ -966,6 +974,102 @@ function generateHTMLReport(reportType: string, data: any, reportName: string): 
       html += `
             </tbody>
           </table>
+        </div>
+      `;
+    }
+  } else if (reportType === 'roi_focused' && data.roiMetrics) {
+    html += `
+      <div class="report-section">
+        <h2 class="section-title">ROI & Business Impact Analysis</h2>
+        
+        <div class="score-card">
+          <div class="score-value">${data.roiMetrics.totalROI}%</div>
+          <div class="score-label">Annual ROI</div>
+        </div>
+        
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-value">${data.roiMetrics.estimatedTrafficIncrease}%</div>
+            <div class="metric-label">Traffic Increase</div>
+          </div>
+          
+          <div class="metric-card">
+            <div class="metric-value">$${data.roiMetrics.estimatedRevenueImpact.toLocaleString()}</div>
+            <div class="metric-label">Monthly Revenue Impact</div>
+          </div>
+          
+          <div class="metric-card">
+            <div class="metric-value">$${data.roiMetrics.costSavingsFromAI.toLocaleString()}</div>
+            <div class="metric-label">Monthly Cost Savings</div>
+          </div>
+          
+          <div class="metric-card">
+            <div class="metric-value">${data.roiMetrics.paybackPeriod}</div>
+            <div class="metric-label">Payback Period (months)</div>
+          </div>
+          
+          <div class="metric-card">
+            <div class="metric-value">${data.roiMetrics.competitiveAdvantage}</div>
+            <div class="metric-label">Competitive Advantage</div>
+          </div>
+          
+          <div class="metric-card">
+            <div class="metric-value">${data.roiMetrics.brandVisibilityScore}</div>
+            <div class="metric-label">Brand Visibility Score</div>
+          </div>
+        </div>
+        
+        <div class="chart-placeholder">
+          <p>ROI projection chart would appear here</p>
+        </div>
+        
+        <div style="background: var(--accent-light); border-radius: 10px; padding: 20px; margin-top: 20px;">
+          <h3 style="color: var(--text-dark); margin-bottom: 10px;">Business Impact Summary</h3>
+          <p>
+            Based on your current AI visibility score and improvement trajectory, we estimate a ${data.roiMetrics.estimatedTrafficIncrease}% increase in organic traffic from AI sources.
+            This translates to approximately $${data.roiMetrics.estimatedRevenueImpact.toLocaleString()} in additional monthly revenue and $${data.roiMetrics.costSavingsFromAI.toLocaleString()} in monthly cost savings from reduced paid search requirements.
+          </p>
+          <p>
+            With a payback period of ${data.roiMetrics.paybackPeriod} months, your annual ROI for AI visibility optimization is projected at ${data.roiMetrics.totalROI}%.
+          </p>
+        </div>
+      </div>
+    `;
+    
+    // Add latest audit data if available
+    if (data.auditHistory && data.auditHistory.length > 0) {
+      const latest = data.auditHistory[0];
+      
+      html += `
+        <div class="report-section">
+          <h2 class="section-title">AI Visibility Performance</h2>
+          
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-value">${latest.overall_score}</div>
+              <div class="metric-label">Overall Score</div>
+            </div>
+            
+            <div class="metric-card">
+              <div class="metric-value">${latest.ai_understanding}</div>
+              <div class="metric-label">AI Understanding</div>
+            </div>
+            
+            <div class="metric-card">
+              <div class="metric-value">${latest.citation_likelihood}</div>
+              <div class="metric-label">Citation Likelihood</div>
+            </div>
+            
+            <div class="metric-card">
+              <div class="metric-value">${latest.conversational_readiness}</div>
+              <div class="metric-label">Conversational</div>
+            </div>
+            
+            <div class="metric-card">
+              <div class="metric-value">${latest.content_structure}</div>
+              <div class="metric-label">Content Structure</div>
+            </div>
+          </div>
         </div>
       `;
     }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Download, Calendar, BarChart3, Target, Loader, X, TrendingUp, DollarSign, Users, Zap } from 'lucide-react';
+import { FileText, Download, Calendar, BarChart3, Target, Loader, X, TrendingUp, DollarSign, Users, Zap, CheckCircle, ArrowRight } from 'lucide-react';
 import { userDataService, type Report } from '../services/userDataService';
 import { apiService } from '../services/api';
 import { supabase } from '../lib/supabase';
@@ -14,6 +14,8 @@ interface ROIMetrics {
   costSavingsFromAI: number;
   competitiveAdvantage: number;
   brandVisibilityScore: number;
+  paybackPeriod: number;
+  totalROI: number;
 }
 
 interface ReportTemplate {
@@ -141,13 +143,27 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
     const revenuePerVisitor = 2.50; // Average revenue per visitor
     const adSpendReduction = 0.08; // 8% ad spend reduction per 10-point improvement
     const brandVisibilityMultiplier = 1.2;
+    const monthlyAdSpend = 5000; // Assumed monthly ad spend
+    const implementationCost = 2000; // Estimated implementation cost
+
+    const trafficIncrease = Math.round((improvement / 10) * baseTrafficMultiplier * 100);
+    const revenueImpact = Math.round((improvement / 10) * baseTrafficMultiplier * 1000 * revenuePerVisitor);
+    const costSavings = Math.round((improvement / 10) * adSpendReduction * monthlyAdSpend);
+    const competitiveAdvantage = Math.round(latestScore - 65); // Points above industry average
+    const brandVisibility = Math.round(latestScore * brandVisibilityMultiplier);
+    
+    const monthlyBenefit = revenueImpact + costSavings;
+    const paybackPeriod = implementationCost / (monthlyBenefit || 1);
+    const annualROI = ((monthlyBenefit * 12 - implementationCost) / implementationCost) * 100;
 
     return {
-      estimatedTrafficIncrease: Math.round((improvement / 10) * baseTrafficMultiplier * 100),
-      estimatedRevenueImpact: Math.round((improvement / 10) * baseTrafficMultiplier * 1000 * revenuePerVisitor),
-      costSavingsFromAI: Math.round((improvement / 10) * adSpendReduction * 5000), // Assuming $5k monthly ad spend
-      competitiveAdvantage: Math.round(latestScore - 65), // Points above industry average
-      brandVisibilityScore: Math.round(latestScore * brandVisibilityMultiplier)
+      estimatedTrafficIncrease: trafficIncrease,
+      estimatedRevenueImpact: revenueImpact,
+      costSavingsFromAI: costSavings,
+      competitiveAdvantage: competitiveAdvantage,
+      brandVisibilityScore: brandVisibility,
+      paybackPeriod: Math.round(paybackPeriod * 10) / 10,
+      totalROI: Math.round(annualROI)
     };
   };
 
