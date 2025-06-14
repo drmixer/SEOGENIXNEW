@@ -56,9 +56,10 @@ Deno.serve(async (req: Request) => {
       fileExtension = 'csv';
       reportContent = generateCSVReport(reportType, reportData);
     } else if (format === 'pdf') {
-      console.log('Generating PDF report (HTML format for demo)');
-      contentType = 'text/html'; // In a real implementation, this would be application/pdf
-      fileExtension = 'html'; // In a real implementation, this would be pdf
+      console.log('Generating HTML report for PDF');
+      // Set content type to text/html so browser renders it properly
+      contentType = 'text/html';
+      fileExtension = 'html';
       reportContent = generatePDFReport(reportType, reportData, reportName);
     } else {
       console.log('Generating JSON report');
@@ -73,6 +74,17 @@ Deno.serve(async (req: Request) => {
     const storagePath = `reports/${user.id}/${fileName}`;
     
     console.log(`Uploading report to storage: ${storagePath}`);
+    
+    // For HTML content, add proper doctype and content-type meta tag
+    if (format === 'pdf' && !reportContent.includes('<!DOCTYPE html>')) {
+      reportContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  ${reportContent.substring(reportContent.indexOf('<head>') + 6, reportContent.indexOf('</head>'))}
+</head>
+${reportContent.substring(reportContent.indexOf('<body>'))}`;
+    }
     
     // Upload the file to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -181,294 +193,290 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
   // For now, return styled HTML that could be converted to PDF
   
   let html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>${reportName}</title>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        /* Modern, clean styling for reports */
-        :root {
-          --primary-color: #8B5CF6;
-          --primary-light: #EDE9FE;
-          --secondary-color: #14B8A6;
-          --secondary-light: #CCFBF1;
-          --accent-color: #F59E0B;
-          --accent-light: #FEF3C7;
-          --text-dark: #1F2937;
-          --text-medium: #4B5563;
-          --text-light: #9CA3AF;
-          --background: #FFFFFF;
-          --background-alt: #F9FAFB;
-          --border-color: #E5E7EB;
-          --success: #10B981;
-          --warning: #F59E0B;
-          --error: #EF4444;
-        }
-        
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-        
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          line-height: 1.6;
-          color: var(--text-dark);
-          background-color: var(--background);
-          padding: 40px;
-          font-size: 14px;
-        }
-        
-        .report-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          background: var(--background);
-          border-radius: 12px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-          overflow: hidden;
-        }
-        
-        .report-header {
-          background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-          color: white;
-          padding: 30px 40px;
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .report-header::after {
-          content: '';
-          position: absolute;
-          top: 0;
-          right: 0;
-          bottom: 0;
-          left: 0;
-          background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0));
-          pointer-events: none;
-        }
-        
-        .report-title {
-          font-size: 28px;
-          font-weight: 700;
-          margin-bottom: 8px;
-        }
-        
-        .report-meta {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 14px;
-          opacity: 0.9;
-        }
-        
-        .report-body {
-          padding: 40px;
-        }
-        
-        .report-section {
-          margin-bottom: 40px;
-        }
-        
-        .section-title {
-          font-size: 20px;
-          font-weight: 600;
-          margin-bottom: 20px;
-          color: var(--primary-color);
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        
-        .section-title::after {
-          content: '';
-          flex-grow: 1;
-          height: 1px;
-          background: var(--border-color);
-          margin-left: 10px;
-        }
-        
-        .score-card {
-          background: linear-gradient(135deg, var(--primary-light), var(--secondary-light));
-          border-radius: 12px;
-          padding: 30px;
-          text-align: center;
-          margin-bottom: 30px;
-        }
-        
-        .score-value {
-          font-size: 64px;
-          font-weight: 700;
-          color: var(--primary-color);
-          line-height: 1;
-          margin-bottom: 10px;
-        }
-        
-        .score-label {
-          font-size: 16px;
-          color: var(--text-medium);
-        }
-        
-        .metrics-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-          gap: 20px;
-          margin-bottom: 30px;
-        }
-        
-        .metric-card {
-          background: var(--background-alt);
-          border-radius: 10px;
-          padding: 20px;
-          border-left: 4px solid var(--primary-color);
-        }
-        
-        .metric-value {
-          font-size: 24px;
-          font-weight: 600;
-          margin-bottom: 5px;
-        }
-        
-        .metric-label {
-          font-size: 14px;
-          color: var(--text-medium);
-        }
-        
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 20px 0;
-          font-size: 14px;
-        }
-        
-        th {
-          background: var(--primary-light);
-          color: var(--primary-color);
-          font-weight: 600;
-          text-align: left;
-          padding: 12px 15px;
-        }
-        
-        td {
-          padding: 10px 15px;
-          border-bottom: 1px solid var(--border-color);
-        }
-        
-        tr:nth-child(even) {
-          background: var(--background-alt);
-        }
-        
-        .recommendations {
-          background: var(--secondary-light);
-          border-radius: 10px;
-          padding: 25px;
-          margin-top: 30px;
-        }
-        
-        .recommendations-title {
-          color: var(--secondary-color);
-          font-size: 18px;
-          font-weight: 600;
-          margin-bottom: 15px;
-        }
-        
-        .recommendation-item {
-          background: white;
-          border-radius: 8px;
-          padding: 15px;
-          margin-bottom: 10px;
-          border-left: 3px solid var(--secondary-color);
-        }
-        
-        .chart-container {
-          background: var(--background-alt);
-          border-radius: 10px;
-          padding: 20px;
-          height: 300px;
-          margin: 20px 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--text-medium);
-        }
-        
-        .report-footer {
-          margin-top: 40px;
-          padding-top: 20px;
-          border-top: 1px solid var(--border-color);
-          display: flex;
-          justify-content: space-between;
-          color: var(--text-light);
-          font-size: 12px;
-        }
-        
-        .badge {
-          display: inline-block;
-          padding: 4px 8px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 500;
-        }
-        
-        .badge-success {
-          background: var(--success);
-          color: white;
-        }
-        
-        .badge-warning {
-          background: var(--warning);
-          color: white;
-        }
-        
-        .badge-error {
-          background: var(--error);
-          color: white;
-        }
-        
-        .snippet-container {
-          background: var(--background-alt);
-          border-radius: 8px;
-          padding: 15px;
-          margin-bottom: 15px;
-          border: 1px solid var(--border-color);
-        }
-        
-        .snippet-header {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 10px;
-        }
-        
-        .snippet-source {
-          font-weight: 600;
-        }
-        
-        .snippet-content {
-          font-size: 14px;
-          color: var(--text-medium);
-          line-height: 1.5;
-        }
-        
-        .snippet-meta {
-          display: flex;
-          justify-content: space-between;
-          font-size: 12px;
-          color: var(--text-light);
-          margin-top: 10px;
-        }
-        
-        .link {
-          color: var(--primary-color);
-          text-decoration: none;
-        }
-        
-        .link:hover {
-          text-decoration: underline;
-        }
-      </style>
-    </head>
+    <title>${reportName}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      /* Modern, clean styling for reports */
+      :root {
+        --primary-color: #8B5CF6;
+        --primary-light: #EDE9FE;
+        --secondary-color: #14B8A6;
+        --secondary-light: #CCFBF1;
+        --accent-color: #F59E0B;
+        --accent-light: #FEF3C7;
+        --text-dark: #1F2937;
+        --text-medium: #4B5563;
+        --text-light: #9CA3AF;
+        --background: #FFFFFF;
+        --background-alt: #F9FAFB;
+        --border-color: #E5E7EB;
+        --success: #10B981;
+        --warning: #F59E0B;
+        --error: #EF4444;
+      }
+      
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        color: var(--text-dark);
+        background-color: var(--background);
+        padding: 40px;
+        font-size: 14px;
+      }
+      
+      .report-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: var(--background);
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+      }
+      
+      .report-header {
+        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+        color: white;
+        padding: 30px 40px;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .report-header::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0));
+        pointer-events: none;
+      }
+      
+      .report-title {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      
+      .report-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 14px;
+        opacity: 0.9;
+      }
+      
+      .report-body {
+        padding: 40px;
+      }
+      
+      .report-section {
+        margin-bottom: 40px;
+      }
+      
+      .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        color: var(--primary-color);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .section-title::after {
+        content: '';
+        flex-grow: 1;
+        height: 1px;
+        background: var(--border-color);
+        margin-left: 10px;
+      }
+      
+      .score-card {
+        background: linear-gradient(135deg, var(--primary-light), var(--secondary-light));
+        border-radius: 12px;
+        padding: 30px;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      
+      .score-value {
+        font-size: 64px;
+        font-weight: 700;
+        color: var(--primary-color);
+        line-height: 1;
+        margin-bottom: 10px;
+      }
+      
+      .score-label {
+        font-size: 16px;
+        color: var(--text-medium);
+      }
+      
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+      }
+      
+      .metric-card {
+        background: var(--background-alt);
+        border-radius: 10px;
+        padding: 20px;
+        border-left: 4px solid var(--primary-color);
+      }
+      
+      .metric-value {
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+      
+      .metric-label {
+        font-size: 14px;
+        color: var(--text-medium);
+      }
+      
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        font-size: 14px;
+      }
+      
+      th {
+        background: var(--primary-light);
+        color: var(--primary-color);
+        font-weight: 600;
+        text-align: left;
+        padding: 12px 15px;
+      }
+      
+      td {
+        padding: 10px 15px;
+        border-bottom: 1px solid var(--border-color);
+      }
+      
+      tr:nth-child(even) {
+        background: var(--background-alt);
+      }
+      
+      .recommendations {
+        background: var(--secondary-light);
+        border-radius: 10px;
+        padding: 25px;
+        margin-top: 30px;
+      }
+      
+      .recommendations-title {
+        color: var(--secondary-color);
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 15px;
+      }
+      
+      .recommendation-item {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-left: 3px solid var(--secondary-color);
+      }
+      
+      .chart-container {
+        background: var(--background-alt);
+        border-radius: 10px;
+        padding: 20px;
+        height: 300px;
+        margin: 20px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-medium);
+      }
+      
+      .report-footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        color: var(--text-light);
+        font-size: 12px;
+      }
+      
+      .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      
+      .badge-success {
+        background: var(--success);
+        color: white;
+      }
+      
+      .badge-warning {
+        background: var(--warning);
+        color: white;
+      }
+      
+      .badge-error {
+        background: var(--error);
+        color: white;
+      }
+      
+      .snippet-container {
+        background: var(--background-alt);
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid var(--border-color);
+      }
+      
+      .snippet-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      
+      .snippet-source {
+        font-weight: 600;
+      }
+      
+      .snippet-content {
+        font-size: 14px;
+        color: var(--text-medium);
+        line-height: 1.5;
+      }
+      
+      .snippet-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--text-light);
+        margin-top: 10px;
+      }
+      
+      .link {
+        color: var(--primary-color);
+        text-decoration: none;
+      }
+      
+      .link:hover {
+        text-decoration: underline;
+      }
+    </style>
     <body>
       <div class="report-container">
         <div class="report-header">
@@ -961,7 +969,6 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
         </div>
       </div>
     </body>
-    </html>
   `;
 
   return html;
