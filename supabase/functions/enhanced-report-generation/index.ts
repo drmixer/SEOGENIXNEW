@@ -102,8 +102,9 @@ Deno.serve(async (req: Request) => {
       fileExtension = 'csv';
       reportContent = generateEnhancedCSVReport(reportType, reportData, config);
     } else if (format === 'pdf') {
-      contentType = 'application/pdf';
-      fileExtension = 'pdf';
+      // Use text/html content type so browser can render it properly
+      contentType = 'text/html';
+      fileExtension = 'html';
       reportContent = generateEnhancedPDFReport(reportType, reportData, reportName, template, config);
     } else {
       reportContent = JSON.stringify({

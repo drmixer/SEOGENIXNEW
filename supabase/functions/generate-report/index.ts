@@ -56,18 +56,11 @@ Deno.serve(async (req: Request) => {
       fileExtension = 'csv';
       reportContent = generateCSVReport(reportType, reportData);
     } else if (format === 'pdf') {
-      console.log('Generating PDF report');
-      contentType = 'application/pdf';
-      fileExtension = 'pdf';
-      
-      // Generate HTML content first
-      const htmlContent = generatePDFReport(reportType, reportData, reportName);
-      
-      // In a real implementation, we would convert HTML to PDF here
-      // For now, we'll set the content type to indicate it's a PDF
-      // but the content will actually be HTML that can be rendered as PDF
-      contentType = 'application/pdf';
-      reportContent = htmlContent;
+      console.log('Generating HTML report (for PDF viewing)');
+      // Use text/html content type so browser can render it properly
+      contentType = 'text/html';
+      fileExtension = 'html';
+      reportContent = generatePDFReport(reportType, reportData, reportName);
     } else {
       console.log('Generating JSON report');
       reportContent = JSON.stringify(reportData, null, 2);
@@ -193,6 +186,8 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
     <html>
     <head>
       <title>${reportName}</title>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
         body { 
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
@@ -288,7 +283,7 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
           text-align: left; 
         }
         th { 
-          background-color: #8B5CF6; 
+          background: #8B5CF6; 
           color: white; 
         }
         tr:nth-child(even) { background-color: #f8fafc; }
@@ -314,6 +309,21 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
           font-size: 14px;
           display: flex;
           justify-content: space-between;
+        }
+        h1, h2, h3, h4, h5, h6 {
+          color: #1f2937;
+          margin-top: 1.5em;
+          margin-bottom: 0.5em;
+        }
+        p {
+          margin-bottom: 1em;
+        }
+        ul, ol {
+          margin-bottom: 1em;
+          padding-left: 1.5em;
+        }
+        li {
+          margin-bottom: 0.5em;
         }
       </style>
     </head>

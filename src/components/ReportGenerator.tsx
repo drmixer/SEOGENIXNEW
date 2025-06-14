@@ -234,16 +234,9 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
       setSelectedTemplate(null);
       setReportConfig({ ...reportConfig, name: '' });
 
-      // Download the report
+      // Open the report in a new tab
       if (response.downloadUrl) {
-        // Create a temporary link element to trigger the download
-        const link = document.createElement('a');
-        link.href = response.downloadUrl;
-        link.target = '_blank';
-        link.download = response.fileName || 'report.pdf';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        window.open(response.downloadUrl, '_blank');
       }
 
     } catch (error) {
