@@ -748,7 +748,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                     </div>
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">Ready to Get Started?</h2>
                     <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
-                      Run your first AI Visibility Audit to see how well your content is optimized for AI systems like ChatGPT, Claude, and voice assistants.
+                      Run your first AI visibility audit to see how well your content is optimized for AI systems like ChatGPT, Claude, and voice assistants.
                     </p>
                     <button
                       onClick={() => setActiveSection('audit')}

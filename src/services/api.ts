@@ -417,6 +417,29 @@ export const apiService = {
     return discoveryPromise;
   },
 
+  // Real-time Content Analysis
+  async analyzeContentRealTime(content: string, keywords: string[]) {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/real-time-content-analysis`, { content, keywords });
+    
+    if (pendingApiRequests.has(cacheKey)) {
+      console.log('Real-time analysis request already in progress, returning existing promise');
+      return pendingApiRequests.get(cacheKey);
+    }
+    
+    const analysisPromise = apiCall(`${API_BASE_URL}/real-time-content-analysis`, {
+      method: 'POST',
+      body: JSON.stringify({ content, keywords })
+    });
+    
+    pendingApiRequests.set(cacheKey, analysisPromise);
+    
+    analysisPromise.finally(() => {
+      pendingApiRequests.delete(cacheKey);
+    });
+    
+    return analysisPromise;
+  },
+
   // Report Generator
   async generateReport(
     reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive' | 'roi_focused',

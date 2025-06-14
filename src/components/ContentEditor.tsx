@@ -383,7 +383,9 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Content Type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Content Type
+                </label>
                 <select
                   value={contentType}
                   onChange={(e) => setContentType(e.target.value as any)}
@@ -396,7 +398,9 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Target Keywords</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Target Keywords
+                </label>
                 <input
                   type="text"
                   value={targetKeywords}
