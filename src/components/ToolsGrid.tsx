@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   FileText, 
   Shield, 
@@ -58,6 +58,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [selectedCompetitor, setSelectedCompetitor] = useState<string>('');
   const [activeSite, setActiveSite] = useState<string>(selectedWebsite || '');
   const [schemaType, setSchemaType] = useState<'article' | 'product' | 'organization' | 'person' | 'faq' | 'howto'>('article');
+  const [contentGenerationType, setContentGenerationType] = useState<'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions'>('faq');
 
   // Enable all tools for development/testing
   const isDevelopment = true;
@@ -273,7 +274,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
         case 'generator':
           result = await apiService.generateAIContent(
-            'faq',
+            contentGenerationType,
             userProfile?.industry || 'Technology',
             ['AI', 'SEO', 'optimization'],
             'professional',
@@ -589,7 +590,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
               </div>
               
               <div className="max-h-60 overflow-y-auto">
-                {result.generatedContent?.faqs && (
+                {result.generatedContent?.faqs && contentGenerationType === 'faq' && (
                   <div className="space-y-2">
                     <h5 className="font-medium text-gray-800">Generated FAQs:</h5>
                     {result.generatedContent.faqs.slice(0, 3).map((faq: any, index: number) => (
@@ -598,6 +599,32 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                         <div className="text-gray-700 text-sm mt-1">{faq.answer}</div>
                       </div>
                     ))}
+                  </div>
+                )}
+                
+                {result.generatedContent?.metaTags && contentGenerationType === 'meta-tags' && (
+                  <div className="space-y-2">
+                    <h5 className="font-medium text-gray-800">Generated Meta Tags:</h5>
+                    <div className="bg-white p-3 rounded border">
+                      <div className="font-medium text-gray-900">Title</div>
+                      <div className="text-gray-700 text-sm mt-1">{result.generatedContent.metaTags.title}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <div className="font-medium text-gray-900">Description</div>
+                      <div className="text-gray-700 text-sm mt-1">{result.generatedContent.metaTags.description}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <div className="font-medium text-gray-900">Keywords</div>
+                      <div className="text-gray-700 text-sm mt-1">{result.generatedContent.metaTags.keywords}</div>
+                    </div>
+                  </div>
+                )}
+                
+                {contentGenerationType !== 'faq' && contentGenerationType !== 'meta-tags' && (
+                  <div className="bg-white p-3 rounded border">
+                    <pre className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {result.generatedContent?.raw || JSON.stringify(result.generatedContent, null, 2)}
+                    </pre>
                   </div>
                 )}
               </div>
@@ -859,6 +886,34 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     );
   };
 
+  // Content generation type selector
+  const ContentGenerationTypeSelector = () => {
+    return (
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Content Type
+        </label>
+        <div className="relative">
+          <select
+            value={contentGenerationType}
+            onChange={(e) => setContentGenerationType(e.target.value as any)}
+            className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          >
+            <option value="faq">FAQ Content</option>
+            <option value="meta-tags">Meta Tags</option>
+            <option value="snippets">Featured Snippets</option>
+            <option value="headings">Heading Structure</option>
+            <option value="descriptions">Content Descriptions</option>
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          Select the type of content you want to generate
+        </p>
+      </div>
+    );
+  };
+
   if (showPreview) {
     return (
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
@@ -930,8 +985,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             {/* Tool-specific configuration */}
             {toolId === 'schema' && <SchemaTypeSelector />}
             
-            {/* Site Selector */}
-            {toolId !== 'schema' && <SiteSelector />}
+            {/* Site Selector - Added for Schema Generator */}
+            <SiteSelector />
+            
+            {/* Content Generation Type Selector */}
+            {toolId === 'generator' && <ContentGenerationTypeSelector />}
             
             {toolId === 'competitive' && userProfile?.competitors?.length > 0 && (
               <div className="mb-4">
