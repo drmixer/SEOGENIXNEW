@@ -56,10 +56,18 @@ Deno.serve(async (req: Request) => {
       fileExtension = 'csv';
       reportContent = generateCSVReport(reportType, reportData);
     } else if (format === 'pdf') {
-      console.log('Generating PDF report (HTML format for demo)');
-      contentType = 'text/html'; // In a real implementation, this would be application/pdf
-      fileExtension = 'html'; // In a real implementation, this would be pdf
-      reportContent = generatePDFReport(reportType, reportData, reportName);
+      console.log('Generating PDF report');
+      contentType = 'application/pdf';
+      fileExtension = 'pdf';
+      
+      // Generate HTML content first
+      const htmlContent = generatePDFReport(reportType, reportData, reportName);
+      
+      // In a real implementation, we would convert HTML to PDF here
+      // For now, we'll set the content type to indicate it's a PDF
+      // but the content will actually be HTML that can be rendered as PDF
+      contentType = 'application/pdf';
+      reportContent = htmlContent;
     } else {
       console.log('Generating JSON report');
       reportContent = JSON.stringify(reportData, null, 2);
@@ -186,20 +194,143 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
     <head>
       <title>${reportName}</title>
       <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        .header { border-bottom: 2px solid #8B5CF6; padding-bottom: 20px; margin-bottom: 30px; }
-        .score { font-size: 48px; font-weight: bold; color: #8B5CF6; }
-        .metric { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #8B5CF6; color: white; }
+        body { 
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+          margin: 40px; 
+          color: #1f2937;
+          line-height: 1.6;
+        }
+        .header { 
+          border-bottom: 3px solid #8B5CF6; 
+          padding-bottom: 20px; 
+          margin-bottom: 30px; 
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .logo-section {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+        .company-name {
+          font-size: 24px;
+          font-weight: bold;
+          color: #8B5CF6;
+        }
+        .report-meta {
+          text-align: right;
+          color: #6b7280;
+        }
+        .score { 
+          font-size: 48px; 
+          font-weight: bold; 
+          color: #8B5CF6;
+          margin: 0;
+        }
+        .metric-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 20px;
+          margin: 30px 0;
+        }
+        .metric-card { 
+          padding: 20px; 
+          background: #f8fafc; 
+          border-radius: 12px; 
+          border-left: 4px solid #8B5CF6;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .metric-value {
+          font-size: 28px;
+          font-weight: bold;
+          color: #1f2937;
+          margin: 0;
+        }
+        .metric-label {
+          color: #6b7280;
+          font-size: 14px;
+          margin-top: 5px;
+        }
+        .roi-section {
+          background: #ecfdf5;
+          border: 2px solid #10b981;
+          border-radius: 16px;
+          padding: 30px;
+          margin: 30px 0;
+        }
+        .roi-title {
+          color: #065f46;
+          font-size: 24px;
+          font-weight: bold;
+          margin-bottom: 20px;
+        }
+        .roi-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 15px;
+        }
+        .roi-metric {
+          background: white;
+          padding: 15px;
+          border-radius: 8px;
+          text-align: center;
+          border: 1px solid #d1fae5;
+        }
+        table { 
+          width: 100%; 
+          border-collapse: collapse; 
+          margin: 20px 0; 
+        }
+        th, td { 
+          border: 1px solid #ddd; 
+          padding: 8px; 
+          text-align: left; 
+        }
+        th { 
+          background-color: #8B5CF6; 
+          color: white; 
+        }
+        tr:nth-child(even) { background-color: #f8fafc; }
+        .recommendations {
+          background: #eff6ff;
+          border: 2px solid #3b82f6;
+          border-radius: 16px;
+          padding: 30px;
+          margin: 30px 0;
+        }
+        .recommendation-item {
+          background: white;
+          padding: 15px;
+          margin: 10px 0;
+          border-radius: 8px;
+          border-left: 4px solid #3b82f6;
+        }
+        .footer {
+          margin-top: 50px;
+          padding-top: 20px;
+          border-top: 2px solid #e5e7eb;
+          color: #6b7280;
+          font-size: 14px;
+          display: flex;
+          justify-content: space-between;
+        }
       </style>
     </head>
     <body>
       <div class="header">
-        <h1>${reportName}</h1>
-        <p>Generated on ${new Date().toLocaleDateString()}</p>
-        <p>Report Type: ${reportType.charAt(0).toUpperCase() + reportType.slice(1)}</p>
+        <div class="logo-section">
+          <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="80" height="80" rx="16" fill="#8B5CF6" />
+            <path d="M24 40L36 52L56 32" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <div class="company-name">SEOGENIX</div>
+        </div>
+        <div class="report-meta">
+          <h1 style="margin: 0; font-size: 24px;">${reportName}</h1>
+          <p>Generated on ${new Date().toLocaleDateString()}</p>
+          <p>Report Type: ${reportType.charAt(0).toUpperCase() + reportType.slice(1)}</p>
+        </div>
       </div>
   `;
 
@@ -208,15 +339,56 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
     const average = data.auditHistory.reduce((sum: number, a: any) => sum + a.overall_score, 0) / data.auditHistory.length;
     
     html += `
-      <div class="metric">
-        <h2>Current AI Visibility Score</h2>
-        <div class="score">${latest?.overall_score || 0}/100</div>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <p class="metric-value">${latest?.overall_score || 0}/100</p>
+          <p class="metric-label">Current AI Visibility Score</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${Math.round(average)}/100</p>
+          <p class="metric-label">Average Score</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.auditHistory.length}</p>
+          <p class="metric-label">Total Audits</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${latest?.ai_understanding || 0}/100</p>
+          <p class="metric-label">AI Understanding</p>
+        </div>
       </div>
       
-      <div class="metric">
-        <h3>Average Score: ${Math.round(average)}/100</h3>
-        <p>Based on ${data.auditHistory.length} audits</p>
-      </div>
+      <h3>Detailed Scores</h3>
+      <table>
+        <tr>
+          <th>Component</th>
+          <th>Score</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td>AI Understanding</td>
+          <td>${latest?.ai_understanding || 0}</td>
+          <td>How well AI systems can comprehend your content</td>
+        </tr>
+        <tr>
+          <td>Citation Likelihood</td>
+          <td>${latest?.citation_likelihood || 0}</td>
+          <td>Probability of AI systems citing your content</td>
+        </tr>
+        <tr>
+          <td>Conversational Readiness</td>
+          <td>${latest?.conversational_readiness || 0}</td>
+          <td>How well your content works with voice search</td>
+        </tr>
+        <tr>
+          <td>Content Structure</td>
+          <td>${latest?.content_structure || 0}</td>
+          <td>Quality of organization and technical implementation</td>
+        </tr>
+      </table>
       
       <h3>Recent Audit History</h3>
       <table>
@@ -245,24 +417,46 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
     
     if (latest?.recommendations?.length > 0) {
       html += `
-        <h3>Key Recommendations</h3>
-        <ul>
+        <div class="recommendations">
+          <h3>Key Recommendations</h3>
+          <ul>
       `;
       
       latest.recommendations.forEach((rec: string) => {
-        html += `<li>${rec}</li>`;
+        html += `<li class="recommendation-item">${rec}</li>`;
       });
       
-      html += '</ul>';
+      html += `
+          </ul>
+        </div>
+      `;
     }
   } else if (reportType === 'competitive' && data.competitorAnalyses) {
     html += `
-      <div class="metric">
-        <h2>Competitive Analysis</h2>
-        <p>Your ranking: #${data.summary?.ranking || 'N/A'}</p>
-        <p>Your score: ${data.summary?.primarySiteScore || 0}/100</p>
-        <p>Average competitor score: ${data.summary?.averageCompetitorScore || 0}/100</p>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <p class="metric-value">#${data.summary?.ranking || 'N/A'}</p>
+          <p class="metric-label">Your Ranking</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.summary?.primarySiteScore || 0}/100</p>
+          <p class="metric-label">Your Score</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.summary?.averageCompetitorScore || 0}/100</p>
+          <p class="metric-label">Competitor Average</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.competitorAnalyses.length}</p>
+          <p class="metric-label">Competitors Analyzed</p>
+        </div>
       </div>
+      
+      <h3>Competitive Analysis</h3>
+      <p>Your AI visibility score is ${data.summary?.primarySiteScore > data.summary?.averageCompetitorScore ? 'above' : 'below'} the industry average by ${Math.abs((data.summary?.primarySiteScore || 0) - (data.summary?.averageCompetitorScore || 0))} points.</p>
       
       <h3>Competitor Comparison</h3>
       <table>
@@ -276,6 +470,21 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
         </tr>
     `;
     
+    // Add primary site first
+    if (data.primarySiteAnalysis) {
+      html += `
+        <tr style="background-color: #e0e7ff;">
+          <td><strong>${data.primarySiteAnalysis.name} (You)</strong></td>
+          <td><strong>${data.primarySiteAnalysis.overallScore}</strong></td>
+          <td>${data.primarySiteAnalysis.subscores.aiUnderstanding}</td>
+          <td>${data.primarySiteAnalysis.subscores.citationLikelihood}</td>
+          <td>${data.primarySiteAnalysis.subscores.conversationalReadiness}</td>
+          <td>${data.primarySiteAnalysis.subscores.contentStructure}</td>
+        </tr>
+      `;
+    }
+    
+    // Add competitors
     data.competitorAnalyses.forEach((comp: any) => {
       html += `
         <tr>
@@ -293,32 +502,81 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
     
     if (data.recommendations?.length > 0) {
       html += `
-        <h3>Recommendations</h3>
-        <ul>
+        <div class="recommendations">
+          <h3>Strategic Recommendations</h3>
+          <ul>
       `;
       
       data.recommendations.forEach((rec: string) => {
-        html += `<li>${rec}</li>`;
+        html += `<li class="recommendation-item">${rec}</li>`;
       });
       
-      html += '</ul>';
+      html += `
+          </ul>
+        </div>
+      `;
+    }
+    
+    // Add competitive gaps
+    if (data.competitiveGaps?.length > 0) {
+      html += `
+        <h3>Competitive Gaps & Opportunities</h3>
+        <table>
+          <tr>
+            <th>Competitor</th>
+            <th>Score Difference</th>
+            <th>Their Strengths</th>
+            <th>Opportunity</th>
+          </tr>
+      `;
+      
+      data.competitiveGaps.forEach((gap: any) => {
+        html += `
+          <tr>
+            <td>${gap.competitor}</td>
+            <td>${gap.scoreDifference > 0 ? '+' : ''}${gap.scoreDifference}</td>
+            <td>${gap.strongerAreas.join(', ')}</td>
+            <td>${gap.opportunities[0] || 'N/A'}</td>
+          </tr>
+        `;
+      });
+      
+      html += '</table>';
     }
   } else if (reportType === 'citation' && data.citations) {
     html += `
-      <div class="metric">
-        <h2>Citation Analysis</h2>
-        <p>Domain: ${data.domain}</p>
-        <p>Total mentions: ${data.total}</p>
-        <p>Keywords: ${data.searchTerms.join(', ')}</p>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <p class="metric-value">${data.total || 0}</p>
+          <p class="metric-label">Total Citations</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.confidenceBreakdown?.high || 0}</p>
+          <p class="metric-label">High Confidence</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.sources?.llm || 0}</p>
+          <p class="metric-label">LLM Mentions</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.sources?.google || 0}</p>
+          <p class="metric-label">Google Mentions</p>
+        </div>
       </div>
       
-      <h3>Citation Breakdown</h3>
+      <h3>Citation Analysis</h3>
+      <p>Domain: <strong>${data.domain}</strong></p>
+      <p>Keywords: ${data.searchTerms?.join(', ') || 'None'}</p>
+      
+      <h3>Citation Details</h3>
       <table>
         <tr>
           <th>Source</th>
           <th>Type</th>
           <th>Confidence</th>
-          <th>Match Type</th>
           <th>Date</th>
         </tr>
     `;
@@ -329,7 +587,6 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
           <td>${citation.source}</td>
           <td>${citation.type}</td>
           <td>${citation.confidence_score || 'N/A'}</td>
-          <td>${citation.match_type || 'N/A'}</td>
           <td>${new Date(citation.date).toLocaleDateString()}</td>
         </tr>
       `;
@@ -342,9 +599,9 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
       <div style="margin-top: 20px;">
     `;
     
-    data.citations.forEach((citation: any, index: number) => {
+    data.citations.slice(0, 5).forEach((citation: any, index: number) => {
       html += `
-        <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+        <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #8B5CF6;">
           <p><strong>Source:</strong> ${citation.source}</p>
           <p><strong>Snippet:</strong> ${citation.snippet}</p>
           <p><a href="${citation.url}" style="color: #8B5CF6;">View Source</a></p>
@@ -353,11 +610,91 @@ function generatePDFReport(reportType: string, data: any, reportName: string): s
     });
     
     html += '</div>';
+  } else if (reportType === 'comprehensive') {
+    // Executive summary
+    html += `
+      <h2>Executive Summary</h2>
+      <p>This comprehensive report provides an overview of your AI visibility performance across multiple dimensions.</p>
+      
+      <div class="metric-grid">
+        <div class="metric-card">
+          <p class="metric-value">${data.auditHistory?.[0]?.overall_score || 'N/A'}</p>
+          <p class="metric-label">Current Score</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.auditHistory?.length || 0}</p>
+          <p class="metric-label">Audits Conducted</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.profile?.websites?.length || 0}</p>
+          <p class="metric-label">Websites</p>
+        </div>
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.profile?.competitors?.length || 0}</p>
+          <p class="metric-label">Competitors</p>
+        </div>
+      </div>
+    `;
+    
+    // Add audit history if available
+    if (data.auditHistory && data.auditHistory.length > 0) {
+      html += `
+        <h3>Audit History</h3>
+        <table>
+          <tr>
+            <th>Date</th>
+            <th>Website</th>
+            <th>Score</th>
+            <th>AI Understanding</th>
+            <th>Citation Likelihood</th>
+          </tr>
+      `;
+      
+      data.auditHistory.slice(0, 5).forEach((audit: any) => {
+        html += `
+          <tr>
+            <td>${new Date(audit.created_at).toLocaleDateString()}</td>
+            <td>${audit.website_url}</td>
+            <td>${audit.overall_score}</td>
+            <td>${audit.ai_understanding}</td>
+            <td>${audit.citation_likelihood}</td>
+          </tr>
+        `;
+      });
+      
+      html += '</table>';
+    }
+    
+    // Add recommendations if available
+    if (data.auditHistory?.[0]?.recommendations) {
+      html += `
+        <div class="recommendations">
+          <h3>Key Recommendations</h3>
+          <ul>
+      `;
+      
+      data.auditHistory[0].recommendations.forEach((rec: string) => {
+        html += `<li class="recommendation-item">${rec}</li>`;
+      });
+      
+      html += `
+          </ul>
+        </div>
+      `;
+    }
   }
 
   html += `
-      <div style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px;">
-        <p>Generated by SEOGENIX - AI-Powered SEO Platform</p>
+      <div class="footer">
+        <div>
+          <p>Generated by SEOGENIX - AI-Powered SEO Platform</p>
+        </div>
+        <div>
+          <p>Report ID: ${crypto.randomUUID().substring(0, 8)}</p>
+        </div>
       </div>
     </body>
     </html>

@@ -238,6 +238,8 @@ function generateEnhancedPDFReport(reportType: string, data: any, reportName: st
     <html>
     <head>
       <title>${reportName}</title>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
         body { 
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
@@ -271,9 +273,7 @@ function generateEnhancedPDFReport(reportType: string, data: any, reportName: st
         .score { 
           font-size: 48px; 
           font-weight: bold; 
-          background: linear-gradient(135deg, #8B5CF6, #14B8A6);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
+          color: #8B5CF6;
           margin: 0;
         }
         .metric-grid {
@@ -284,7 +284,7 @@ function generateEnhancedPDFReport(reportType: string, data: any, reportName: st
         }
         .metric-card { 
           padding: 20px; 
-          background: linear-gradient(135deg, #f8fafc, #f1f5f9); 
+          background: #f8fafc; 
           border-radius: 12px; 
           border-left: 4px solid #8B5CF6;
           box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -301,7 +301,7 @@ function generateEnhancedPDFReport(reportType: string, data: any, reportName: st
           margin-top: 5px;
         }
         .roi-section {
-          background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+          background: #ecfdf5;
           border: 2px solid #10b981;
           border-radius: 16px;
           padding: 30px;
@@ -329,7 +329,7 @@ function generateEnhancedPDFReport(reportType: string, data: any, reportName: st
           border: 1px solid #d1fae5;
         }
         .competitive-section {
-          background: linear-gradient(135deg, #fef3c7, #fde68a);
+          background: #fef3c7;
           border: 2px solid #f59e0b;
           border-radius: 16px;
           padding: 30px;
@@ -350,13 +350,13 @@ function generateEnhancedPDFReport(reportType: string, data: any, reportName: st
           text-align: left; 
         }
         th { 
-          background: linear-gradient(135deg, #8B5CF6, #7C3AED); 
+          background: #8B5CF6; 
           color: white; 
           font-weight: 600;
         }
         tr:nth-child(even) { background-color: #f8fafc; }
         .recommendations {
-          background: linear-gradient(135deg, #eff6ff, #dbeafe);
+          background: #eff6ff;
           border: 2px solid #3b82f6;
           border-radius: 16px;
           padding: 30px;
@@ -386,6 +386,21 @@ function generateEnhancedPDFReport(reportType: string, data: any, reportName: st
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
           height: 300px;
         }
+        h1, h2, h3, h4, h5, h6 {
+          color: #1f2937;
+          margin-top: 1.5em;
+          margin-bottom: 0.5em;
+        }
+        p {
+          margin-bottom: 1em;
+        }
+        ul, ol {
+          margin-bottom: 1em;
+          padding-left: 1.5em;
+        }
+        li {
+          margin-bottom: 0.5em;
+        }
       </style>
     </head>
     <body>
@@ -394,14 +409,8 @@ function generateEnhancedPDFReport(reportType: string, data: any, reportName: st
           ${config?.brandingOptions?.includeLogo 
             ? `<img src="https://via.placeholder.com/80x80" alt="Logo" />`
             : `<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="80" height="80" rx="16" fill="url(#paint0_linear)" />
+                <rect width="80" height="80" rx="16" fill="#8B5CF6" />
                 <path d="M24 40L36 52L56 32" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
-                <defs>
-                  <linearGradient id="paint0_linear" x1="0" y1="0" x2="80" y2="80" gradientUnits="userSpaceOnUse">
-                    <stop stop-color="#8B5CF6" />
-                    <stop offset="1" stop-color="#14B8A6" />
-                  </linearGradient>
-                </defs>
               </svg>`
           }
           <div class="company-name">

@@ -236,7 +236,14 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
 
       // Download the report
       if (response.downloadUrl) {
-        window.open(response.downloadUrl, '_blank');
+        // Create a temporary link element to trigger the download
+        const link = document.createElement('a');
+        link.href = response.downloadUrl;
+        link.target = '_blank';
+        link.download = response.fileName || 'report.pdf';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
 
     } catch (error) {
@@ -379,13 +386,15 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
                     </div>
                     <div className="flex items-center space-x-2">
                       {report.file_url && (
-                        <button
-                          onClick={() => window.open(report.file_url, '_blank')}
+                        <a
+                          href={report.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors"
                           title="Download Report"
                         >
                           <Download className="w-4 h-4" />
-                        </button>
+                        </a>
                       )}
                       <button
                         onClick={() => deleteReport(report.id)}
