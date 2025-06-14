@@ -384,7 +384,7 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                          title="Download Report"
+                          title="View Report"
                         >
                           <Download className="w-4 h-4" />
                         </a>
