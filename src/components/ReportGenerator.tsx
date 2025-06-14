@@ -37,7 +37,7 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
   const [reportConfig, setReportConfig] = useState({
     type: 'audit' as 'audit' | 'competitive' | 'citation' | 'comprehensive' | 'roi_focused',
     name: '',
-    format: 'pdf' as 'pdf' | 'csv' | 'json',
+    format: 'html' as 'html' | 'csv' | 'json',
     dateRange: '30d' as '7d' | '30d' | '90d' | 'all',
     includeRecommendations: true,
     includeCharts: true,
@@ -310,7 +310,7 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
           <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Advanced ROI-Focused Reporting</h3>
           <p className="text-gray-600 mb-4">
-            Generate comprehensive PDF and CSV reports with ROI metrics, competitive benchmarks, and business impact analysis. Perfect for stakeholder presentations and business cases.
+            Generate comprehensive HTML and CSV reports with ROI metrics, competitive benchmarks, and business impact analysis. Perfect for stakeholder presentations and business cases.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="bg-blue-50 p-4 rounded-lg">
@@ -493,9 +493,9 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
                           onChange={(e) => setReportConfig({ ...reportConfig, format: e.target.value as any })}
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                         >
-                          <option value="pdf">PDF</option>
-                          <option value="csv">CSV</option>
-                          <option value="json">JSON</option>
+                          <option value="html">HTML Report</option>
+                          <option value="csv">CSV Data Export</option>
+                          <option value="json">JSON Data Export</option>
                         </select>
                       </div>
 

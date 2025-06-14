@@ -445,7 +445,7 @@ export const apiService = {
     reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive' | 'roi_focused',
     reportData: any,
     reportName: string,
-    format: 'pdf' | 'csv' | 'json' = 'pdf'
+    format: 'html' | 'csv' | 'json' = 'html'
   ) {
     // Don't cache report generation as each report should be unique
     return await apiCall(`${API_BASE_URL}/generate-report`, {
