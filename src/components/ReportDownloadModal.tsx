@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, FileText, Download, Printer, Copy, ExternalLink, Loader, Settings } from 'lucide-react';
-import { reportService, type ReportOptions } from '../services/reportService';
+import { X, FileText, Download, Copy, ExternalLink, Loader } from 'lucide-react';
+import { reportService } from '../services/reportService';
 
 interface ReportDownloadModalProps {
   onClose: () => void;
@@ -17,18 +17,9 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
   reportType,
   downloadUrl
 }) => {
-  const [selectedFormat, setSelectedFormat] = useState<'html' | 'pdf' | 'csv' | 'json'>('html');
+  const [selectedFormat, setSelectedFormat] = useState<'html' | 'csv' | 'json'>('html');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const [pdfOptions, setPdfOptions] = useState({
-    format: 'A4',
-    landscape: false,
-    margin: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' },
-    printBackground: true,
-    headerTemplate: '',
-    footerTemplate: ''
-  });
 
   const handleDownload = async () => {
     setLoading(true);
@@ -37,10 +28,6 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
     try {
       if (selectedFormat === 'html') {
         await reportService.viewReport(reportId, 'html', true);
-      } else if (selectedFormat === 'pdf') {
-        // Generate PDF from HTML report
-        const pdfUrl = await reportService.generatePDF(reportId, pdfOptions);
-        window.open(pdfUrl, '_blank');
       } else {
         // For other formats, we would need to implement specific handlers
         // This is a placeholder for CSV and JSON downloads
@@ -99,7 +86,7 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
 
           <div className="mb-6">
             <h4 className="font-medium text-gray-900 mb-2">Select Format</h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <button
                 onClick={() => setSelectedFormat('html')}
                 className={`p-4 border rounded-lg flex flex-col items-center justify-center transition-colors ${
@@ -111,19 +98,6 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
                 <FileText className="w-6 h-6 text-purple-600 mb-2" />
                 <span className="font-medium text-gray-900">HTML</span>
                 <span className="text-xs text-gray-500 mt-1">Styled web page</span>
-              </button>
-              
-              <button
-                onClick={() => setSelectedFormat('pdf')}
-                className={`p-4 border rounded-lg flex flex-col items-center justify-center transition-colors ${
-                  selectedFormat === 'pdf' 
-                    ? 'border-purple-500 bg-purple-50' 
-                    : 'border-gray-200 hover:border-purple-300'
-                }`}
-              >
-                <FileText className="w-6 h-6 text-red-600 mb-2" />
-                <span className="font-medium text-gray-900">PDF</span>
-                <span className="text-xs text-gray-500 mt-1">Print-ready document</span>
               </button>
               
               <button
@@ -153,131 +127,6 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
               </button>
             </div>
           </div>
-
-          {selectedFormat === 'pdf' && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-medium text-gray-900">PDF Options</h4>
-                <button
-                  onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
-                  className="text-sm text-purple-600 flex items-center space-x-1"
-                >
-                  <Settings className="w-4 h-4" />
-                  <span>{showAdvancedOptions ? 'Hide' : 'Show'} Advanced Options</span>
-                </button>
-              </div>
-              
-              <div className="space-y-3">
-                <div className="flex items-center space-x-3">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      checked={pdfOptions.format === 'A4'}
-                      onChange={() => setPdfOptions({...pdfOptions, format: 'A4'})}
-                      className="mr-2"
-                    />
-                    A4
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      checked={pdfOptions.format === 'Letter'}
-                      onChange={() => setPdfOptions({...pdfOptions, format: 'Letter'})}
-                      className="mr-2"
-                    />
-                    Letter
-                  </label>
-                </div>
-                
-                <div className="flex items-center space-x-3">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      checked={!pdfOptions.landscape}
-                      onChange={() => setPdfOptions({...pdfOptions, landscape: false})}
-                      className="mr-2"
-                    />
-                    Portrait
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      checked={pdfOptions.landscape}
-                      onChange={() => setPdfOptions({...pdfOptions, landscape: true})}
-                      className="mr-2"
-                    />
-                    Landscape
-                  </label>
-                </div>
-                
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={pdfOptions.printBackground}
-                    onChange={() => setPdfOptions({...pdfOptions, printBackground: !pdfOptions.printBackground})}
-                    className="mr-2"
-                  />
-                  Print Background Colors/Images
-                </label>
-                
-                {showAdvancedOptions && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <h5 className="text-sm font-medium text-gray-900 mb-2">Margins</h5>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Top</label>
-                        <input
-                          type="text"
-                          value={pdfOptions.margin.top}
-                          onChange={(e) => setPdfOptions({
-                            ...pdfOptions, 
-                            margin: {...pdfOptions.margin, top: e.target.value}
-                          })}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Right</label>
-                        <input
-                          type="text"
-                          value={pdfOptions.margin.right}
-                          onChange={(e) => setPdfOptions({
-                            ...pdfOptions, 
-                            margin: {...pdfOptions.margin, right: e.target.value}
-                          })}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Bottom</label>
-                        <input
-                          type="text"
-                          value={pdfOptions.margin.bottom}
-                          onChange={(e) => setPdfOptions({
-                            ...pdfOptions, 
-                            margin: {...pdfOptions.margin, bottom: e.target.value}
-                          })}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Left</label>
-                        <input
-                          type="text"
-                          value={pdfOptions.margin.left}
-                          onChange={(e) => setPdfOptions({
-                            ...pdfOptions, 
-                            margin: {...pdfOptions.margin, left: e.target.value}
-                          })}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {error && (
             <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg">

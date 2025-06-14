@@ -150,7 +150,7 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
         <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">Advanced ROI-Focused Reporting</h3>
         <p className="text-gray-600 mb-4">
-          Generate comprehensive HTML and PDF reports with ROI metrics, competitive benchmarks, and business impact analysis. Perfect for stakeholder presentations and business cases.
+          Generate comprehensive HTML reports with ROI metrics, competitive benchmarks, and business impact analysis. Perfect for stakeholder presentations and business cases.
         </p>
         <button className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300">
           Upgrade to Core Plan
@@ -273,7 +273,6 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     >
                       <option value="html">HTML Report</option>
-                      <option value="pdf">PDF Document</option>
                       <option value="csv">CSV Data Export</option>
                       <option value="json">JSON Data Export</option>
                     </select>

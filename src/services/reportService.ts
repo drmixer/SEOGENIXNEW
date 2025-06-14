@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 
 export interface ReportOptions {
-  format?: 'html' | 'csv' | 'json' | 'pdf';
+  format?: 'html' | 'csv' | 'json';
   includeRecommendations?: boolean;
   includeCharts?: boolean;
   includeHistory?: boolean;
@@ -80,9 +80,9 @@ export const reportService = {
   },
 
   /**
-   * View a report in the browser (HTML) or download it (PDF)
+   * View a report in the browser (HTML) or download it
    */
-  async viewReport(reportId: string, format: 'html' | 'pdf' = 'html', download: boolean = false): Promise<string> {
+  async viewReport(reportId: string, format: 'html' = 'html', download: boolean = false): Promise<string> {
     try {
       // Get auth token for API calls
       const { data: { session } } = await supabase.auth.getSession();
@@ -90,64 +90,55 @@ export const reportService = {
         throw new Error('Authentication required');
       }
 
-      // Generate a URL to the report-viewer function
+      // Get the report from the database to get the file URL
+      const { data: report, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('id', reportId)
+        .single();
+
+      if (error || !report) {
+        throw new Error('Report not found');
+      }
+
+      // If we have a direct file URL, use it
+      if (report.file_url) {
+        if (download) {
+          // For downloads, we need to use a different approach
+          // Create a temporary anchor element
+          const a = document.createElement('a');
+          a.href = report.file_url;
+          a.download = `${report.report_name.replace(/\s+/g, '_')}.${format}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          return report.file_url;
+        } else {
+          // For viewing in browser, just open in a new tab
+          window.open(report.file_url, '_blank');
+          return report.file_url;
+        }
+      }
+
+      // If we don't have a direct URL, use the report-viewer function
       const viewerUrl = `${API_URL}/report-viewer?reportId=${reportId}&format=${format}&download=${download}`;
       
-      // For HTML viewing in the browser, we can just return the URL
-      if (format === 'html' && !download) {
-        // Open in a new tab
+      if (!download) {
+        // Open in a new tab for viewing
         window.open(viewerUrl, '_blank');
-        return viewerUrl;
+      } else {
+        // Create a temporary anchor element for downloading
+        const a = document.createElement('a');
+        a.href = viewerUrl;
+        a.download = `${report.report_name.replace(/\s+/g, '_')}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       }
       
-      // For PDF or downloads, we need to handle it differently
-      // Redirect to the URL which will trigger the download
-      window.location.href = viewerUrl;
       return viewerUrl;
     } catch (error) {
       console.error('Report viewing error:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Generate a PDF from an HTML report
-   */
-  async generatePDF(reportId: string, options?: any): Promise<string> {
-    try {
-      // Get auth token for API calls
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Authentication required');
-      }
-
-      // Call the pdf-generator function
-      const response = await fetch(`${API_URL}/pdf-generator`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          reportId,
-          options: options || {
-            format: 'A4',
-            landscape: false,
-            margin: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' },
-            printBackground: true
-          }
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate PDF');
-      }
-
-      const result = await response.json();
-      return result.downloadUrl;
-    } catch (error) {
-      console.error('PDF generation error:', error);
       throw error;
     }
   },

@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 interface ReportViewRequest {
   reportId: string;
-  format?: 'html' | 'pdf';
+  format?: 'html' | 'csv' | 'json';
   download?: boolean;
 }
 
@@ -16,14 +16,14 @@ Deno.serve(async (req: Request) => {
   try {
     // Get report ID from URL or request body
     let reportId: string;
-    let format: 'html' | 'pdf' = 'html';
+    let format: 'html' | 'csv' | 'json' = 'html';
     let download = false;
 
     // Parse request based on method
     if (req.method === 'GET') {
       const url = new URL(req.url);
       reportId = url.searchParams.get('reportId') || '';
-      format = (url.searchParams.get('format') || 'html') as 'html' | 'pdf';
+      format = (url.searchParams.get('format') || 'html') as 'html' | 'csv' | 'json';
       download = url.searchParams.get('download') === 'true';
     } else {
       const data: ReportViewRequest = await req.json();
@@ -72,32 +72,6 @@ Deno.serve(async (req: Request) => {
       .download(storagePath);
 
     if (fileError) {
-      // If PDF is requested but doesn't exist, try to generate it from HTML
-      if (format === 'pdf') {
-        // Try to get the HTML version
-        const htmlPath = `reports/${report.user_id}/${reportId}.html`;
-        const { data: htmlData, error: htmlError } = await supabase.storage
-          .from('reports')
-          .download(htmlPath);
-
-        if (htmlError) {
-          return new Response(
-            JSON.stringify({ error: 'Report file not found', details: htmlError.message }),
-            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Generate PDF from HTML (in a real implementation, this would use Puppeteer or similar)
-        // For this example, we'll return a message about PDF generation
-        return new Response(
-          JSON.stringify({ 
-            message: 'PDF generation would happen here', 
-            note: 'In a real implementation, this would convert the HTML to PDF using Puppeteer or a similar tool'
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
       return new Response(
         JSON.stringify({ error: 'Report file not found', details: fileError.message }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -105,7 +79,21 @@ Deno.serve(async (req: Request) => {
     }
 
     // Set appropriate content type and disposition headers
-    const contentType = format === 'html' ? 'text/html' : 'application/pdf';
+    let contentType;
+    switch (format) {
+      case 'html':
+        contentType = 'text/html';
+        break;
+      case 'csv':
+        contentType = 'text/csv';
+        break;
+      case 'json':
+        contentType = 'application/json';
+        break;
+      default:
+        contentType = 'text/plain';
+    }
+    
     const disposition = download ? 'attachment' : 'inline';
     const filename = `${report.report_name.replace(/\s+/g, '_')}.${format}`;
 
