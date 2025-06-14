@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Bell, TrendingUp, TrendingDown, AlertTriangle, Info, X, Eye, ExternalLink, Brain, Target, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bell, TrendingUp, TrendingDown, AlertTriangle, Info, X, Eye, ExternalLink, Brain, Target, Zap, Calendar, CheckCircle, ArrowRight } from 'lucide-react';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 
@@ -17,6 +17,7 @@ interface Alert {
   confidence?: number;
   impact?: 'low' | 'medium' | 'high';
   timeframe?: string;
+  steps?: string[];
 }
 
 interface ProactiveAlertsProps {
@@ -28,6 +29,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [alertThresholds, setAlertThresholds] = useState({
     scoreChangeThreshold: 10,
     competitorScoreThreshold: 15,
@@ -81,7 +83,14 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
             read: false,
             confidence: 95,
             impact: scoreDiff <= -20 ? 'high' : 'medium',
-            timeframe: 'immediate'
+            timeframe: 'immediate',
+            steps: [
+              "Review recent content changes that might have affected your score",
+              "Check if schema markup is still present and valid",
+              "Verify that key content sections haven't been removed",
+              "Run a new audit to confirm the drop",
+              "Use Content Optimizer to address identified issues"
+            ]
           });
         }
 
@@ -108,7 +117,14 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
             createdAt: latest.created_at,
             read: false,
             confidence: 88,
-            impact: 'medium'
+            impact: 'medium',
+            steps: [
+              `Run a detailed analysis of your ${problematicArea?.replace('_', ' ')} score`,
+              "Review recent content changes in this specific area",
+              "Check for technical issues that might affect this subscore",
+              "Use the recommended tool to address the specific issues",
+              "Run a follow-up audit to verify improvements"
+            ]
           });
         }
       }
@@ -132,7 +148,14 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
             read: false,
             confidence: Math.round(trend.confidence * 100),
             impact: 'high',
-            timeframe: '2 weeks'
+            timeframe: '2 weeks',
+            steps: [
+              "Review your content strategy and recent changes",
+              "Identify patterns in declining subscores",
+              "Start a comprehensive optimization playbook",
+              "Focus on your weakest performance areas first",
+              "Schedule regular audits to monitor progress"
+            ]
           });
         }
       }
@@ -155,7 +178,14 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
               createdAt: new Date().toISOString(),
               read: false,
               confidence: 75,
-              impact: 'medium' as const
+              impact: 'medium' as const,
+              steps: [
+                "Run a competitive analysis to understand their improvements",
+                "Identify which areas they've improved most significantly",
+                "Analyze their content changes and new strategies",
+                "Implement similar improvements on your own content",
+                "Monitor their ongoing optimization efforts"
+              ]
             };
           }
           return null;
@@ -171,17 +201,38 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
           {
             trend: 'Voice search optimization',
             impact: 'AI systems are increasingly prioritizing conversational content',
-            action: 'voice'
+            action: 'voice',
+            steps: [
+              "Test your content with voice search queries",
+              "Add more conversational content and FAQs",
+              "Implement question-answer format content",
+              "Optimize for natural language patterns",
+              "Monitor voice search performance regularly"
+            ]
           },
           {
             trend: 'Entity-rich content',
             impact: 'Content with comprehensive entity coverage is getting more AI citations',
-            action: 'entities'
+            action: 'entities',
+            steps: [
+              "Run an entity coverage analysis",
+              "Identify missing important entities in your content",
+              "Add clear definitions for key entities",
+              "Establish relationships between entities",
+              "Monitor citation improvements after implementation"
+            ]
           },
           {
             trend: 'FAQ-structured content',
             impact: 'Q&A format content is being preferred by AI systems for direct answers',
-            action: 'generator'
+            action: 'generator',
+            steps: [
+              "Generate FAQ content for your key topics",
+              "Structure FAQs to match common user questions",
+              "Implement FAQ schema markup",
+              "Ensure answers are concise and informative",
+              "Monitor how AI systems cite your FAQ content"
+            ]
           }
         ];
 
@@ -199,7 +250,8 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
             createdAt: new Date().toISOString(),
             read: false,
             confidence: alertThresholds.industryTrendConfidence,
-            impact: 'medium'
+            impact: 'medium',
+            steps: trend.steps
           });
         }
       }
@@ -208,9 +260,27 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
       if (auditHistory.length > 0) {
         const latestScore = auditHistory[0].overall_score;
         const milestones = [
-          { threshold: 90, title: 'Elite AI Visibility Achieved!', message: 'You\'ve reached the top 10% of AI visibility scores' },
-          { threshold: 80, title: 'Excellent AI Visibility!', message: 'Your content is highly optimized for AI systems' },
-          { threshold: 70, title: 'Good AI Visibility Milestone', message: 'You\'ve achieved a solid foundation for AI visibility' }
+          { threshold: 90, title: 'Elite AI Visibility Achieved!', message: 'You\'ve reached the top 10% of AI visibility scores', steps: [
+            "Share your achievement with stakeholders",
+            "Document your successful strategies",
+            "Focus on maintaining your excellent performance",
+            "Consider running competitive analysis to stay ahead",
+            "Explore advanced optimization techniques"
+          ]},
+          { threshold: 80, title: 'Excellent AI Visibility!', message: 'Your content is highly optimized for AI systems', steps: [
+            "Identify which strategies contributed most to your success",
+            "Apply these successful approaches to other content",
+            "Set a goal to reach 90+ score",
+            "Monitor for any performance fluctuations",
+            "Consider competitive analysis to maintain your edge"
+          ]},
+          { threshold: 70, title: 'Good AI Visibility Milestone', message: 'You\'ve achieved a solid foundation for AI visibility', steps: [
+            "Celebrate this important milestone",
+            "Identify your next improvement targets",
+            "Focus on your lowest subscore areas",
+            "Implement more advanced optimization techniques",
+            "Set a goal to reach 80+ score"
+          ]}
         ];
 
         const achievedMilestone = milestones.find(m => 
@@ -231,7 +301,8 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
             createdAt: new Date().toISOString(),
             read: false,
             confidence: 100,
-            impact: 'low'
+            impact: 'low',
+            steps: achievedMilestone.steps
           });
         }
       }
@@ -255,7 +326,41 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
           read: false,
           confidence: 85,
           impact: 'medium',
-          timeframe: 'this week'
+          timeframe: 'this week',
+          steps: [
+            "Run a new AI visibility audit to check current status",
+            "Review any changes in your scores since last audit",
+            "Identify areas that need immediate attention",
+            "Implement recommended optimizations",
+            "Schedule regular maintenance checks"
+          ]
+        });
+      }
+
+      // 7. CONTENT FRESHNESS ALERTS
+      if (auditHistory.length > 0 && profile?.websites?.length > 0) {
+        const randomWebsite = profile.websites[Math.floor(Math.random() * profile.websites.length)];
+        newAlerts.push({
+          id: `content_freshness_${Date.now()}`,
+          type: 'recommendation',
+          title: 'Content Freshness Check',
+          message: `${randomWebsite.name} may need content updates to maintain AI visibility. Fresh content is more likely to be cited.`,
+          severity: 'low',
+          actionUrl: 'editor',
+          actionLabel: 'Update Content',
+          data: { website: randomWebsite },
+          createdAt: new Date().toISOString(),
+          read: false,
+          confidence: 70,
+          impact: 'medium',
+          timeframe: 'next 2 weeks',
+          steps: [
+            "Review your most important pages for outdated information",
+            "Update statistics, dates, and references",
+            "Add new sections addressing recent developments",
+            "Refresh examples and case studies",
+            "Run a new audit after updates to measure improvement"
+          ]
         });
       }
 
@@ -325,7 +430,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
       case 'competitor_update': return Eye;
       case 'industry_trend': return Info;
       case 'recommendation': return AlertTriangle;
-      case 'milestone': return TrendingUp;
+      case 'milestone': return CheckCircle;
       case 'anomaly': return AlertTriangle;
       case 'predictive': return Brain;
       default: return Bell;
@@ -364,6 +469,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
       
       // Close the alerts dropdown
       setShowAlerts(false);
+      setSelectedAlert(null);
     }
   };
 
@@ -418,6 +524,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
                     <div
                       key={alert.id}
                       className={`p-4 hover:bg-gray-50 transition-colors ${!alert.read ? 'bg-blue-50' : ''}`}
+                      onClick={() => setSelectedAlert(alert)}
                     >
                       <div className="flex items-start space-x-3">
                         <div className={`p-2 rounded-lg ${getSeverityColor(alert.severity)}`}>
@@ -462,7 +569,10 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
                             <div className="flex items-center space-x-2">
                               {alert.actionUrl && (
                                 <button
-                                  onClick={() => handleActionClick(alert)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleActionClick(alert);
+                                  }}
                                   className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1"
                                 >
                                   <span>{alert.actionLabel}</span>
@@ -470,7 +580,10 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
                                 </button>
                               )}
                               <button
-                                onClick={() => dismissAlert(alert.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  dismissAlert(alert.id);
+                                }}
                                 className="text-xs text-gray-400 hover:text-gray-600"
                               >
                                 <X className="w-3 h-3" />
@@ -503,6 +616,143 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Alert Details Modal */}
+      {selectedAlert && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-lg ${getSeverityColor(selectedAlert.severity)}`}>
+                  {getAlertIcon(selectedAlert.type)({ className: "w-5 h-5" })}
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">{selectedAlert.title}</h3>
+                  <p className="text-sm text-gray-500">
+                    {new Date(selectedAlert.createdAt).toLocaleString()}
+                    {selectedAlert.confidence && (
+                      <span className="ml-2">• {selectedAlert.confidence}% confidence</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedAlert(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+              <div className="space-y-6">
+                <div className={`p-4 rounded-lg ${getSeverityColor(selectedAlert.severity)}`}>
+                  <p className="text-base">{selectedAlert.message}</p>
+                </div>
+                
+                {selectedAlert.impact && (
+                  <div className="flex items-center space-x-2">
+                    <span className="font-medium text-gray-700">Impact:</span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      selectedAlert.impact === 'high' ? 'bg-red-100 text-red-800' :
+                      selectedAlert.impact === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      {selectedAlert.impact.toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                
+                {selectedAlert.timeframe && (
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="w-4 h-4 text-gray-600" />
+                    <span className="text-gray-700">Timeframe: {selectedAlert.timeframe}</span>
+                  </div>
+                )}
+                
+                {selectedAlert.steps && selectedAlert.steps.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-3">Recommended Steps:</h4>
+                    <div className="space-y-2">
+                      {selectedAlert.steps.map((step, index) => (
+                        <div key={index} className="flex items-start space-x-3">
+                          <div className="bg-purple-100 text-purple-800 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            {index + 1}
+                          </div>
+                          <p className="text-gray-700">{step}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {selectedAlert.data && selectedAlert.type === 'anomaly' && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">Anomaly Details:</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Previous Score:</span>
+                        <span className="font-medium">{selectedAlert.data.previous?.overall_score || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Current Score:</span>
+                        <span className="font-medium">{selectedAlert.data.latest?.overall_score || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Change:</span>
+                        <span className={`font-medium ${selectedAlert.data.scoreDiff < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {selectedAlert.data.scoreDiff > 0 ? '+' : ''}{selectedAlert.data.scoreDiff}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {selectedAlert.data && selectedAlert.type === 'predictive' && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">Prediction Details:</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Current Trend:</span>
+                        <span className="font-medium capitalize">{selectedAlert.data.trend?.direction || 'Unknown'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Predicted Score:</span>
+                        <span className="font-medium">{Math.round(selectedAlert.data.predictedScore || 0)}/100</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Confidence:</span>
+                        <span className="font-medium">{selectedAlert.confidence}%</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  markAsRead(selectedAlert.id);
+                  setSelectedAlert(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Dismiss
+              </button>
+              {selectedAlert.actionUrl && (
+                <button
+                  onClick={() => handleActionClick(selectedAlert)}
+                  className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 flex items-center space-x-2"
+                >
+                  <span>{selectedAlert.actionLabel}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
