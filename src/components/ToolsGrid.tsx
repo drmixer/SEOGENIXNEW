@@ -59,6 +59,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [activeSite, setActiveSite] = useState<string>(selectedWebsite || '');
   const [schemaType, setSchemaType] = useState<'article' | 'product' | 'organization' | 'person' | 'faq' | 'howto'>('article');
   const [contentGenerationType, setContentGenerationType] = useState<'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions'>('faq');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Enable all tools for development/testing
   const isDevelopment = true;
@@ -189,13 +191,25 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   }, [userProfile]);
 
   const runTool = async (toolId: string) => {
-    if (!activeSite && !selectedCompetitor && toolId !== 'generator' && toolId !== 'prompts' && toolId !== 'schema') {
+    // For schema generator, we don't require a website selection
+    if (toolId !== 'schema' && toolId !== 'generator' && toolId !== 'prompts' && !activeSite) {
       alert('Please select a website first');
       return;
     }
 
     setLoadingTool(toolId);
     setExpandedTool(toolId);
+    setIsProcessing(true);
+
+    // Set a timeout to ensure we show loading state for at least 1.5 seconds
+    // This helps prevent flickering for fast responses and gives a better UX
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+    }
+    
+    processingTimeoutRef.current = setTimeout(() => {
+      setIsProcessing(false);
+    }, 1500);
 
     try {
       let result: any = {};
@@ -342,6 +356,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       }));
     } finally {
       setLoadingTool(null);
+      // Don't clear isProcessing here, let the timeout handle it
     }
   };
 
@@ -1021,10 +1036,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 <p className="text-gray-600 mb-4">Run the tool to see results</p>
                 <button
                   onClick={() => runTool(toolId)}
-                  disabled={loadingTool === toolId}
+                  disabled={loadingTool === toolId || isProcessing}
                   className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2 mx-auto"
                 >
-                  {loadingTool === toolId ? (
+                  {loadingTool === toolId || isProcessing ? (
                     <>
                       <Loader className="w-5 h-5 animate-spin" />
                       <span>Running...</span>
@@ -1050,10 +1065,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             {result && (
               <button
                 onClick={() => runTool(toolId)}
-                disabled={loadingTool === toolId}
+                disabled={loadingTool === toolId || isProcessing}
                 className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
               >
-                {loadingTool === toolId ? (
+                {loadingTool === toolId || isProcessing ? (
                   <>
                     <Loader className="w-4 h-4 animate-spin" />
                     <span>Running...</span>
@@ -1090,7 +1105,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
               .filter(tool => tool.category === category)
               .map((tool) => {
                 const IconComponent = tool.icon;
-                const isLoading = loadingTool === tool.id;
+                const isLoading = loadingTool === tool.id || (tool.id === loadingTool && isProcessing);
                 const isExpanded = expandedTool === tool.id;
                 const result = toolResults[tool.id];
                 const hasResult = result && !result.error;

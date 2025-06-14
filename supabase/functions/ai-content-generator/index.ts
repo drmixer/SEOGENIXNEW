@@ -29,6 +29,14 @@ Deno.serve(async (req: Request) => {
     console.log(`Processing content generation request for ${contentType} about ${topic}`);
     console.log(`Keywords: ${targetKeywords.join(', ')}, Tone: ${tone}, Length: ${contentLength}`);
 
+    // Ensure we have valid inputs
+    if (!topic || topic.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'Topic is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const contentPrompts = {
       faq: `Generate a comprehensive FAQ section optimized for AI visibility and voice search. Create questions that people commonly ask about ${topic} and provide clear, concise answers that AI systems can easily understand and cite.`,
       
@@ -83,6 +91,7 @@ Deno.serve(async (req: Request) => {
               5. Ensure content is factual and helpful
               6. Use clear, concise language
               7. Include relevant entities and context
+              8. Make content SPECIFIC to the topic "${topic}" - avoid generic content
 
               ${contentType === 'faq' ? `
               Format as:
@@ -240,30 +249,33 @@ Deno.serve(async (req: Request) => {
 function generateFallbackContent(contentType: string, topic: string, targetKeywords: string[], tone: string): Response {
   console.log(`Generating fallback ${contentType} content for ${topic}`);
   
+  // Make sure we have a valid topic
+  const validTopic = topic && topic.trim().length > 0 ? topic : 'AI visibility';
+  
   let parsedContent: any = { raw: '' };
   
   switch (contentType) {
     case 'faq':
       const faqs = [
         {
-          question: `What is ${topic}?`,
-          answer: `${topic} refers to the strategic approach to optimizing digital content for better visibility and performance in modern search environments. It encompasses various techniques and best practices designed to help businesses and individuals achieve their goals.`
+          question: `What is ${validTopic}?`,
+          answer: `${validTopic} refers to the strategic approach to optimizing digital content for better visibility and performance in modern search environments. It encompasses various techniques and best practices designed to help businesses and individuals achieve their goals.`
         },
         {
-          question: `Why is ${topic} important?`,
-          answer: `${topic} is crucial because it directly impacts your ability to reach and engage your target audience effectively. In today's digital landscape, having a strong ${topic} strategy can significantly improve your visibility, credibility, and overall performance.`
+          question: `Why is ${validTopic} important?`,
+          answer: `${validTopic} is crucial because it directly impacts your ability to reach and engage your target audience effectively. In today's digital landscape, having a strong ${validTopic} strategy can significantly improve your visibility, credibility, and overall performance.`
         },
         {
-          question: `How can I improve my ${topic} strategy?`,
-          answer: `To enhance your ${topic} strategy, focus on creating high-quality, structured content that addresses user needs and questions directly. Implement proper technical optimizations, maintain consistency across platforms, and regularly analyze performance metrics to make data-driven improvements.`
+          question: `How can I improve my ${validTopic} strategy?`,
+          answer: `To enhance your ${validTopic} strategy, focus on creating high-quality, structured content that addresses user needs and questions directly. Implement proper technical optimizations, maintain consistency across platforms, and regularly analyze performance metrics to make data-driven improvements.`
         },
         {
-          question: `What are the best tools for ${topic}?`,
-          answer: `The best tools for ${topic} include comprehensive analytics platforms, content optimization software, technical audit tools, and competitive intelligence solutions. The ideal toolset depends on your specific goals, industry, and resources.`
+          question: `What are the best tools for ${validTopic}?`,
+          answer: `The best tools for ${validTopic} include comprehensive analytics platforms, content optimization software, technical audit tools, and competitive intelligence solutions. The ideal toolset depends on your specific goals, industry, and resources.`
         },
         {
-          question: `How long does it take to see results from ${topic} efforts?`,
-          answer: `Results from ${topic} efforts typically begin to appear within 2-4 weeks, with more significant improvements visible after 2-3 months of consistent implementation. However, this timeline can vary based on your starting point, industry competition, and the scope of your optimization efforts.`
+          question: `How long does it take to see results from ${validTopic} efforts?`,
+          answer: `Results from ${validTopic} efforts typically begin to appear within 2-4 weeks, with more significant improvements visible after 2-3 months of consistent implementation. However, this timeline can vary based on your starting point, industry competition, and the scope of your optimization efforts.`
         }
       ];
       
@@ -275,23 +287,23 @@ function generateFallbackContent(contentType: string, topic: string, targetKeywo
       
     case 'meta-tags':
       parsedContent = {
-        raw: `TITLE: Complete Guide to ${topic}: Strategies, Tips & Best Practices\nDESCRIPTION: Discover expert insights on ${topic} including ${targetKeywords.join(', ')}. Learn proven strategies to improve your results and stay ahead of the competition.\nKEYWORDS: ${topic}, ${targetKeywords.join(', ')}, guide, strategies, best practices\nOG_TITLE: Ultimate ${topic} Guide: Expert Strategies & Tips\nOG_DESCRIPTION: Comprehensive resource on ${topic} with actionable insights and proven techniques for better results.`,
+        raw: `TITLE: Complete Guide to ${validTopic}: Strategies, Tips & Best Practices\nDESCRIPTION: Discover expert insights on ${validTopic} including ${targetKeywords.join(', ')}. Learn proven strategies to improve your results and stay ahead of the competition.\nKEYWORDS: ${validTopic}, ${targetKeywords.join(', ')}, guide, strategies, best practices\nOG_TITLE: Ultimate ${validTopic} Guide: Expert Strategies & Tips\nOG_DESCRIPTION: Comprehensive resource on ${validTopic} with actionable insights and proven techniques for better results.`,
         metaTags: {
-          title: `Complete Guide to ${topic}: Strategies, Tips & Best Practices`,
-          description: `Discover expert insights on ${topic} including ${targetKeywords.join(', ')}. Learn proven strategies to improve your results and stay ahead of the competition.`,
-          keywords: `${topic}, ${targetKeywords.join(', ')}, guide, strategies, best practices`,
-          ogTitle: `Ultimate ${topic} Guide: Expert Strategies & Tips`,
-          ogDescription: `Comprehensive resource on ${topic} with actionable insights and proven techniques for better results.`
+          title: `Complete Guide to ${validTopic}: Strategies, Tips & Best Practices`,
+          description: `Discover expert insights on ${validTopic} including ${targetKeywords.join(', ')}. Learn proven strategies to improve your results and stay ahead of the competition.`,
+          keywords: `${validTopic}, ${targetKeywords.join(', ')}, guide, strategies, best practices`,
+          ogTitle: `Ultimate ${validTopic} Guide: Expert Strategies & Tips`,
+          ogDescription: `Comprehensive resource on ${validTopic} with actionable insights and proven techniques for better results.`
         }
       };
       break;
       
     case 'snippets':
       parsedContent.raw = `Definition Snippet:
-${topic} refers to the strategic approach to optimizing digital content and presence for better visibility and performance in modern search and discovery environments.
+${validTopic} refers to the strategic approach to optimizing digital content and presence for better visibility and performance in modern search and discovery environments.
 
 How-to Snippet:
-How to Improve Your ${topic}:
+How to Improve Your ${validTopic}:
 1. Conduct a comprehensive audit of your current performance
 2. Identify key areas for improvement based on data
 3. Implement strategic optimizations in priority order
@@ -299,7 +311,7 @@ How to Improve Your ${topic}:
 5. Stay updated on industry trends and best practices
 
 List Snippet:
-Top 5 ${topic} Strategies:
+Top 5 ${validTopic} Strategies:
 • Create high-quality, structured content
 • Implement proper technical optimizations
 • Focus on user experience and engagement
@@ -307,7 +319,7 @@ Top 5 ${topic} Strategies:
 • Regularly analyze performance metrics
 
 Table Snippet:
-| ${topic} Component | Importance | Implementation Difficulty |
+| ${validTopic} Component | Importance | Implementation Difficulty |
 |-------------------|------------|---------------------------|
 | Content Quality   | High       | Medium                    |
 | Technical Setup   | High       | High                      |
@@ -316,58 +328,58 @@ Table Snippet:
 | Ongoing Maintenance | Medium   | Low                       |
 
 FAQ Snippet:
-Q: What is the most important aspect of ${topic}?
-A: The most critical component of ${topic} is creating high-quality, well-structured content that addresses user needs while being easily understood by both humans and AI systems.`;
+Q: What is the most important aspect of ${validTopic}?
+A: The most critical component of ${validTopic} is creating high-quality, well-structured content that addresses user needs while being easily understood by both humans and AI systems.`;
       break;
       
     case 'headings':
-      parsedContent.raw = `H1: Complete Guide to ${topic}: Strategies for Success in ${new Date().getFullYear()}
+      parsedContent.raw = `H1: Complete Guide to ${validTopic}: Strategies for Success in ${new Date().getFullYear()}
 
-H2: Understanding ${topic} Fundamentals
-H3: Key Components of Effective ${topic}
-H3: How ${topic} Has Evolved
-H3: Why ${topic} Matters in Today's Digital Landscape
+H2: Understanding ${validTopic} Fundamentals
+H3: Key Components of Effective ${validTopic}
+H3: How ${validTopic} Has Evolved
+H3: Why ${validTopic} Matters in Today's Digital Landscape
 
-H2: Essential ${topic} Strategies
-H3: Establishing Your ${topic} Foundation
+H2: Essential ${validTopic} Strategies
+H3: Establishing Your ${validTopic} Foundation
 H3: Advanced Techniques for ${targetKeywords[0] || 'Optimization'}
-H3: Measuring ${topic} Success
+H3: Measuring ${validTopic} Success
 
-H2: Implementing ${topic} Best Practices
+H2: Implementing ${validTopic} Best Practices
 H3: Step-by-Step Implementation Guide
-H3: Common ${topic} Mistakes to Avoid
-H3: Tools to Enhance Your ${topic} Efforts
+H3: Common ${validTopic} Mistakes to Avoid
+H3: Tools to Enhance Your ${validTopic} Efforts
 
-H2: ${topic} Case Studies and Examples
+H2: ${validTopic} Case Studies and Examples
 H3: Success Stories from Industry Leaders
-H3: Before and After: ${topic} Transformations
-H3: Lessons Learned from Failed ${topic} Attempts
+H3: Before and After: ${validTopic} Transformations
+H3: Lessons Learned from Failed ${validTopic} Attempts
 
-H2: Frequently Asked Questions About ${topic}
-H3: Basic ${topic} Questions
-H3: Advanced ${topic} Considerations
-H3: Troubleshooting ${topic} Issues`;
+H2: Frequently Asked Questions About ${validTopic}
+H3: Basic ${validTopic} Questions
+H3: Advanced ${validTopic} Considerations
+H3: Troubleshooting ${validTopic} Issues`;
       break;
       
     case 'descriptions':
       parsedContent.raw = `SHORT:
-${topic} encompasses strategic approaches to optimizing digital content for better visibility and performance in modern search environments, focusing on ${targetKeywords.slice(0, 2).join(' and ')}.
+${validTopic} encompasses strategic approaches to optimizing digital content for better visibility and performance in modern search environments, focusing on ${targetKeywords.slice(0, 2).join(' and ')}.
 
 MEDIUM:
-${topic} refers to the comprehensive strategy of optimizing digital content and presence for maximum visibility and effectiveness in today's AI-driven search landscape. By focusing on ${targetKeywords.join(', ')}, organizations can improve their discoverability, citation rates, and overall digital performance across various platforms and interfaces.
+${validTopic} refers to the comprehensive strategy of optimizing digital content and presence for maximum visibility and effectiveness in today's AI-driven search landscape. By focusing on ${targetKeywords.join(', ')}, organizations can improve their discoverability, citation rates, and overall digital performance across various platforms and interfaces.
 
 LONG:
-${topic} represents a holistic approach to digital optimization designed specifically for the era of AI-driven search and discovery. Unlike traditional methods, ${topic} focuses on how content is structured, contextualized, and presented to ensure maximum comprehension by artificial intelligence systems including large language models, voice assistants, and other AI interfaces. By implementing best practices around ${targetKeywords.join(', ')}, organizations can significantly improve their visibility in AI-generated answers, voice search results, and featured snippets. This approach recognizes the fundamental shift in how information is discovered and consumed in the modern digital ecosystem, where AI increasingly mediates between content and users.
+${validTopic} represents a holistic approach to digital optimization designed specifically for the era of AI-driven search and discovery. Unlike traditional methods, ${validTopic} focuses on how content is structured, contextualized, and presented to ensure maximum comprehension by artificial intelligence systems including large language models, voice assistants, and other AI interfaces. By implementing best practices around ${targetKeywords.join(', ')}, organizations can significantly improve their visibility in AI-generated answers, voice search results, and featured snippets. This approach recognizes the fundamental shift in how information is discovered and consumed in the modern digital ecosystem, where AI increasingly mediates between content and users.
 
 ELEVATOR_PITCH:
-${topic} is our specialized approach to optimizing your digital presence for today's AI-driven search landscape. We help you structure content so it's easily understood by systems like ChatGPT and voice assistants, dramatically increasing your visibility when people ask questions in your industry. Unlike traditional SEO, we focus on citation likelihood, conversational readiness, and AI understanding to ensure your content gets featured in the places that matter most.`;
+${validTopic} is our specialized approach to optimizing your digital presence for today's AI-driven search landscape. We help you structure content so it's easily understood by systems like ChatGPT and voice assistants, dramatically increasing your visibility when people ask questions in your industry. Unlike traditional SEO, we focus on citation likelihood, conversational readiness, and AI understanding to ensure your content gets featured in the places that matter most.`;
       break;
   }
   
   return new Response(
     JSON.stringify({
       contentType,
-      topic,
+      topic: validTopic,
       targetKeywords,
       tone,
       industry: industry || 'General',

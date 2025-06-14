@@ -44,35 +44,20 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan 
       const keywords = targetKeywords.split(',').map(k => k.trim());
       
       // Use the real-time analysis API
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/real-time-content-analysis`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ content: text, keywords })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setMetrics(data);
-      } else {
-        // Fallback to simulated analysis
-        const data = generateSimulatedMetrics(text, keywords);
-        setMetrics(data);
-      }
+      const result = await apiService.analyzeContentRealTime(text, keywords);
+      setMetrics(result);
     } catch (error) {
       console.error('Real-time analysis error:', error);
-      // Fallback to simulated analysis
-      const data = generateSimulatedMetrics(text, keywords);
-      setMetrics(data);
+      // Generate fallback metrics
+      const fallbackMetrics = generateFallbackMetrics(text, keywords);
+      setMetrics(fallbackMetrics);
     } finally {
       setIsAnalyzing(false);
     }
   }, [targetKeywords]);
 
-  // Generate simulated metrics for demo
-  const generateSimulatedMetrics = (text: string, keywords: string[]): ContentMetrics => {
+  // Generate fallback metrics for demo
+  const generateFallbackMetrics = (text: string, keywords: string[]): ContentMetrics => {
     const words = text.split(/\s+/);
     const sentences = text.split(/[.!?]+/).filter(s => s.trim());
     
@@ -87,14 +72,14 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan 
     const suggestions: RealTimeSuggestion[] = [];
 
     // Check for passive voice
-    const passivePatterns = /\b(was|were|been|being)\s+\w+ed\b/gi;
+    const passivePatterns = /\b(is|are|was|were|be|been|being)\s+\w+ed\b/gi;
     let match;
     while ((match = passivePatterns.exec(text)) !== null) {
       suggestions.push({
         type: 'ai_clarity',
         severity: 'warning',
-        message: 'Consider using active voice for better AI understanding',
-        suggestion: 'AI systems better understand active voice constructions',
+        message: 'Passive voice detected',
+        suggestion: 'Use active voice for better AI understanding and clarity',
         position: { start: match.index, end: match.index + match[0].length },
         replacement: 'Use active voice instead'
       });
@@ -107,40 +92,43 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan 
         suggestions.push({
           type: 'structure',
           severity: 'suggestion',
-          message: 'Long sentence detected - consider breaking it down',
-          suggestion: 'Shorter sentences improve AI comprehension and voice search optimization',
+          message: 'Long sentence detected',
+          suggestion: 'Consider breaking this sentence into shorter ones for better AI comprehension',
           position: { start, end: start + sentence.length }
         });
       }
     });
 
     // Check keyword density
-    Object.entries(keywordDensity).forEach(([keyword, density]) => {
-      if (density > 3) {
-        suggestions.push({
-          type: 'keyword',
-          severity: 'warning',
-          message: `Keyword "${keyword}" may be over-optimized (${density.toFixed(1)}%)`,
-          suggestion: 'Reduce keyword density to avoid appearing spammy to AI systems',
-          position: { start: 0, end: 0 }
-        });
-      } else if (density < 0.5) {
-        suggestions.push({
-          type: 'keyword',
-          severity: 'suggestion',
-          message: `Consider using "${keyword}" more frequently`,
-          suggestion: 'Increase keyword presence for better topic relevance',
-          position: { start: 0, end: 0 }
-        });
+    keywords.forEach(keyword => {
+      if (keyword) {
+        const density = keywordDensity[keyword] || 0;
+        if (density > 3) {
+          suggestions.push({
+            type: 'keyword',
+            severity: 'warning',
+            message: `Keyword "${keyword}" may be over-optimized (${density.toFixed(1)}%)`,
+            suggestion: 'Reduce keyword density to avoid appearing spammy to AI systems',
+            position: { start: 0, end: 0 }
+          });
+        } else if (density < 0.5 && text.length > 200) {
+          suggestions.push({
+            type: 'keyword',
+            severity: 'suggestion',
+            message: `Consider using "${keyword}" more frequently`,
+            suggestion: 'Increase keyword presence for better topic relevance',
+            position: { start: 0, end: 0 }
+          });
+        }
       }
     });
 
-    // Check for missing entities
+    // Check for missing question words for voice search
     if (!text.match(/\b(who|what|when|where|why|how)\b/i)) {
       suggestions.push({
         type: 'entity',
         severity: 'suggestion',
-        message: 'Consider adding question words for better voice search optimization',
+        message: 'Missing question words for voice search',
         suggestion: 'Include "who, what, when, where, why, how" to match voice queries',
         position: { start: 0, end: 0 }
       });
@@ -155,7 +143,7 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan 
     };
   };
 
-  // Debounce content analysis
+  // Debounce the analysis
   useEffect(() => {
     if (analysisTimeoutRef.current) {
       clearTimeout(analysisTimeoutRef.current);

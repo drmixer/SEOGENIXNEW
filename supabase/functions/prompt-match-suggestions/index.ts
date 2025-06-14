@@ -34,6 +34,14 @@ Deno.serve(async (req: Request) => {
     console.log(`Processing prompt match suggestions for topic: ${topic}`);
     console.log(`Industry: ${industry || 'not specified'}, Content type: ${contentType}, User intent: ${userIntent}`);
 
+    // Ensure we have a valid topic
+    if (!topic || topic.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'Topic is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDJC5a7zgGvBk58ojXPKkQJXu-fR3qHHHM'; // Fallback to demo key
     
     if (!geminiApiKey) {
@@ -53,7 +61,7 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `Generate comprehensive prompt suggestions that users might ask AI systems (ChatGPT, Claude, Bard, voice assistants) related to this topic. These prompts should align with how people naturally ask questions to AI.
+              text: `Generate specific, realistic prompt suggestions that users might ask AI systems (ChatGPT, Claude, Bard, voice assistants) related to this topic. These prompts should align with how people naturally ask questions to AI.
 
               Topic: ${topic}
               Industry: ${industry || 'General'}
@@ -86,7 +94,9 @@ Deno.serve(async (req: Request) => {
               LIKELIHOOD: [1-100 score of how likely this prompt is]
               OPTIMIZATION: [How to optimize content for this prompt]
 
-              Generate 20-25 diverse prompt suggestions that cover different angles and user needs.`
+              Generate 20-25 diverse prompt suggestions that cover different angles and user needs.
+              
+              IMPORTANT: Make all prompts SPECIFIC to the topic "${topic}" - do not use generic placeholders.`
             }]
           }],
           generationConfig: {
@@ -213,9 +223,12 @@ function generateFallbackPromptSuggestions(
 ): Response {
   console.log(`Generating fallback prompt suggestions for ${topic}`);
   
+  // Make sure we have a valid topic
+  const validTopic = topic && topic.trim().length > 0 ? topic : 'AI visibility';
+  
   const promptSuggestions: PromptSuggestion[] = [
     {
-      prompt: `What is ${topic}?`,
+      prompt: `What is ${validTopic}?`,
       category: 'DIRECT QUESTIONS',
       intent: 'informational',
       aiSystem: 'General',
@@ -223,7 +236,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include a clear definition section with comprehensive explanation'
     },
     {
-      prompt: `How does ${topic} work?`,
+      prompt: `How does ${validTopic} work?`,
       category: 'DIRECT QUESTIONS',
       intent: 'informational',
       aiSystem: 'ChatGPT',
@@ -231,7 +244,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Provide a step-by-step explanation with visual aids if possible'
     },
     {
-      prompt: `What are the benefits of ${topic}?`,
+      prompt: `What are the benefits of ${validTopic}?`,
       category: 'DIRECT QUESTIONS',
       intent: 'informational',
       aiSystem: 'General',
@@ -239,7 +252,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'List clear benefits with supporting evidence or examples'
     },
     {
-      prompt: `${topic} vs traditional approaches`,
+      prompt: `${validTopic} vs traditional approaches`,
       category: 'COMPARISON QUERIES',
       intent: 'informational',
       aiSystem: 'Claude',
@@ -247,7 +260,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create a comparison table with clear advantages and disadvantages'
     },
     {
-      prompt: `What's better, ${topic} or alternative solutions?`,
+      prompt: `What's better, ${validTopic} or alternative solutions?`,
       category: 'COMPARISON QUERIES',
       intent: 'commercial',
       aiSystem: 'ChatGPT',
@@ -255,7 +268,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Provide balanced comparison with specific use cases for each option'
     },
     {
-      prompt: `How to implement ${topic} for best results`,
+      prompt: `How to implement ${validTopic} for best results`,
       category: 'HOW-TO REQUESTS',
       intent: 'informational',
       aiSystem: 'General',
@@ -263,7 +276,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create a numbered list with clear implementation steps'
     },
     {
-      prompt: `Step by step guide to ${topic}`,
+      prompt: `Step by step guide to ${validTopic}`,
       category: 'HOW-TO REQUESTS',
       intent: 'informational',
       aiSystem: 'Google',
@@ -271,7 +284,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Structure content as a clear tutorial with headings for each step'
     },
     {
-      prompt: `Common problems with ${topic} and how to solve them`,
+      prompt: `Common problems with ${validTopic} and how to solve them`,
       category: 'PROBLEM-SOLVING',
       intent: 'informational',
       aiSystem: 'Claude',
@@ -279,7 +292,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create a troubleshooting section with problem-solution format'
     },
     {
-      prompt: `Why isn't my ${topic} working?`,
+      prompt: `Why isn't my ${validTopic} working?`,
       category: 'PROBLEM-SOLVING',
       intent: 'informational',
       aiSystem: 'General',
@@ -287,7 +300,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include a FAQ section addressing common issues and solutions'
     },
     {
-      prompt: `Hey Siri, tell me about ${topic}`,
+      prompt: `Hey Siri, tell me about ${validTopic}`,
       category: 'VOICE SEARCH',
       intent: 'informational',
       aiSystem: 'Siri',
@@ -295,7 +308,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create concise, conversational content optimized for voice responses'
     },
     {
-      prompt: `Alexa, what should I know about ${topic}?`,
+      prompt: `Alexa, what should I know about ${validTopic}?`,
       category: 'VOICE SEARCH',
       intent: 'informational',
       aiSystem: 'Alexa',
@@ -303,7 +316,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Structure content to answer direct questions in 1-2 sentences'
     },
     {
-      prompt: `Can you explain ${topic} in simple terms?`,
+      prompt: `Can you explain ${validTopic} in simple terms?`,
       category: 'CONVERSATIONAL',
       intent: 'informational',
       aiSystem: 'General',
@@ -311,7 +324,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include a simplified explanation section using analogies'
     },
     {
-      prompt: `I'm new to ${topic}, where should I start?`,
+      prompt: `I'm new to ${validTopic}, where should I start?`,
       category: 'CONVERSATIONAL',
       intent: 'informational',
       aiSystem: 'ChatGPT',
@@ -319,7 +332,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create a beginner\'s guide section with clear starting points'
     },
     {
-      prompt: `Technical specifications for ${topic} implementation`,
+      prompt: `Technical specifications for ${validTopic} implementation`,
       category: 'TECHNICAL',
       intent: 'informational',
       aiSystem: 'Claude',
@@ -327,7 +340,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include detailed technical documentation with code examples if applicable'
     },
     {
-      prompt: `Advanced ${topic} strategies for professionals`,
+      prompt: `Advanced ${validTopic} strategies for professionals`,
       category: 'TECHNICAL',
       intent: 'informational',
       aiSystem: 'ChatGPT',
@@ -335,7 +348,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Provide in-depth technical content with industry-specific terminology'
     },
     {
-      prompt: `Best ${topic} tools to buy`,
+      prompt: `Best ${validTopic} tools to buy`,
       category: 'COMMERCIAL',
       intent: 'commercial',
       aiSystem: 'General',
@@ -343,7 +356,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include product comparisons with clear features and benefits'
     },
     {
-      prompt: `Is ${topic} worth the investment?`,
+      prompt: `Is ${validTopic} worth the investment?`,
       category: 'COMMERCIAL',
       intent: 'commercial',
       aiSystem: 'Claude',
@@ -377,7 +390,7 @@ function generateFallbackPromptSuggestions(
   
   return new Response(
     JSON.stringify({
-      topic,
+      topic: validTopic,
       industry,
       targetAudience: 'General audience',
       contentType,

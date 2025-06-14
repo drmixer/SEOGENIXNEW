@@ -56,6 +56,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const { toasts, addToast, removeToast } = useToast();
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [profileFetchAttempted, setProfileFetchAttempted] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
   
   // Use refs to prevent duplicate fetches and track component mount state
   const profileFetchedRef = useRef(false);
@@ -608,6 +609,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           {dashboardError && (
             <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{dashboardError}</p>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (dashboardLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
         </div>
       </div>
     );
