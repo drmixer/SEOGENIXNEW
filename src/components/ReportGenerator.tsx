@@ -219,15 +219,6 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ userPlan }) => {
         reportConfig.format
       );
 
-      // Save report metadata with enhanced information
-      await userDataService.saveReport({
-        user_id: user.id,
-        report_type: reportConfig.type,
-        report_name: reportConfig.name,
-        report_data: enhancedReportData,
-        file_url: response.downloadUrl
-      });
-
       // Refresh reports list
       await loadReports();
       setShowGenerator(false);
