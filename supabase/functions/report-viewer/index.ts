@@ -63,49 +63,51 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Get the file from storage
-    const storagePath = `reports/${report.user_id}/${reportId}.${format}`;
-    
-    // Check if the file exists
-    const { data: fileData, error: fileError } = await supabase.storage
-      .from('reports')
-      .download(storagePath);
-
-    if (fileError) {
+    // Get the file URL from the report record
+    if (report.file_url) {
+      // If we have a direct file URL, fetch the content and serve it with proper headers
+      const response = await fetch(report.file_url);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch report file: ${response.statusText}`);
+      }
+      
+      const fileContent = await response.text();
+      
+      // Set appropriate content type and disposition headers
+      let contentType;
+      switch (format) {
+        case 'html':
+          contentType = 'text/html; charset=utf-8';
+          break;
+        case 'csv':
+          contentType = 'text/csv; charset=utf-8';
+          break;
+        case 'json':
+          contentType = 'application/json; charset=utf-8';
+          break;
+        default:
+          contentType = 'text/plain; charset=utf-8';
+      }
+      
+      const disposition = download ? 'attachment' : 'inline';
+      const filename = `${report.report_name.replace(/\s+/g, '_')}.${format}`;
+      
+      // Return the file with proper headers
+      return new Response(fileContent, {
+        headers: {
+          'Content-Type': contentType,
+          'Content-Disposition': `${disposition}; filename="${filename}"`,
+          'Cache-Control': 'no-cache',
+          ...corsHeaders
+        }
+      });
+    } else {
       return new Response(
-        JSON.stringify({ error: 'Report file not found', details: fileError.message }),
+        JSON.stringify({ error: 'Report file URL not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Set appropriate content type and disposition headers
-    let contentType;
-    switch (format) {
-      case 'html':
-        contentType = 'text/html';
-        break;
-      case 'csv':
-        contentType = 'text/csv';
-        break;
-      case 'json':
-        contentType = 'application/json';
-        break;
-      default:
-        contentType = 'text/plain';
-    }
-    
-    const disposition = download ? 'attachment' : 'inline';
-    const filename = `${report.report_name.replace(/\s+/g, '_')}.${format}`;
-
-    // Return the file with proper headers
-    return new Response(fileData, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `${disposition}; filename="${filename}"`,
-        ...corsHeaders
-      }
-    });
-
   } catch (error) {
     console.error('Report viewer error:', error);
     return new Response(

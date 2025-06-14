@@ -82,7 +82,7 @@ export const reportService = {
   /**
    * View a report in the browser (HTML) or download it
    */
-  async viewReport(reportId: string, format: 'html' = 'html', download: boolean = false): Promise<string> {
+  async viewReport(reportId: string, format: 'html' | 'csv' | 'json' = 'html', download: boolean = false): Promise<string> {
     try {
       // Get auth token for API calls
       const { data: { session } } = await supabase.auth.getSession();
@@ -101,39 +101,15 @@ export const reportService = {
         throw new Error('Report not found');
       }
 
-      // If we have a direct file URL, use it
-      if (report.file_url) {
-        if (download) {
-          // For downloads, we need to use a different approach
-          // Create a temporary anchor element
-          const a = document.createElement('a');
-          a.href = report.file_url;
-          a.download = `${report.report_name.replace(/\s+/g, '_')}.${format}`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          return report.file_url;
-        } else {
-          // For viewing in browser, just open in a new tab
-          window.open(report.file_url, '_blank');
-          return report.file_url;
-        }
-      }
-
-      // If we don't have a direct URL, use the report-viewer function
+      // Create the viewer URL with proper authentication
       const viewerUrl = `${API_URL}/report-viewer?reportId=${reportId}&format=${format}&download=${download}`;
       
-      if (!download) {
-        // Open in a new tab for viewing
-        window.open(viewerUrl, '_blank');
+      if (download) {
+        // For downloads, use a direct approach
+        window.location.href = viewerUrl;
       } else {
-        // Create a temporary anchor element for downloading
-        const a = document.createElement('a');
-        a.href = viewerUrl;
-        a.download = `${report.report_name.replace(/\s+/g, '_')}.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // For viewing in browser, open in a new tab
+        window.open(viewerUrl, '_blank');
       }
       
       return viewerUrl;

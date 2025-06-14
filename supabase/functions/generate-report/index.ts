@@ -185,386 +185,310 @@ function generateCSVReport(reportType: string, data: any): string {
 function generateHTMLReport(reportType: string, data: any, reportName: string): string {
   console.log(`Generating HTML content for ${reportType} report`);
   
+  // Get branding settings
+  const companyName = 'SEOGENIX';
+  const primaryColor = '#8B5CF6';
+  const secondaryColor = '#14B8A6';
+  
+  // Enhanced HTML template with better styling and ROI focus
   let html = `
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
+      <title>${reportName}</title>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${reportName}</title>
       <style>
-        /* Modern, clean styling for reports */
-        :root {
-          --primary-color: #8B5CF6;
-          --primary-light: #EDE9FE;
-          --secondary-color: #14B8A6;
-          --secondary-light: #CCFBF1;
-          --accent-color: #F59E0B;
-          --accent-light: #FEF3C7;
-          --text-dark: #1F2937;
-          --text-medium: #4B5563;
-          --text-light: #9CA3AF;
-          --background: #FFFFFF;
-          --background-alt: #F9FAFB;
-          --border-color: #E5E7EB;
-          --success: #10B981;
-          --warning: #F59E0B;
-          --error: #EF4444;
-        }
-        
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-        
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        body { 
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+          margin: 0; 
+          padding: 40px; 
+          color: #1f2937;
           line-height: 1.6;
-          color: var(--text-dark);
-          background-color: var(--background);
-          padding: 40px;
-          font-size: 14px;
         }
-        
-        .report-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          background: var(--background);
-          border-radius: 12px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-          overflow: hidden;
-        }
-        
-        .report-header {
-          background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-          color: white;
-          padding: 30px 40px;
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .report-header::after {
-          content: '';
-          position: absolute;
-          top: 0;
-          right: 0;
-          bottom: 0;
-          left: 0;
-          background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0));
-          pointer-events: none;
-        }
-        
-        .report-title {
-          font-size: 28px;
-          font-weight: 700;
-          margin-bottom: 8px;
-        }
-        
-        .report-meta {
+        .header { 
+          border-bottom: 3px solid ${primaryColor}; 
+          padding-bottom: 30px; 
+          margin-bottom: 40px; 
           display: flex;
           justify-content: space-between;
           align-items: center;
+        }
+        .logo-section {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+        .company-name {
+          font-size: 24px;
+          font-weight: bold;
+          color: ${primaryColor};
+        }
+        .report-meta {
+          text-align: right;
+          color: #6b7280;
+        }
+        .score { 
+          font-size: 48px; 
+          font-weight: bold; 
+          color: ${primaryColor};
+          margin: 0;
+        }
+        .metric-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 20px;
+          margin: 30px 0;
+        }
+        .metric-card { 
+          padding: 20px; 
+          background: #f8fafc; 
+          border-radius: 12px; 
+          border-left: 4px solid ${primaryColor};
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .metric-value {
+          font-size: 28px;
+          font-weight: bold;
+          color: #1f2937;
+          margin: 0;
+        }
+        .metric-label {
+          color: #6b7280;
           font-size: 14px;
-          opacity: 0.9;
+          margin-top: 5px;
         }
-        
-        .report-body {
-          padding: 40px;
+        .roi-section {
+          background: #ecfdf5;
+          border: 2px solid ${secondaryColor};
+          border-radius: 16px;
+          padding: 30px;
+          margin: 30px 0;
         }
-        
-        .report-section {
-          margin-bottom: 40px;
-        }
-        
-        .section-title {
-          font-size: 20px;
-          font-weight: 600;
+        .roi-title {
+          color: #065f46;
+          font-size: 24px;
+          font-weight: bold;
           margin-bottom: 20px;
-          color: var(--primary-color);
           display: flex;
           align-items: center;
           gap: 10px;
         }
-        
-        .section-title::after {
-          content: '';
-          flex-grow: 1;
-          height: 1px;
-          background: var(--border-color);
-          margin-left: 10px;
-        }
-        
-        .score-card {
-          background: linear-gradient(135deg, var(--primary-light), var(--secondary-light));
-          border-radius: 12px;
-          padding: 30px;
-          text-align: center;
-          margin-bottom: 30px;
-        }
-        
-        .score-value {
-          font-size: 64px;
-          font-weight: 700;
-          color: var(--primary-color);
-          line-height: 1;
-          margin-bottom: 10px;
-        }
-        
-        .score-label {
-          font-size: 16px;
-          color: var(--text-medium);
-        }
-        
-        .metrics-grid {
+        .roi-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-          gap: 20px;
-          margin-bottom: 30px;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 15px;
         }
-        
-        .metric-card {
-          background: var(--background-alt);
-          border-radius: 10px;
-          padding: 20px;
-          border-left: 4px solid var(--primary-color);
+        .roi-metric {
+          background: white;
+          padding: 15px;
+          border-radius: 8px;
+          text-align: center;
+          border: 1px solid #d1fae5;
         }
-        
-        .metric-value {
-          font-size: 24px;
-          font-weight: 600;
-          margin-bottom: 5px;
+        .competitive-section {
+          background: #fef3c7;
+          border: 2px solid #f59e0b;
+          border-radius: 16px;
+          padding: 30px;
+          margin: 30px 0;
         }
-        
-        .metric-label {
-          font-size: 14px;
-          color: var(--text-medium);
-        }
-        
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 20px 0;
-          font-size: 14px;
-        }
-        
-        th {
-          background: var(--primary-light);
-          color: var(--primary-color);
-          font-weight: 600;
-          text-align: left;
-          padding: 12px 15px;
-        }
-        
-        td {
-          padding: 10px 15px;
-          border-bottom: 1px solid var(--border-color);
-        }
-        
-        tr:nth-child(even) {
-          background: var(--background-alt);
-        }
-        
-        .recommendations {
-          background: var(--secondary-light);
-          border-radius: 10px;
-          padding: 25px;
-          margin-top: 30px;
-        }
-        
-        .recommendations-title {
-          color: var(--secondary-color);
-          font-size: 18px;
-          font-weight: 600;
-          margin-bottom: 15px;
-        }
-        
-        .recommendation-item {
+        table { 
+          width: 100%; 
+          border-collapse: collapse; 
+          margin: 20px 0; 
           background: white;
           border-radius: 8px;
-          padding: 15px;
-          margin-bottom: 10px;
-          border-left: 3px solid var(--secondary-color);
+          overflow: hidden;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
-        
+        th, td { 
+          border: none; 
+          padding: 12px 16px; 
+          text-align: left; 
+        }
+        th { 
+          background: ${primaryColor}; 
+          color: white; 
+          font-weight: 600;
+        }
+        tr:nth-child(even) { background-color: #f8fafc; }
+        .recommendations {
+          background: #eff6ff;
+          border: 2px solid #3b82f6;
+          border-radius: 16px;
+          padding: 30px;
+          margin: 30px 0;
+        }
+        .recommendation-item {
+          background: white;
+          padding: 15px;
+          margin: 10px 0;
+          border-radius: 8px;
+          border-left: 4px solid #3b82f6;
+        }
+        .footer {
+          margin-top: 60px;
+          padding-top: 30px;
+          border-top: 2px solid #e5e7eb;
+          color: #6b7280;
+          font-size: 14px;
+          display: flex;
+          justify-content: space-between;
+        }
         .chart-placeholder {
-          background: var(--background-alt);
-          border-radius: 10px;
+          background: white;
+          border-radius: 12px;
           padding: 20px;
-          height: 300px;
           margin: 20px 0;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          height: 300px;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: var(--text-medium);
-          border: 1px dashed var(--border-color);
+          color: #6b7280;
+          border: 1px dashed #d1d5db;
         }
-        
-        .report-footer {
-          margin-top: 40px;
-          padding-top: 20px;
-          border-top: 1px solid var(--border-color);
-          display: flex;
-          justify-content: space-between;
-          color: var(--text-light);
-          font-size: 12px;
-        }
-        
-        .badge {
-          display: inline-block;
-          padding: 4px 8px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 500;
-        }
-        
-        .badge-success {
-          background: var(--success);
-          color: white;
-        }
-        
-        .badge-warning {
-          background: var(--warning);
-          color: white;
-        }
-        
-        .badge-error {
-          background: var(--error);
-          color: white;
-        }
-        
-        .snippet-container {
-          background: var(--background-alt);
-          border-radius: 8px;
-          padding: 15px;
-          margin-bottom: 15px;
-          border: 1px solid var(--border-color);
-        }
-        
-        .snippet-header {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 10px;
-        }
-        
-        .snippet-source {
-          font-weight: 600;
-        }
-        
-        .snippet-content {
-          font-size: 14px;
-          color: var(--text-medium);
-          line-height: 1.5;
-        }
-        
-        .snippet-meta {
-          display: flex;
-          justify-content: space-between;
-          font-size: 12px;
-          color: var(--text-light);
-          margin-top: 10px;
-        }
-        
-        .link {
-          color: var(--primary-color);
-          text-decoration: none;
-        }
-        
-        .link:hover {
-          text-decoration: underline;
-        }
-        
         h1, h2, h3, h4, h5, h6 {
-          color: var(--text-dark);
+          color: #1f2937;
           margin-top: 1.5em;
           margin-bottom: 0.5em;
         }
-        
         p {
           margin-bottom: 1em;
         }
-        
         ul, ol {
           margin-bottom: 1em;
           padding-left: 1.5em;
         }
-        
         li {
           margin-bottom: 0.5em;
         }
       </style>
     </head>
     <body>
-      <div class="report-container">
-        <div class="report-header">
-          <h1 class="report-title">${reportName}</h1>
-          <div class="report-meta">
-            <div>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</div>
-            <div>Report Type: ${reportType.charAt(0).toUpperCase() + reportType.slice(1)}</div>
+      <div class="header">
+        <div class="logo-section">
+          <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="80" height="80" rx="16" fill="${primaryColor}" />
+            <path d="M24 40L36 52L56 32" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <div class="company-name">
+            ${companyName}
           </div>
         </div>
-        
-        <div class="report-body">
-  `;
-
-  if (reportType === 'audit' && data.auditHistory) {
-    const latest = data.auditHistory[0];
-    const average = data.auditHistory.reduce((sum: number, a: any) => sum + a.overall_score, 0) / data.auditHistory.length;
-    
-    html += `
-      <div class="report-section">
-        <h2 class="section-title">AI Visibility Overview</h2>
-        
-        <div class="score-card">
-          <div class="score-value">${latest?.overall_score || 0}</div>
-          <div class="score-label">Current AI Visibility Score</div>
-        </div>
-        
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-value">${latest?.ai_understanding || 0}</div>
-            <div class="metric-label">AI Understanding</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${latest?.citation_likelihood || 0}</div>
-            <div class="metric-label">Citation Likelihood</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${latest?.conversational_readiness || 0}</div>
-            <div class="metric-label">Conversational</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${latest?.content_structure || 0}</div>
-            <div class="metric-label">Content Structure</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${Math.round(average)}</div>
-            <div class="metric-label">Average Score</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.auditHistory.length}</div>
-            <div class="metric-label">Total Audits</div>
-          </div>
+        <div class="report-meta">
+          <h1 style="margin: 0; font-size: 24px;">${reportName}</h1>
+          <p>Generated on ${new Date().toLocaleDateString()}</p>
+          <p>Report Type: ${reportType.charAt(0).toUpperCase() + reportType.slice(1)}</p>
         </div>
       </div>
+  `;
+
+  // Executive Summary Section
+  html += `
+    <section>
+      <h2>Executive Summary</h2>
+      <p>This report provides a comprehensive analysis of your AI visibility performance.</p>
       
-      <div class="report-section">
-        <h2 class="section-title">Audit History</h2>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <p class="metric-value">${data.auditHistory?.[0]?.overall_score || 'N/A'}</p>
+          <p class="metric-label">Current AI Visibility Score</p>
+        </div>
+        
+        ${data.auditHistory && data.auditHistory.length > 1 ? `
+          <div class="metric-card">
+            <p class="metric-value">${data.auditHistory[0].overall_score - data.auditHistory[1].overall_score > 0 ? '+' : ''}${data.auditHistory[0].overall_score - data.auditHistory[1].overall_score}</p>
+            <p class="metric-label">Score Change</p>
+          </div>
+        ` : ''}
+        
+        <div class="metric-card">
+          <p class="metric-value">${data.auditHistory?.length || 0}</p>
+          <p class="metric-label">Audits Conducted</p>
+        </div>
+      </div>
+    </section>
+  `;
+
+  // ROI Analysis Section (if enabled)
+  if (data.roiMetrics) {
+    html += `
+      <section class="roi-section">
+        <h2 class="roi-title">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM14.59 8.59L16 10L12 14L8 10L9.41 8.59L12 11.17L14.59 8.59Z" fill="#065f46"/>
+          </svg>
+          ROI & Business Impact Analysis
+        </h2>
+        
+        <div class="roi-grid">
+          <div class="roi-metric">
+            <h3 style="color: #065f46; margin: 0; font-size: 28px;">${data.roiMetrics.estimatedTrafficIncrease}%</h3>
+            <p style="margin: 5px 0 0; color: #065f46;">Traffic Increase</p>
+          </div>
+          
+          <div class="roi-metric">
+            <h3 style="color: #065f46; margin: 0; font-size: 28px;">$${data.roiMetrics.estimatedRevenueImpact.toLocaleString()}</h3>
+            <p style="margin: 5px 0 0; color: #065f46;">Revenue Impact</p>
+          </div>
+          
+          <div class="roi-metric">
+            <h3 style="color: #065f46; margin: 0; font-size: 28px;">$${data.roiMetrics.costSavingsFromAI.toLocaleString()}</h3>
+            <p style="margin: 5px 0 0; color: #065f46;">Cost Savings</p>
+          </div>
+          
+          <div class="roi-metric">
+            <h3 style="color: #065f46; margin: 0; font-size: 28px;">${data.roiMetrics.totalROI}%</h3>
+            <p style="margin: 5px 0 0; color: #065f46;">Annual ROI</p>
+          </div>
+        </div>
+        
+        <div style="margin-top: 20px; background: white; padding: 15px; border-radius: 8px;">
+          <h4 style="margin: 0 0 10px; color: #065f46;">Business Impact Summary</h4>
+          <p style="margin: 0; color: #065f46;">
+            Based on your current AI visibility score and improvement trajectory, we estimate a ${data.roiMetrics.estimatedTrafficIncrease}% increase in organic traffic from AI sources.
+            This translates to approximately $${data.roiMetrics.estimatedRevenueImpact.toLocaleString()} in additional monthly revenue and $${data.roiMetrics.costSavingsFromAI.toLocaleString()} in monthly cost savings from reduced paid search requirements.
+            With a payback period of ${data.roiMetrics.paybackPeriod} months, your annual ROI for AI visibility optimization is projected at ${data.roiMetrics.totalROI}%.
+          </p>
+        </div>
+      </section>
+    `;
+  }
+
+  // Recommendations
+  if (data.auditHistory?.[0]?.recommendations?.length > 0) {
+    html += `
+      <section class="recommendations">
+        <h2 style="color: #1e40af; margin-bottom: 20px;">Strategic Recommendations</h2>
+        
+        <div class="recommendation-items">
+          ${data.auditHistory[0].recommendations.map((rec: string, index: number) => `
+            <div class="recommendation-item">
+              <h4 style="margin: 0 0 5px; color: #1e40af;">Priority ${index + 1}</h4>
+              <p style="margin: 0; color: #1e3a8a;">${rec}</p>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+    `;
+  }
+
+  // Historical Performance
+  if (data.auditHistory && data.auditHistory.length > 1) {
+    html += `
+      <section>
+        <h2>Historical Performance</h2>
         
         <div class="chart-placeholder">
-          <p>Performance trend visualization would appear here</p>
+          <p>Performance Trend Visualization</p>
         </div>
         
         <table>
           <thead>
             <tr>
               <th>Date</th>
-              <th>Website</th>
               <th>Overall Score</th>
               <th>AI Understanding</th>
               <th>Citation Likelihood</th>
@@ -573,512 +497,30 @@ function generateHTMLReport(reportType: string, data: any, reportName: string): 
             </tr>
           </thead>
           <tbody>
-    `;
-    
-    data.auditHistory.slice(0, 10).forEach((audit: any) => {
-      const date = new Date(audit.created_at).toLocaleDateString();
-      
-      html += `
-        <tr>
-          <td>${date}</td>
-          <td>${audit.website_url}</td>
-          <td><strong>${audit.overall_score}</strong></td>
-          <td>${audit.ai_understanding}</td>
-          <td>${audit.citation_likelihood}</td>
-          <td>${audit.conversational_readiness}</td>
-          <td>${audit.content_structure}</td>
-        </tr>
-      `;
-    });
-    
-    html += `
-          </tbody>
-        </table>
-      </div>
-    `;
-    
-    if (latest?.recommendations?.length > 0) {
-      html += `
-        <div class="report-section">
-          <h2 class="section-title">Key Recommendations</h2>
-          
-          <div class="recommendations">
-            <h3 class="recommendations-title">Actionable Improvements</h3>
-      `;
-      
-      latest.recommendations.forEach((rec: string, index: number) => {
-        html += `
-          <div class="recommendation-item">
-            <strong>Priority ${index + 1}:</strong> ${rec}
-          </div>
-        `;
-      });
-      
-      html += `
-          </div>
-        </div>
-      `;
-    }
-  } else if (reportType === 'competitive' && data.competitorAnalyses) {
-    html += `
-      <div class="report-section">
-        <h2 class="section-title">Competitive Analysis</h2>
-        
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-value">#${data.summary?.ranking || 'N/A'}</div>
-            <div class="metric-label">Your Ranking</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.summary?.primarySiteScore || 0}</div>
-            <div class="metric-label">Your Score</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.summary?.averageCompetitorScore || 0}</div>
-            <div class="metric-label">Competitor Average</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.competitorAnalyses.length}</div>
-            <div class="metric-label">Competitors Analyzed</div>
-          </div>
-        </div>
-        
-        <div class="chart-placeholder">
-          <p>Competitive comparison chart would appear here</p>
-        </div>
-        
-        <table>
-          <thead>
-            <tr>
-              <th>Competitor</th>
-              <th>Overall Score</th>
-              <th>AI Understanding</th>
-              <th>Citation Likelihood</th>
-              <th>Conversational</th>
-              <th>Structure</th>
-              <th>Position</th>
-            </tr>
-          </thead>
-          <tbody>
-    `;
-    
-    // Add primary site first with highlighting
-    if (data.primarySiteAnalysis) {
-      html += `
-        <tr style="background-color: var(--primary-light);">
-          <td><strong>${data.primarySiteAnalysis.name} (You)</strong></td>
-          <td><strong>${data.primarySiteAnalysis.overallScore}</strong></td>
-          <td>${data.primarySiteAnalysis.subscores.aiUnderstanding}</td>
-          <td>${data.primarySiteAnalysis.subscores.citationLikelihood}</td>
-          <td>${data.primarySiteAnalysis.subscores.conversationalReadiness}</td>
-          <td>${data.primarySiteAnalysis.subscores.contentStructure}</td>
-          <td><span class="badge badge-success">#${data.summary?.ranking || 'N/A'}</span></td>
-        </tr>
-      `;
-    }
-    
-    // Add competitors
-    data.competitorAnalyses.forEach((comp: any, index: number) => {
-      html += `
-        <tr>
-          <td>${comp.name}</td>
-          <td><strong>${comp.overallScore}</strong></td>
-          <td>${comp.subscores.aiUnderstanding}</td>
-          <td>${comp.subscores.citationLikelihood}</td>
-          <td>${comp.subscores.conversationalReadiness}</td>
-          <td>${comp.subscores.contentStructure}</td>
-          <td>#${index + 1}</td>
-        </tr>
-      `;
-    });
-    
-    html += `
-          </tbody>
-        </table>
-      </div>
-    `;
-    
-    // Strengths and weaknesses section
-    if (data.primarySiteAnalysis?.strengths && data.primarySiteAnalysis?.weaknesses) {
-      html += `
-        <div class="report-section">
-          <h2 class="section-title">SWOT Analysis</h2>
-          
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-            <div style="background: var(--success); background: linear-gradient(135deg, var(--success), #34D399); color: white; border-radius: 10px; padding: 20px;">
-              <h3 style="margin-bottom: 15px; font-size: 18px;">Your Strengths</h3>
-              <ul style="list-style-position: inside; margin-left: 10px;">
-      `;
-      
-      data.primarySiteAnalysis.strengths.forEach((strength: string) => {
-        html += `<li>${strength}</li>`;
-      });
-      
-      html += `
-              </ul>
-            </div>
-            
-            <div style="background: var(--warning); background: linear-gradient(135deg, var(--warning), #FBBF24); color: white; border-radius: 10px; padding: 20px;">
-              <h3 style="margin-bottom: 15px; font-size: 18px;">Areas for Improvement</h3>
-              <ul style="list-style-position: inside; margin-left: 10px;">
-      `;
-      
-      data.primarySiteAnalysis.weaknesses.forEach((weakness: string) => {
-        html += `<li>${weakness}</li>`;
-      });
-      
-      html += `
-              </ul>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    
-    // Recommendations
-    if (data.recommendations?.length > 0) {
-      html += `
-        <div class="report-section">
-          <h2 class="section-title">Strategic Recommendations</h2>
-          
-          <div class="recommendations">
-            <h3 class="recommendations-title">Competitive Advantage Opportunities</h3>
-      `;
-      
-      data.recommendations.forEach((rec: string, index: number) => {
-        html += `
-          <div class="recommendation-item">
-            <strong>Strategy ${index + 1}:</strong> ${rec}
-          </div>
-        `;
-      });
-      
-      html += `
-          </div>
-        </div>
-      `;
-    }
-  } else if (reportType === 'citation' && data.citations) {
-    html += `
-      <div class="report-section">
-        <h2 class="section-title">Citation Analysis</h2>
-        
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-value">${data.total || data.citations.length}</div>
-            <div class="metric-label">Total Citations</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.domain || 'N/A'}</div>
-            <div class="metric-label">Domain Analyzed</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.confidenceBreakdown?.high || 0}</div>
-            <div class="metric-label">High Confidence</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.sources?.llm || 0}</div>
-            <div class="metric-label">LLM Mentions</div>
-          </div>
-        </div>
-        
-        <div class="chart-placeholder">
-          <p>Citation source distribution chart would appear here</p>
-        </div>
-      </div>
-      
-      <div class="report-section">
-        <h2 class="section-title">Citation Details</h2>
-        
-        <div style="margin-bottom: 20px;">
-          <strong>Keywords:</strong> ${data.searchTerms?.join(', ') || 'N/A'}
-        </div>
-    `;
-    
-    // Group citations by type
-    const citationTypes = ['llm', 'google', 'reddit', 'news'];
-    
-    citationTypes.forEach((type) => {
-      const typeCitations = data.citations.filter((c: any) => c.type === type);
-      
-      if (typeCitations.length > 0) {
-        html += `
-          <div style="margin-bottom: 30px;">
-            <h3 style="font-size: 18px; margin-bottom: 15px; color: var(--text-dark);">
-              ${type.toUpperCase()} Citations (${typeCitations.length})
-            </h3>
-        `;
-        
-        typeCitations.forEach((citation: any) => {
-          const date = new Date(citation.date).toLocaleDateString();
-          const confidenceClass = citation.confidence_score >= 80 ? 'badge-success' : 
-                                citation.confidence_score >= 60 ? 'badge-warning' : 'badge-error';
-          
-          html += `
-            <div class="snippet-container">
-              <div class="snippet-header">
-                <div class="snippet-source">${citation.source}</div>
-                <div>
-                  <span class="badge ${confidenceClass}">${citation.confidence_score || 'N/A'}% confidence</span>
-                </div>
-              </div>
-              
-              <div class="snippet-content">
-                "${citation.snippet}"
-              </div>
-              
-              <div class="snippet-meta">
-                <div>Date: ${date}</div>
-                <div>Match: ${citation.match_type || 'N/A'}</div>
-                <div><a href="${citation.url}" class="link" target="_blank">View Source</a></div>
-              </div>
-            </div>
-          `;
-        });
-        
-        html += `</div>`;
-      }
-    });
-    
-    html += `</div>`;
-  } else if (reportType === 'comprehensive') {
-    html += `
-      <div class="report-section">
-        <h2 class="section-title">Comprehensive Performance Overview</h2>
-        
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-value">${data.auditHistory?.length || 0}</div>
-            <div class="metric-label">Total Audits</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.profile?.websites?.length || 0}</div>
-            <div class="metric-label">Websites</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.profile?.competitors?.length || 0}</div>
-            <div class="metric-label">Competitors</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.profile?.industry || 'N/A'}</div>
-            <div class="metric-label">Industry</div>
-          </div>
-        </div>
-        
-        <div class="chart-placeholder">
-          <p>Performance trend chart would appear here</p>
-        </div>
-      </div>
-    `;
-    
-    // Add latest audit data if available
-    if (data.auditHistory && data.auditHistory.length > 0) {
-      const latest = data.auditHistory[0];
-      
-      html += `
-        <div class="report-section">
-          <h2 class="section-title">Latest Audit Results</h2>
-          
-          <div class="score-card">
-            <div class="score-value">${latest.overall_score}</div>
-            <div class="score-label">Overall AI Visibility Score</div>
-          </div>
-          
-          <div class="metrics-grid">
-            <div class="metric-card">
-              <div class="metric-value">${latest.ai_understanding}</div>
-              <div class="metric-label">AI Understanding</div>
-            </div>
-            
-            <div class="metric-card">
-              <div class="metric-value">${latest.citation_likelihood}</div>
-              <div class="metric-label">Citation Likelihood</div>
-            </div>
-            
-            <div class="metric-card">
-              <div class="metric-value">${latest.conversational_readiness}</div>
-              <div class="metric-label">Conversational</div>
-            </div>
-            
-            <div class="metric-card">
-              <div class="metric-value">${latest.content_structure}</div>
-              <div class="metric-label">Content Structure</div>
-            </div>
-          </div>
-        </div>
-      `;
-      
-      if (latest.recommendations && latest.recommendations.length > 0) {
-        html += `
-          <div class="report-section">
-            <h2 class="section-title">Recommendations</h2>
-            
-            <div class="recommendations">
-              <h3 class="recommendations-title">Priority Improvements</h3>
-        `;
-        
-        latest.recommendations.forEach((rec: string, index: number) => {
-          html += `
-            <div class="recommendation-item">
-              <strong>Priority ${index + 1}:</strong> ${rec}
-            </div>
-          `;
-        });
-        
-        html += `
-            </div>
-          </div>
-        `;
-      }
-    }
-    
-    // Add activity summary if available
-    if (data.activity) {
-      html += `
-        <div class="report-section">
-          <h2 class="section-title">Activity Summary</h2>
-          
-          <table>
-            <thead>
+            ${data.auditHistory.slice(0, 5).map((audit: any) => `
               <tr>
-                <th>Date</th>
-                <th>Activity</th>
-                <th>Details</th>
+                <td>${new Date(audit.created_at).toLocaleDateString()}</td>
+                <td><strong>${audit.overall_score}</strong></td>
+                <td>${audit.ai_understanding}</td>
+                <td>${audit.citation_likelihood}</td>
+                <td>${audit.conversational_readiness}</td>
+                <td>${audit.content_structure}</td>
               </tr>
-            </thead>
-            <tbody>
-      `;
-      
-      data.activity.slice(0, 10).forEach((activity: any) => {
-        const date = new Date(activity.created_at).toLocaleDateString();
-        const activityType = activity.activity_type.replace(/_/g, ' ');
-        
-        html += `
-          <tr>
-            <td>${date}</td>
-            <td>${activityType}</td>
-            <td>${activity.tool_id || activity.activity_data?.type || 'N/A'}</td>
-          </tr>
-        `;
-      });
-      
-      html += `
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
-  } else if (reportType === 'roi_focused' && data.roiMetrics) {
-    html += `
-      <div class="report-section">
-        <h2 class="section-title">ROI & Business Impact Analysis</h2>
-        
-        <div class="score-card">
-          <div class="score-value">${data.roiMetrics.totalROI}%</div>
-          <div class="score-label">Annual ROI</div>
-        </div>
-        
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-value">${data.roiMetrics.estimatedTrafficIncrease}%</div>
-            <div class="metric-label">Traffic Increase</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">$${data.roiMetrics.estimatedRevenueImpact.toLocaleString()}</div>
-            <div class="metric-label">Monthly Revenue Impact</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">$${data.roiMetrics.costSavingsFromAI.toLocaleString()}</div>
-            <div class="metric-label">Monthly Cost Savings</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.roiMetrics.paybackPeriod}</div>
-            <div class="metric-label">Payback Period (months)</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.roiMetrics.competitiveAdvantage}</div>
-            <div class="metric-label">Competitive Advantage</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value">${data.roiMetrics.brandVisibilityScore}</div>
-            <div class="metric-label">Brand Visibility Score</div>
-          </div>
-        </div>
-        
-        <div class="chart-placeholder">
-          <p>ROI projection chart would appear here</p>
-        </div>
-        
-        <div style="background: var(--accent-light); border-radius: 10px; padding: 20px; margin-top: 20px;">
-          <h3 style="color: var(--text-dark); margin-bottom: 10px;">Business Impact Summary</h3>
-          <p>
-            Based on your current AI visibility score and improvement trajectory, we estimate a ${data.roiMetrics.estimatedTrafficIncrease}% increase in organic traffic from AI sources.
-            This translates to approximately $${data.roiMetrics.estimatedRevenueImpact.toLocaleString()} in additional monthly revenue and $${data.roiMetrics.costSavingsFromAI.toLocaleString()} in monthly cost savings from reduced paid search requirements.
-          </p>
-          <p>
-            With a payback period of ${data.roiMetrics.paybackPeriod} months, your annual ROI for AI visibility optimization is projected at ${data.roiMetrics.totalROI}%.
-          </p>
-        </div>
-      </div>
+            `).join('')}
+          </tbody>
+        </table>
+      </section>
     `;
-    
-    // Add latest audit data if available
-    if (data.auditHistory && data.auditHistory.length > 0) {
-      const latest = data.auditHistory[0];
-      
-      html += `
-        <div class="report-section">
-          <h2 class="section-title">AI Visibility Performance</h2>
-          
-          <div class="metrics-grid">
-            <div class="metric-card">
-              <div class="metric-value">${latest.overall_score}</div>
-              <div class="metric-label">Overall Score</div>
-            </div>
-            
-            <div class="metric-card">
-              <div class="metric-value">${latest.ai_understanding}</div>
-              <div class="metric-label">AI Understanding</div>
-            </div>
-            
-            <div class="metric-card">
-              <div class="metric-value">${latest.citation_likelihood}</div>
-              <div class="metric-label">Citation Likelihood</div>
-            </div>
-            
-            <div class="metric-card">
-              <div class="metric-value">${latest.conversational_readiness}</div>
-              <div class="metric-label">Conversational</div>
-            </div>
-            
-            <div class="metric-card">
-              <div class="metric-value">${latest.content_structure}</div>
-              <div class="metric-label">Content Structure</div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
   }
 
+  // Footer
   html += `
-        <div class="report-footer">
-          <div>Generated by SEOGENIX - AI-Powered SEO Platform</div>
-          <div>Report ID: ${crypto.randomUUID().substring(0, 8)}</div>
+      <div class="footer">
+        <div>
+          <p>Generated by SEOGENIX - AI-Powered SEO Platform</p>
+        </div>
+        <div>
+          <p>Report ID: ${crypto.randomUUID().substring(0, 8)}</p>
         </div>
       </div>
     </body>
