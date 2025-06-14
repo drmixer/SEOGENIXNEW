@@ -298,10 +298,10 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
-      case 'error': return <AlertCircle className="w-4 h-4" />;
-      case 'warning': return <AlertCircle className="w-4 h-4" />;
-      case 'suggestion': return <Lightbulb className="w-4 h-4" />;
-      default: return <CheckCircle className="w-4 h-4" />;
+      case 'error': return AlertCircle;
+      case 'warning': return AlertCircle;
+      case 'suggestion': return Lightbulb;
+      default: return CheckCircle;
     }
   };
 
