@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { TrendingUp, TrendingDown, Target, Brain, MessageSquare, FileText, RefreshCw, Info, ChevronDown, ChevronUp, ExternalLink, AlertCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Target, Brain, MessageSquare, FileText, RefreshCw, Info, ChevronDown, ChevronUp, ExternalLink, AlertCircle, ArrowRight } from 'lucide-react';
 import { apiService, type AuditResult } from '../services/api';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
