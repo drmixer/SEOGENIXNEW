@@ -1,8 +1,8 @@
-import createLemonSqueezy from '@lemonsqueezy/lemonsqueezy.js';
+import { LemonSqueezy } from '@lemonsqueezy/lemonsqueezy.js';
 import { supabase } from '../lib/supabase';
 
 // Initialize LemonSqueezy with your API key
-const lemonSqueezy = createLemonSqueezy(import.meta.env.VITE_LEMONSQUEEZY_API_KEY || '');
+const lemonSqueezy = new LemonSqueezy(import.meta.env.VITE_LEMONSQUEEZY_API_KEY || '');
 
 // Plan IDs from LemonSqueezy
 export const PLAN_IDS = {
