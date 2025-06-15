@@ -6,6 +6,7 @@ interface PromptMatchRequest {
   targetAudience?: string;
   contentType?: 'article' | 'product' | 'service' | 'faq' | 'guide';
   userIntent?: 'informational' | 'transactional' | 'navigational' | 'commercial';
+  websiteUrl?: string; // Added to provide context about the site
 }
 
 interface PromptSuggestion {
@@ -28,11 +29,13 @@ Deno.serve(async (req: Request) => {
       industry, 
       targetAudience, 
       contentType = 'article',
-      userIntent = 'informational'
+      userIntent = 'informational',
+      websiteUrl
     }: PromptMatchRequest = await req.json();
     
     console.log(`Processing prompt match suggestions for topic: ${topic}`);
     console.log(`Industry: ${industry || 'not specified'}, Content type: ${contentType}, User intent: ${userIntent}`);
+    console.log(`Website URL: ${websiteUrl || 'not provided'}`);
 
     // Ensure we have a valid topic
     if (!topic || topic.trim().length === 0) {
@@ -40,6 +43,27 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: 'Topic is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Fetch website content if URL is provided to use as context
+    let websiteContent = '';
+    if (websiteUrl) {
+      try {
+        console.log(`Fetching content from ${websiteUrl} for context`);
+        const response = await fetch(websiteUrl, {
+          headers: {
+            'User-Agent': 'SEOGENIX Prompt Suggestions Bot 1.0'
+          }
+        });
+        if (response.ok) {
+          websiteContent = await response.text();
+          console.log(`Successfully fetched website content, length: ${websiteContent.length} characters`);
+        } else {
+          console.error(`Failed to fetch website: ${response.status}`);
+        }
+      } catch (error) {
+        console.error('Failed to fetch website:', error);
+      }
     }
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDJC5a7zgGvBk58ojXPKkQJXu-fR3qHHHM'; // Fallback to demo key
@@ -68,6 +92,9 @@ Deno.serve(async (req: Request) => {
               Target Audience: ${targetAudience || 'General audience'}
               Content Type: ${contentType}
               User Intent: ${userIntent}
+              
+              ${websiteContent ? `Website Context (use this to make prompts specific to this website):
+              ${websiteContent.substring(0, 3000)}` : ''}
 
               Generate prompts across these categories:
               1. DIRECT QUESTIONS - Simple, direct questions about the topic
@@ -85,6 +112,8 @@ Deno.serve(async (req: Request) => {
               - Conversational AI interactions
               - Mobile voice queries
               - Different AI system preferences
+              
+              If website context is provided, make prompts SPECIFIC to that website's services, products, or content.
 
               Format each suggestion as:
               PROMPT: [The actual prompt/question users might ask]
@@ -96,7 +125,8 @@ Deno.serve(async (req: Request) => {
 
               Generate 20-25 diverse prompt suggestions that cover different angles and user needs.
               
-              IMPORTANT: Make all prompts SPECIFIC to the topic "${topic}" - do not use generic placeholders.`
+              IMPORTANT: Make all prompts SPECIFIC to the topic "${topic}" - do not use generic placeholders.
+              If website context is provided, ensure prompts are relevant to that specific business or website.`
             }]
           }],
           generationConfig: {
@@ -115,7 +145,7 @@ Deno.serve(async (req: Request) => {
       
       // Return fallback data if API fails
       console.log('Using fallback prompt suggestions data');
-      return generateFallbackPromptSuggestions(topic, industry, contentType, userIntent);
+      return generateFallbackPromptSuggestions(topic, industry, contentType, userIntent, websiteUrl);
     }
 
     console.log('Received response from Gemini API');
@@ -180,6 +210,7 @@ Deno.serve(async (req: Request) => {
         targetAudience,
         contentType,
         userIntent,
+        websiteUrl,
         totalPrompts: promptSuggestions.length,
         averageLikelihood: avgLikelihood,
         promptSuggestions,
@@ -219,16 +250,34 @@ function generateFallbackPromptSuggestions(
   topic: string, 
   industry?: string, 
   contentType: string = 'article',
-  userIntent: string = 'informational'
+  userIntent: string = 'informational',
+  websiteUrl?: string
 ): Response {
   console.log(`Generating fallback prompt suggestions for ${topic}`);
   
   // Make sure we have a valid topic
   const validTopic = topic && topic.trim().length > 0 ? topic : 'AI visibility';
   
+  // Extract domain name if website URL is provided
+  let domainName = '';
+  let brandName = '';
+  
+  if (websiteUrl) {
+    try {
+      const url = new URL(websiteUrl);
+      domainName = url.hostname;
+      brandName = domainName.split('.')[0].charAt(0).toUpperCase() + domainName.split('.')[0].slice(1);
+    } catch (error) {
+      console.error('Error parsing website URL:', error);
+    }
+  }
+  
+  // Use brand name in prompts if available
+  const contextualizedTopic = brandName ? `${brandName}'s ${validTopic}` : validTopic;
+  
   const promptSuggestions: PromptSuggestion[] = [
     {
-      prompt: `What is ${validTopic}?`,
+      prompt: `What is ${contextualizedTopic}?`,
       category: 'DIRECT QUESTIONS',
       intent: 'informational',
       aiSystem: 'General',
@@ -236,7 +285,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include a clear definition section with comprehensive explanation'
     },
     {
-      prompt: `How does ${validTopic} work?`,
+      prompt: `How does ${contextualizedTopic} work?`,
       category: 'DIRECT QUESTIONS',
       intent: 'informational',
       aiSystem: 'ChatGPT',
@@ -244,7 +293,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Provide a step-by-step explanation with visual aids if possible'
     },
     {
-      prompt: `What are the benefits of ${validTopic}?`,
+      prompt: `What are the benefits of ${contextualizedTopic}?`,
       category: 'DIRECT QUESTIONS',
       intent: 'informational',
       aiSystem: 'General',
@@ -252,7 +301,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'List clear benefits with supporting evidence or examples'
     },
     {
-      prompt: `${validTopic} vs traditional approaches`,
+      prompt: `${contextualizedTopic} vs traditional approaches`,
       category: 'COMPARISON QUERIES',
       intent: 'informational',
       aiSystem: 'Claude',
@@ -260,7 +309,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create a comparison table with clear advantages and disadvantages'
     },
     {
-      prompt: `What's better, ${validTopic} or alternative solutions?`,
+      prompt: `What's better, ${contextualizedTopic} or alternative solutions?`,
       category: 'COMPARISON QUERIES',
       intent: 'commercial',
       aiSystem: 'ChatGPT',
@@ -268,7 +317,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Provide balanced comparison with specific use cases for each option'
     },
     {
-      prompt: `How to implement ${validTopic} for best results`,
+      prompt: `How to implement ${contextualizedTopic} for best results`,
       category: 'HOW-TO REQUESTS',
       intent: 'informational',
       aiSystem: 'General',
@@ -276,7 +325,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create a numbered list with clear implementation steps'
     },
     {
-      prompt: `Step by step guide to ${validTopic}`,
+      prompt: `Step by step guide to ${contextualizedTopic}`,
       category: 'HOW-TO REQUESTS',
       intent: 'informational',
       aiSystem: 'Google',
@@ -284,7 +333,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Structure content as a clear tutorial with headings for each step'
     },
     {
-      prompt: `Common problems with ${validTopic} and how to solve them`,
+      prompt: `Common problems with ${contextualizedTopic} and how to solve them`,
       category: 'PROBLEM-SOLVING',
       intent: 'informational',
       aiSystem: 'Claude',
@@ -292,7 +341,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create a troubleshooting section with problem-solution format'
     },
     {
-      prompt: `Why isn't my ${validTopic} working?`,
+      prompt: `Why isn't my ${contextualizedTopic} working?`,
       category: 'PROBLEM-SOLVING',
       intent: 'informational',
       aiSystem: 'General',
@@ -300,7 +349,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include a FAQ section addressing common issues and solutions'
     },
     {
-      prompt: `Hey Siri, tell me about ${validTopic}`,
+      prompt: `Hey Siri, tell me about ${contextualizedTopic}`,
       category: 'VOICE SEARCH',
       intent: 'informational',
       aiSystem: 'Siri',
@@ -308,7 +357,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create concise, conversational content optimized for voice responses'
     },
     {
-      prompt: `Alexa, what should I know about ${validTopic}?`,
+      prompt: `Alexa, what should I know about ${contextualizedTopic}?`,
       category: 'VOICE SEARCH',
       intent: 'informational',
       aiSystem: 'Alexa',
@@ -316,7 +365,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Structure content to answer direct questions in 1-2 sentences'
     },
     {
-      prompt: `Can you explain ${validTopic} in simple terms?`,
+      prompt: `Can you explain ${contextualizedTopic} in simple terms?`,
       category: 'CONVERSATIONAL',
       intent: 'informational',
       aiSystem: 'General',
@@ -324,7 +373,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include a simplified explanation section using analogies'
     },
     {
-      prompt: `I'm new to ${validTopic}, where should I start?`,
+      prompt: `I'm new to ${contextualizedTopic}, where should I start?`,
       category: 'CONVERSATIONAL',
       intent: 'informational',
       aiSystem: 'ChatGPT',
@@ -332,7 +381,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Create a beginner\'s guide section with clear starting points'
     },
     {
-      prompt: `Technical specifications for ${validTopic} implementation`,
+      prompt: `Technical specifications for ${contextualizedTopic} implementation`,
       category: 'TECHNICAL',
       intent: 'informational',
       aiSystem: 'Claude',
@@ -340,7 +389,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include detailed technical documentation with code examples if applicable'
     },
     {
-      prompt: `Advanced ${validTopic} strategies for professionals`,
+      prompt: `Advanced ${contextualizedTopic} strategies for professionals`,
       category: 'TECHNICAL',
       intent: 'informational',
       aiSystem: 'ChatGPT',
@@ -348,7 +397,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Provide in-depth technical content with industry-specific terminology'
     },
     {
-      prompt: `Best ${validTopic} tools to buy`,
+      prompt: `Best ${contextualizedTopic} tools to buy`,
       category: 'COMMERCIAL',
       intent: 'commercial',
       aiSystem: 'General',
@@ -356,7 +405,7 @@ function generateFallbackPromptSuggestions(
       optimization: 'Include product comparisons with clear features and benefits'
     },
     {
-      prompt: `Is ${validTopic} worth the investment?`,
+      prompt: `Is ${contextualizedTopic} worth the investment?`,
       category: 'COMMERCIAL',
       intent: 'commercial',
       aiSystem: 'Claude',
@@ -364,6 +413,44 @@ function generateFallbackPromptSuggestions(
       optimization: 'Provide ROI analysis and case studies demonstrating value'
     }
   ];
+  
+  // Add website-specific prompts if website URL is provided
+  if (brandName) {
+    promptSuggestions.push(
+      {
+        prompt: `How does ${brandName} approach ${validTopic}?`,
+        category: 'DIRECT QUESTIONS',
+        intent: 'informational',
+        aiSystem: 'General',
+        likelihood: 92,
+        optimization: 'Include a clear explanation of your company\'s unique approach'
+      },
+      {
+        prompt: `What makes ${brandName}'s ${validTopic} services different?`,
+        category: 'COMPARISON QUERIES',
+        intent: 'commercial',
+        aiSystem: 'ChatGPT',
+        likelihood: 89,
+        optimization: 'Highlight your unique selling propositions and differentiators'
+      },
+      {
+        prompt: `How much does ${brandName} charge for ${validTopic} services?`,
+        category: 'COMMERCIAL',
+        intent: 'commercial',
+        aiSystem: 'General',
+        likelihood: 86,
+        optimization: 'Include transparent pricing information or pricing factors'
+      },
+      {
+        prompt: `Is ${brandName} good for ${validTopic}?`,
+        category: 'CONVERSATIONAL',
+        intent: 'commercial',
+        aiSystem: 'Claude',
+        likelihood: 84,
+        optimization: 'Include testimonials and evidence of your expertise'
+      }
+    );
+  }
   
   // Group prompts by category
   const promptsByCategory = promptSuggestions.reduce((acc, prompt) => {
@@ -395,6 +482,7 @@ function generateFallbackPromptSuggestions(
       targetAudience: 'General audience',
       contentType,
       userIntent,
+      websiteUrl,
       totalPrompts: promptSuggestions.length,
       averageLikelihood: avgLikelihood,
       promptSuggestions,

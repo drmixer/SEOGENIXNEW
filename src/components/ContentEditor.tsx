@@ -340,9 +340,9 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
     return (
       <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100 text-center">
         <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Real-time Content Editor</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Content Editor</h3>
         <p className="text-gray-600 mb-4">
-          Write and optimize content with instant AI visibility feedback as you type. Available with Core plan and above.
+          Write and optimize content with AI visibility feedback. Available with Core plan and above.
         </p>
         <button className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300">
           Upgrade to Core Plan
@@ -487,7 +487,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
           {/* Real-time Suggestions Panel */}
           {realTimeSuggestions.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-              <h3 className="font-medium text-gray-900 mb-3">Real-time Suggestions</h3>
+              <h3 className="font-medium text-gray-900 mb-3">Suggestions</h3>
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {realTimeSuggestions.map((suggestion, index) => {
                   const IconComponent = getSeverityIcon(suggestion.severity);
@@ -662,7 +662,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 text-center">
               <FileText className="w-8 h-8 text-gray-400 mx-auto mb-3" />
               <p className="text-gray-600 text-sm">
-                Start writing content to see real-time AI visibility analysis
+                Start writing content to see AI visibility analysis
               </p>
             </div>
           )}
