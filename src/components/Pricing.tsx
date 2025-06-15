@@ -19,11 +19,15 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
       monthlyPrice: 0,
       annualPrice: 0,
       description: 'Try basic tools and explore AI visibility',
+      websitesLimit: 1,
+      competitorsLimit: 1,
       features: [
         'AI Visibility Score (Overall)',
         'Basic dashboard access',
         'Limited tool usage',
-        'Community support'
+        'Community support',
+        '1 website',
+        '1 competitor tracking'
       ],
       limitations: [
         'No subscore breakdown',
@@ -38,6 +42,8 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
       monthlyPrice: 20,
       annualPrice: 180,
       description: 'Full audits and essential tools',
+      websitesLimit: 3,
+      competitorsLimit: 3,
       features: [
         'Everything in Free',
         'AI Visibility Subscores',
@@ -46,7 +52,9 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
         'LLM Site Summaries',
         'Citation Tracker',
         'Voice Assistant Tester',
-        'Genie Chatbot (Tool Guidance)'
+        'Genie Chatbot (Tool Guidance)',
+        'Up to 3 websites',
+        'Up to 3 competitors'
       ],
       limitations: [
         'No advanced analytics',
@@ -60,6 +68,8 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
       monthlyPrice: 60,
       annualPrice: 540,
       description: 'Advanced optimization with full chatbot access',
+      websitesLimit: 10,
+      competitorsLimit: 10,
       popular: true,
       features: [
         'Everything in Core',
@@ -69,7 +79,9 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
         'AI Content Generator',
         'Full Genie Chatbot Support',
         'Weekly Proactive Suggestions',
-        'Priority support'
+        'Priority support',
+        'Up to 10 websites',
+        'Up to 10 competitors'
       ],
       limitations: [
         'Single user account',
@@ -82,6 +94,8 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
       monthlyPrice: 150,
       annualPrice: 1350,
       description: 'Manage multiple clients with team access',
+      websitesLimit: 25,
+      competitorsLimit: 25,
       features: [
         'Everything in Pro',
         'Multi-site Management',
@@ -90,7 +104,9 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
         'White-label Options',
         'Dedicated Account Manager',
         'Custom Integrations',
-        'Priority Features'
+        'Priority Features',
+        'Up to 25 websites',
+        'Up to 25 competitors'
       ]
     }
   ];

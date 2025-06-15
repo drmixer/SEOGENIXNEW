@@ -72,7 +72,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
     free: { websites: 1, competitors: 1 },
     core: { websites: 3, competitors: 3 },
     pro: { websites: 10, competitors: 10 },
-    agency: { websites: 50, competitors: 25 }
+    agency: { websites: 25, competitors: 25 }
   };
 
   const currentLimits = planLimits[userPlan];

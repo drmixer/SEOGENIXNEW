@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, CreditCard, Check, Star, Calendar, Download, ExternalLink, RefreshCw, Loader } from 'lucide-react';
+import { X, CreditCard, Check, Star, Calendar, Download, ExternalLink, Loader, RefreshCw } from 'lucide-react';
 import { lemonsqueezyService } from '../services/lemonsqueezy';
 import { supabase } from '../lib/supabase';
 
@@ -44,11 +44,15 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
       monthlyPrice: 0,
       annualPrice: 0,
       description: 'Try basic tools and explore SEO visibility',
+      websitesLimit: 1,
+      competitorsLimit: 1,
       features: [
         'AI Visibility Score (Overall)',
         'Basic dashboard access',
         'Limited tool usage',
-        'Community support'
+        'Community support',
+        '1 website',
+        '1 competitor tracking'
       ],
       limitations: [
         'No subscore breakdown',
@@ -63,6 +67,8 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
       monthlyPrice: 20,
       annualPrice: 180,
       description: 'Full audits and essential tools',
+      websitesLimit: 3,
+      competitorsLimit: 3,
       features: [
         'Everything in Free',
         'AI Visibility Subscores',
@@ -71,7 +77,9 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
         'LLM Site Summaries',
         'Citation Tracker',
         'Voice Assistant Tester',
-        'Genie Chatbot (Tool Guidance)'
+        'Genie Chatbot (Tool Guidance)',
+        'Up to 3 websites',
+        'Up to 3 competitors'
       ],
       limitations: [
         'No advanced analytics',
@@ -85,6 +93,8 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
       monthlyPrice: 60,
       annualPrice: 540,
       description: 'Advanced optimization with full chatbot access',
+      websitesLimit: 10,
+      competitorsLimit: 10,
       popular: true,
       features: [
         'Everything in Core',
@@ -94,7 +104,9 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
         'AI Content Generator',
         'Full Genie Chatbot Support',
         'Weekly Proactive Suggestions',
-        'Priority support'
+        'Priority support',
+        'Up to 10 websites',
+        'Up to 10 competitors'
       ],
       limitations: [
         'Single user account',
@@ -107,6 +119,8 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
       monthlyPrice: 150,
       annualPrice: 1350,
       description: 'Manage multiple clients with team access',
+      websitesLimit: 25,
+      competitorsLimit: 25,
       features: [
         'Everything in Pro',
         'Multi-site Management',
@@ -115,7 +129,9 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
         'White-label Options',
         'Dedicated Account Manager',
         'Custom Integrations',
-        'Priority Features'
+        'Priority Features',
+        'Up to 25 websites',
+        'Up to 25 competitors'
       ]
     }
   ];
@@ -424,7 +440,7 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
                   {plans.map((plan) => (
                     <div 
                       key={plan.id}
-                      className={`bg-white rounded-xl shadow-sm border-2 transition-all duration-300 ${
+                      className={`bg-white rounded-xl shadow-sm border-2 transition-all ${
                         plan.popular 
                           ? 'border-purple-600 relative' 
                           : plan.id === userPlan
@@ -729,11 +745,21 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
                       <h4 className="font-medium text-gray-900">Plan Benefits</h4>
                       <span className="text-sm text-purple-600 font-medium">{userPlan.toUpperCase()}</span>
                     </div>
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Websites</span>
+                        <span className="font-medium">{currentPlan?.websitesLimit || 1}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Competitors</span>
+                        <span className="font-medium">{currentPlan?.competitorsLimit || 1}</span>
+                      </div>
+                    </div>
                     <div className="space-y-2">
                       {currentPlan?.features.slice(0, 4).map((feature, index) => (
-                        <div key={index} className="flex items-center space-x-2">
+                        <div key={index} className="flex items-center">
                           <Check className="w-4 h-4 text-green-500" />
-                          <span className="text-sm text-gray-600">{feature}</span>
+                          <span className="text-sm text-gray-600 ml-2">{feature}</span>
                         </div>
                       ))}
                     </div>
