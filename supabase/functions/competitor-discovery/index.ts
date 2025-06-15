@@ -11,13 +11,12 @@ interface CompetitorDiscoveryRequest {
 interface CompetitorSuggestion {
   name: string;
   url: string;
-  type: 'direct' | 'indirect' | 'industry_leader' | 'emerging' | 'local';
+  type: 'direct' | 'indirect' | 'industry_leader' | 'emerging';
   relevanceScore: number;
   reason: string;
   marketPosition: string;
   keyStrengths: string[];
   differentiators: string[];
-  location?: string; // Added location field
 }
 
 Deno.serve(async (req: Request) => {
@@ -38,39 +37,9 @@ Deno.serve(async (req: Request) => {
     console.log(`Industry: ${industry || 'not specified'}, Analysis depth: ${analysisDepth}`);
     console.log(`Existing competitors: ${existingCompetitors.join(', ') || 'none'}`);
 
-    // Extract location from URL, business description, and content
-    let detectedLocation = '';
-    
-    // Try to extract location from URL
-    try {
-      const urlObj = new URL(url);
-      const domainParts = urlObj.hostname.split('.');
-      const path = urlObj.pathname.split('/').filter(Boolean);
-      
-      // Check for location in domain (e.g., prescottwebdesign.com)
-      const commonLocations = ['prescott', 'phoenix', 'scottsdale', 'flagstaff', 'sedona', 'tempe', 'mesa', 'chandler', 'gilbert', 'glendale', 'peoria', 'surprise', 'yuma', 'tucson'];
-      
-      for (const part of [...domainParts, ...path]) {
-        const normalizedPart = part.toLowerCase();
-        if (commonLocations.includes(normalizedPart)) {
-          detectedLocation = normalizedPart.charAt(0).toUpperCase() + normalizedPart.slice(1);
-          console.log(`Detected location from URL: ${detectedLocation}`);
-          break;
-        }
-      }
-    } catch (error) {
-      console.error('Error parsing URL:', error);
-    }
-    
-    // Try to extract from business description if no location found yet
-    if (!detectedLocation && businessDescription) {
-      const locationRegex = /\b(Prescott|Phoenix|Scottsdale|Flagstaff|Sedona|Tempe|Mesa|Chandler|Gilbert|Glendale|Peoria|Surprise|Yuma|Tucson|Arizona|AZ)\b/i;
-      const match = businessDescription.match(locationRegex);
-      if (match) {
-        detectedLocation = match[1];
-        console.log(`Detected location from business description: ${detectedLocation}`);
-      }
-    }
+    // Extract location information from URL and business description
+    const locationInfo = extractLocationInfo(url, businessDescription);
+    console.log(`Extracted location info: ${JSON.stringify(locationInfo)}`);
 
     // Fetch content from the user's website for analysis
     let websiteContent = '';
@@ -84,45 +53,11 @@ Deno.serve(async (req: Request) => {
       if (response.ok) {
         websiteContent = await response.text();
         console.log(`Successfully fetched content, length: ${websiteContent.length} characters`);
-        
-        // Try to extract location from content if still not found
-        if (!detectedLocation) {
-          const locationRegex = /\b(Prescott|Phoenix|Scottsdale|Flagstaff|Sedona|Tempe|Mesa|Chandler|Gilbert|Glendale|Peoria|Surprise|Yuma|Tucson|Arizona|AZ)\b/i;
-          const matches = [...websiteContent.matchAll(locationRegex)];
-          if (matches.length > 0) {
-            // Count occurrences to find the most mentioned location
-            const locationCounts = matches.reduce((acc, match) => {
-              const loc = match[1];
-              acc[loc] = (acc[loc] || 0) + 1;
-              return acc;
-            }, {} as Record<string, number>);
-            
-            // Get the most mentioned location
-            const mostMentioned = Object.entries(locationCounts)
-              .sort((a, b) => b[1] - a[1])[0];
-              
-            if (mostMentioned) {
-              detectedLocation = mostMentioned[0];
-              console.log(`Extracted location from content: ${detectedLocation}`);
-            }
-          }
-        }
       } else {
         console.error(`Failed to fetch URL: ${url}, status: ${response.status}`);
       }
     } catch (error) {
-      console.error('Failed to fetch URL:', error);
-    }
-
-    // Determine business type from content or industry
-    let businessType = industry || '';
-    if (!businessType && websiteContent) {
-      const businessTypeRegex = /\b(web design|web development|digital marketing|SEO|graphic design|branding|e-commerce|app development|software development|IT services|consulting)\b/i;
-      const matches = websiteContent.match(businessTypeRegex);
-      if (matches) {
-        businessType = matches[1];
-        console.log(`Detected business type from content: ${businessType}`);
-      }
+      console.error('Failed to fetch website:', error);
     }
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDJC5a7zgGvBk58ojXPKkQJXu-fR3qHHHM'; // Fallback to demo key
@@ -135,296 +70,138 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Use Google Search API if available
-    const googleApiKey = Deno.env.get('GOOGLE_SEARCH_API_KEY');
-    const googleEngineId = Deno.env.get('GOOGLE_SEARCH_ENGINE_ID');
-    
-    let competitorSuggestions: CompetitorSuggestion[] = [];
-    let usedRealSearch = false;
-    
-    if (googleApiKey && googleEngineId) {
-      try {
-        console.log('Using Google Search API for competitor discovery');
-        
-        // Construct location-specific search queries
-        const queries = [];
-        
-        if (detectedLocation) {
-          // Location-specific queries
-          queries.push(`${detectedLocation} ${businessType || 'web design'} companies`);
-          queries.push(`${businessType || 'web design'} in ${detectedLocation}`);
-          queries.push(`${detectedLocation} ${businessType || 'web design'} agency`);
-        } else {
-          // General queries
-          queries.push(`${businessType || 'web design'} companies`);
-          queries.push(`${businessType || 'web design'} agency`);
-        }
-        
-        // Extract domain to exclude from results
-        const domain = new URL(url).hostname;
-        
-        for (const query of queries.slice(0, 2)) { // Limit to 2 queries to avoid rate limits
-          console.log(`Searching for: ${query}`);
-          
-          const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${googleApiKey}&cx=${googleEngineId}&q=${encodeURIComponent(query)}&num=10`;
-          
-          const searchResponse = await fetch(searchUrl);
-          
-          if (searchResponse.ok) {
-            const searchData = await searchResponse.json();
-            
-            if (searchData.items && searchData.items.length > 0) {
-              usedRealSearch = true;
+    console.log('Calling Gemini API for competitor discovery...');
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `Analyze this business and discover potential competitors they may not be aware of. Provide comprehensive competitor intelligence.
+
+              Business Website: ${url}
+              Industry: ${industry || 'Not specified'}
+              Business Description: ${businessDescription || 'Not provided'}
+              Website Content: ${websiteContent ? websiteContent.substring(0, 3000) : 'Not available'}
               
-              for (const item of searchData.items) {
-                try {
-                  // Skip if this is the user's own website
-                  if (item.link.includes(domain)) continue;
-                  
-                  // Skip if this is already in existing competitors
-                  if (existingCompetitors.some(comp => item.link.includes(comp))) continue;
-                  
-                  // Skip if we already added this competitor
-                  if (competitorSuggestions.some(comp => comp.url === item.link)) continue;
-                  
-                  // Validate URL
-                  new URL(item.link);
-                  
-                  // Determine competitor type
-                  let competitorType: CompetitorSuggestion['type'] = 'direct';
-                  let location = '';
-                  
-                  // Check if it's a local competitor
-                  if (detectedLocation && 
-                      (item.title.toLowerCase().includes(detectedLocation.toLowerCase()) || 
-                       item.snippet.toLowerCase().includes(detectedLocation.toLowerCase()))) {
-                    competitorType = 'local';
-                    location = detectedLocation;
-                  }
-                  
-                  // Check if it's an industry leader
-                  const industryLeaders = [
-                    'wix', 'squarespace', 'wordpress', 'shopify', 'webflow', 
-                    'godaddy', 'adobe', 'hubspot', 'mailchimp', 'salesforce'
-                  ];
-                  
-                  if (industryLeaders.some(leader => 
-                    item.link.toLowerCase().includes(leader) || 
-                    item.title.toLowerCase().includes(leader))) {
-                    competitorType = 'industry_leader';
-                  }
-                  
-                  // Extract name from title
-                  let name = item.title.split('-')[0].trim();
-                  if (name.length > 30) {
-                    name = name.substring(0, 30) + '...';
-                  }
-                  
-                  // Calculate relevance score based on query match and competitor type
-                  let relevanceScore = 75;
-                  if (competitorType === 'local') {
-                    relevanceScore = 90; // Local competitors are highly relevant
-                  } else if (competitorType === 'industry_leader') {
-                    relevanceScore = 65; // Industry leaders are less directly relevant
-                  }
-                  
-                  competitorSuggestions.push({
-                    name,
-                    url: item.link,
-                    type: competitorType,
-                    relevanceScore,
-                    reason: `Found as a ${competitorType === 'local' ? 'local competitor' : competitorType === 'industry_leader' ? 'major industry player' : 'competitor'} for ${businessType || 'web design'} ${location ? `in ${location}` : ''}`,
-                    marketPosition: `${competitorType === 'industry_leader' ? 'Major player' : competitorType === 'local' ? 'Local business' : 'Competitor'} in the ${businessType || 'web design'} market`,
-                    keyStrengths: extractKeyStrengths(item.snippet),
-                    differentiators: extractDifferentiators(item.snippet),
-                    location
-                  });
-                } catch (error) {
-                  console.error(`Error processing search result: ${error}`);
-                }
-              }
-            }
-          } else {
-            console.error('Search API error:', await searchResponse.text());
-          }
-        }
-      } catch (error) {
-        console.error('Error using search API:', error);
-      }
-    }
-
-    // If we couldn't use real search or didn't get enough results, use Gemini API
-    if (!usedRealSearch || competitorSuggestions.length < 3) {
-      console.log('Using Gemini API for competitor discovery');
-      
-      const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `Analyze this business and discover potential competitors they may not be aware of. Provide comprehensive competitor intelligence.
-
-                Business Website: ${url}
-                Industry: ${industry || businessType || 'Not specified'}
-                Business Description: ${businessDescription || 'Not provided'}
-                Location: ${detectedLocation || 'Not specified'}
-                Content: ${websiteContent ? websiteContent.substring(0, 3000) : 'Not available'}
-                
-                Existing Known Competitors: ${existingCompetitors.length > 0 ? existingCompetitors.join(', ') : 'None specified'}
-                Analysis Depth: ${analysisDepth}
-
-                Discover and analyze competitors across these categories:
-
-                1. DIRECT COMPETITORS - Companies offering very similar products/services to the same target market
-                2. INDIRECT COMPETITORS - Companies solving the same customer problem with different approaches
-                3. INDUSTRY LEADERS - Major established players in the industry that set market standards
-                4. EMERGING PLAYERS - Newer companies or startups that could become significant competitors
-                5. LOCAL COMPETITORS - Businesses in the same geographic area offering similar services
-
-                ${detectedLocation ? `IMPORTANT: Since this is a location-based business in ${detectedLocation}, prioritize finding LOCAL competitors in that area. Focus on finding real, existing businesses in ${detectedLocation} that offer similar services.` : ''}
-
-                For each competitor, provide:
-                - Company name and website URL (MUST be a real, existing website)
-                - Competitor type (direct/indirect/industry_leader/emerging/local)
-                - Relevance score (1-100) based on how directly they compete
-                - Detailed reason why they're a competitor
-                - Market position analysis
-                - 3-5 key strengths
-                - 2-3 key differentiators
-                - Location (if known)
-
-                Focus on discovering competitors the user might not already know about. Avoid suggesting the existing competitors they've already listed.
-
-                ${analysisDepth === 'comprehensive' ? `
-                For comprehensive analysis, also include:
-                - International competitors
-                - Adjacent market players
-                - Platform/marketplace competitors
-                - Technology stack competitors
-                ` : ''}
-
-                Format each competitor as:
-                COMPETITOR: [Company Name]
-                URL: [Website URL - MUST be a real, valid URL]
-                TYPE: [direct/indirect/industry_leader/emerging/local]
-                RELEVANCE: [1-100 score]
-                REASON: [Why they're a competitor]
-                MARKET_POSITION: [Their position in the market]
-                STRENGTHS: [Strength 1] | [Strength 2] | [Strength 3]
-                DIFFERENTIATORS: [Diff 1] | [Diff 2]
-                LOCATION: [City, State/Province, Country if known]
-
-                Provide 8-15 competitor suggestions depending on analysis depth.
-                
-                CRITICAL: ONLY include REAL companies with VALID URLs. Do NOT make up fictional competitors.`
-              }]
-            }],
-            generationConfig: {
-              temperature: 0.4,
-              topK: 40,
-              topP: 0.8,
-              maxOutputTokens: 2048,
-            }
-          })
-        }
-      );
-
-      if (geminiResponse.ok) {
-        const geminiData = await geminiResponse.json();
-        const responseText = geminiData.candidates[0].content.parts[0].text;
-
-        // Parse competitor suggestions
-        const sections = responseText.split('COMPETITOR:').slice(1);
-
-        for (const section of sections) {
-          const nameMatch = section.match(/^([^\n]+)/);
-          const urlMatch = section.match(/URL:\s*(.*)/i);
-          const typeMatch = section.match(/TYPE:\s*(.*)/i);
-          const relevanceMatch = section.match(/RELEVANCE:\s*(\d+)/i);
-          const reasonMatch = section.match(/REASON:\s*(.*)/i);
-          const positionMatch = section.match(/MARKET_POSITION:\s*(.*)/i);
-          const strengthsMatch = section.match(/STRENGTHS:\s*(.*)/i);
-          const diffMatch = section.match(/DIFFERENTIATORS:\s*(.*)/i);
-          const locationMatch = section.match(/LOCATION:\s*(.*)/i);
-
-          if (nameMatch && urlMatch && typeMatch && relevanceMatch && reasonMatch) {
-            try {
-              // Validate URL
-              new URL(urlMatch[1].trim());
+              Location Information: ${locationInfo.city ? `City: ${locationInfo.city}, State/Region: ${locationInfo.state}` : 'No specific location detected'}
               
-              const strengths = strengthsMatch ? 
-                strengthsMatch[1].split('|').map(s => s.trim()).filter(s => s) : [];
-              const differentiators = diffMatch ? 
-                diffMatch[1].split('|').map(d => d.trim()).filter(d => d) : [];
-              const location = locationMatch ? locationMatch[1].trim() : '';
+              Existing Known Competitors: ${existingCompetitors.length > 0 ? existingCompetitors.join(', ') : 'None specified'}
+              Analysis Depth: ${analysisDepth}
 
-              // Skip if this is the user's own website
-              if (urlMatch[1].trim().includes(new URL(url).hostname)) {
-                continue;
-              }
+              IMPORTANT INSTRUCTIONS:
+              1. Focus on finding REAL, SPECIFIC competitors that actually exist
+              2. If location information is provided, prioritize finding LOCAL competitors in the same geographic area
+              3. For location-based businesses, find competitors within the same city or nearby cities
+              4. For online-only businesses, find niche-specific competitors rather than large obvious ones
+              5. Avoid suggesting generic placeholder companies or made-up businesses
+              6. Research actual businesses in the industry and location
+              7. Provide REAL website URLs that actually exist
+              8. Focus on smaller, less obvious competitors that the business might not be aware of
+              9. DO NOT include any of the existing known competitors in your suggestions
 
-              // Skip if already in existing competitors
-              if (existingCompetitors.some(comp => urlMatch[1].trim().includes(comp))) {
-                continue;
-              }
+              Discover and analyze competitors across these categories:
 
-              // Skip if we already added this competitor
-              if (competitorSuggestions.some(comp => comp.url === urlMatch[1].trim())) {
-                continue;
-              }
+              1. DIRECT COMPETITORS - Companies offering very similar products/services to the same target market
+              2. INDIRECT COMPETITORS - Companies solving the same customer problem with different approaches
+              3. INDUSTRY LEADERS - Major established players in the industry that set market standards
+              4. EMERGING PLAYERS - Newer companies or startups that could become significant competitors
 
-              competitorSuggestions.push({
-                name: nameMatch[1].trim(),
-                url: urlMatch[1].trim(),
-                type: typeMatch[1].trim() as CompetitorSuggestion['type'],
-                relevanceScore: parseInt(relevanceMatch[1]),
-                reason: reasonMatch[1].trim(),
-                marketPosition: positionMatch ? positionMatch[1].trim() : 'Market position analysis not available',
-                keyStrengths: strengths.slice(0, 5),
-                differentiators: differentiators.slice(0, 3),
-                location
-              });
-            } catch (error) {
-              console.error(`Error processing competitor: ${error}`);
-            }
+              For each competitor, provide:
+              - Company name and website URL (MUST BE REAL)
+              - Competitor type (direct/indirect/industry_leader/emerging)
+              - Relevance score (1-100) based on how directly they compete
+              - Detailed reason why they're a competitor
+              - Market position analysis
+              - 3-5 key strengths
+              - 2-3 key differentiators
+
+              Focus on discovering competitors the user might not already know about. Avoid suggesting the existing competitors they've already listed.
+
+              ${analysisDepth === 'comprehensive' ? `
+              For comprehensive analysis, also include:
+              - International competitors
+              - Adjacent market players
+              - Platform/marketplace competitors
+              - Technology stack competitors
+              ` : ''}
+
+              Format each competitor as:
+              COMPETITOR: [Company Name]
+              URL: [Website URL]
+              TYPE: [direct/indirect/industry_leader/emerging]
+              RELEVANCE: [1-100 score]
+              REASON: [Why they're a competitor]
+              MARKET_POSITION: [Their position in the market]
+              STRENGTHS: [Strength 1] | [Strength 2] | [Strength 3]
+              DIFFERENTIATORS: [Diff 1] | [Diff 2]
+
+              Provide 8-15 competitor suggestions depending on analysis depth.`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.4,
+            topK: 40,
+            topP: 0.8,
+            maxOutputTokens: 2048,
           }
-        }
-      } else {
-        console.error('Gemini API error:', await geminiResponse.text());
+        })
+      }
+    );
+
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      console.error('Gemini API error:', errorText);
+      
+      // Return fallback data if API fails
+      console.log('Using fallback competitor discovery data');
+      return generateFallbackCompetitors(url, industry, locationInfo, existingCompetitors, analysisDepth);
+    }
+
+    console.log('Received response from Gemini API');
+    const geminiData = await geminiResponse.json();
+    const responseText = geminiData.candidates[0].content.parts[0].text;
+
+    // Parse competitor suggestions
+    const competitorSuggestions: CompetitorSuggestion[] = [];
+    const sections = responseText.split('COMPETITOR:').slice(1);
+
+    for (const section of sections) {
+      const nameMatch = section.match(/^([^\n]+)/);
+      const urlMatch = section.match(/URL:\s*(.*)/i);
+      const typeMatch = section.match(/TYPE:\s*(.*)/i);
+      const relevanceMatch = section.match(/RELEVANCE:\s*(\d+)/i);
+      const reasonMatch = section.match(/REASON:\s*(.*)/i);
+      const positionMatch = section.match(/MARKET_POSITION:\s*(.*)/i);
+      const strengthsMatch = section.match(/STRENGTHS:\s*(.*)/i);
+      const diffMatch = section.match(/DIFFERENTIATORS:\s*(.*)/i);
+
+      if (nameMatch && urlMatch && typeMatch && relevanceMatch && reasonMatch) {
+        const strengths = strengthsMatch ? 
+          strengthsMatch[1].split('|').map(s => s.trim()).filter(s => s) : [];
+        const differentiators = diffMatch ? 
+          diffMatch[1].split('|').map(d => d.trim()).filter(d => d) : [];
+
+        competitorSuggestions.push({
+          name: nameMatch[1].trim(),
+          url: urlMatch[1].trim(),
+          type: typeMatch[1].trim() as CompetitorSuggestion['type'],
+          relevanceScore: parseInt(relevanceMatch[1]),
+          reason: reasonMatch[1].trim(),
+          marketPosition: positionMatch ? positionMatch[1].trim() : 'Market position analysis not available',
+          keyStrengths: strengths.slice(0, 5),
+          differentiators: differentiators.slice(0, 3)
+        });
       }
     }
 
-    // If we still don't have enough results, add fallback competitors
-    if (competitorSuggestions.length < 3) {
-      console.log('Adding fallback competitors');
-      const fallbackCompetitors = generateFallbackCompetitors(url, industry || businessType, detectedLocation);
-      
-      // Add fallbacks that aren't already in our list
-      for (const fallback of fallbackCompetitors) {
-        if (!competitorSuggestions.some(comp => comp.url === fallback.url)) {
-          competitorSuggestions.push(fallback);
-        }
-      }
-    }
-
-    // Sort by relevance score and prioritize local competitors
-    competitorSuggestions.sort((a, b) => {
-      // First prioritize local competitors
-      if (a.type === 'local' && b.type !== 'local') return -1;
-      if (a.type !== 'local' && b.type === 'local') return 1;
-      
-      // Then sort by relevance score
-      return b.relevanceScore - a.relevanceScore;
-    });
-    
-    // Limit to a reasonable number
-    const finalCompetitors = competitorSuggestions.slice(0, 15);
+    // Sort by relevance score
+    competitorSuggestions.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
     // Group by type
-    const competitorsByType = finalCompetitors.reduce((acc, comp) => {
+    const competitorsByType = competitorSuggestions.reduce((acc, comp) => {
       if (!acc[comp.type]) {
         acc[comp.type] = [];
       }
@@ -433,56 +210,42 @@ Deno.serve(async (req: Request) => {
     }, {} as Record<string, CompetitorSuggestion[]>);
 
     // Calculate insights
-    const averageRelevance = finalCompetitors.length > 0 ? 
-      Math.round(finalCompetitors.reduce((sum, comp) => sum + comp.relevanceScore, 0) / finalCompetitors.length) : 0;
+    const averageRelevance = competitorSuggestions.length > 0 ? 
+      Math.round(competitorSuggestions.reduce((sum, comp) => sum + comp.relevanceScore, 0) / competitorSuggestions.length) : 0;
 
     const competitiveIntensity = averageRelevance >= 80 ? 'High' : 
-                              averageRelevance >= 60 ? 'Medium' : 'Low';
-    
-    // Count local competitors
-    const localCompetitorsCount = finalCompetitors.filter(c => 
-      c.type === 'local' || 
-      (c.location && detectedLocation && 
-       c.location.toLowerCase().includes(detectedLocation.toLowerCase()))
-    ).length;
+                                averageRelevance >= 60 ? 'Medium' : 'Low';
 
-    console.log(`Competitor discovery complete. Found ${finalCompetitors.length} potential competitors (${localCompetitorsCount} local)`);
+    console.log(`Competitor discovery complete. Found ${competitorSuggestions.length} potential competitors`);
     return new Response(
       JSON.stringify({
         businessUrl: url,
-        industry: industry || businessType,
-        location: detectedLocation,
+        industry,
         analysisDepth,
-        totalSuggestions: finalCompetitors.length,
-        localCompetitorsFound: localCompetitorsCount,
+        totalSuggestions: competitorSuggestions.length,
         averageRelevance,
         competitiveIntensity,
-        competitorSuggestions: finalCompetitors,
+        competitorSuggestions,
         competitorsByType,
+        locationInfo,
         insights: {
           directCompetitors: competitorsByType.direct?.length || 0,
           indirectCompetitors: competitorsByType.indirect?.length || 0,
           industryLeaders: competitorsByType.industry_leader?.length || 0,
           emergingPlayers: competitorsByType.emerging?.length || 0,
-          localCompetitors: competitorsByType.local?.length || 0,
-          highRelevanceCompetitors: finalCompetitors.filter(c => c.relevanceScore >= 80).length,
-          marketGaps: finalCompetitors.length < 5 ? 'Low competitive density - potential market opportunity' : 
-                     finalCompetitors.length > 12 ? 'High competitive density - crowded market' : 
-                     'Moderate competitive density - balanced market',
-          locationInsight: detectedLocation ? 
-            `Found ${localCompetitorsCount} competitors in the ${detectedLocation} area` : 
-            'No specific location detected for local competitor analysis'
+          highRelevanceCompetitors: competitorSuggestions.filter(c => c.relevanceScore >= 80).length,
+          marketGaps: competitorSuggestions.length < 5 ? 'Low competitive density - potential market opportunity' : 
+                     competitorSuggestions.length > 12 ? 'High competitive density - crowded market' : 
+                     'Moderate competitive density - balanced market'
         },
         recommendations: [
           'Monitor high-relevance competitors for strategic insights',
           'Analyze competitor strengths to identify improvement opportunities',
           'Track emerging players for early competitive intelligence',
           'Consider partnerships with indirect competitors',
-          'Differentiate from industry leaders through unique value propositions',
-          ...(detectedLocation ? ['Focus on local SEO to compete with nearby businesses'] : [])
+          'Differentiate from industry leaders through unique value propositions'
         ],
-        analyzedAt: new Date().toISOString(),
-        searchMethod: usedRealSearch ? 'real_search_api' : 'ai_generation'
+        analyzedAt: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -499,305 +262,445 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-// Helper function to extract key strengths from a snippet
-function extractKeyStrengths(snippet: string): string[] {
-  // Try to extract actual strengths from the snippet
-  const strengthPatterns = [
-    /\b(professional|custom|responsive|mobile-friendly|affordable|experienced|creative|innovative|quality|reliable|fast|secure)\b/gi,
-    /\b(SEO|optimization|marketing|branding|strategy|support|maintenance|hosting|e-commerce|portfolio)\b/gi
+// Helper function to extract location information from URL and business description
+function extractLocationInfo(url: string, businessDescription?: string): { city?: string; state?: string; country?: string } {
+  const locationInfo: { city?: string; state?: string; country?: string } = {};
+  
+  // List of US states and their abbreviations
+  const usStates = [
+    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'Florida',
+    'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine',
+    'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska',
+    'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota',
+    'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
+    'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming'
   ];
   
-  const extractedStrengths = new Set<string>();
+  const stateAbbreviations = [
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
+    'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND',
+    'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+  ];
   
-  for (const pattern of strengthPatterns) {
-    const matches = snippet.match(pattern);
-    if (matches) {
-      matches.forEach(match => {
-        // Capitalize first letter
-        const formatted = match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
-        extractedStrengths.add(formatted);
-      });
+  // Common US cities
+  const commonUsCities = [
+    'New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia', 'San Antonio', 'San Diego',
+    'Dallas', 'San Jose', 'Austin', 'Jacksonville', 'Fort Worth', 'Columbus', 'Charlotte', 'San Francisco',
+    'Indianapolis', 'Seattle', 'Denver', 'Boston', 'Portland', 'Las Vegas', 'Nashville', 'Oklahoma City',
+    'Tucson', 'Albuquerque', 'Atlanta', 'Long Beach', 'Miami', 'Cleveland', 'Sacramento', 'Kansas City',
+    'Mesa', 'Detroit', 'Omaha', 'Raleigh', 'Colorado Springs', 'Minneapolis', 'Tulsa', 'Arlington',
+    'New Orleans', 'Wichita', 'Tampa', 'Santa Ana', 'Anaheim', 'Cincinnati', 'Bakersfield', 'Aurora',
+    'Riverside', 'Stockton', 'Corpus Christi', 'Pittsburgh', 'Lexington', 'Anchorage', 'St. Louis',
+    'Henderson', 'Greensboro', 'Plano', 'Newark', 'Lincoln', 'Buffalo', 'Fort Wayne', 'Jersey City',
+    'Chula Vista', 'Orlando', 'St. Petersburg', 'Norfolk', 'Chandler', 'Laredo', 'Madison', 'Durham',
+    'Lubbock', 'Winston-Salem', 'Garland', 'Glendale', 'Hialeah', 'Reno', 'Baton Rouge', 'Irvine',
+    'Chesapeake', 'Irving', 'Scottsdale', 'North Las Vegas', 'Fremont', 'Gilbert', 'San Bernardino',
+    'Boise', 'Birmingham', 'Rochester', 'Richmond', 'Spokane', 'Des Moines', 'Montgomery', 'Modesto',
+    'Fayetteville', 'Tacoma', 'Shreveport', 'Fontana', 'Oxnard', 'Aurora', 'Moreno Valley', 'Akron',
+    'Yonkers', 'Columbus', 'Augusta', 'Little Rock', 'Amarillo', 'Mobile', 'Huntington Beach', 'Glendale',
+    'Grand Rapids', 'Salt Lake City', 'Tallahassee', 'Huntsville', 'Grand Prairie', 'Knoxville', 'Worcester',
+    'Newport News', 'Brownsville', 'Santa Clarita', 'Overland Park', 'Providence', 'Jackson', 'Garden Grove',
+    'Oceanside', 'Chattanooga', 'Fort Lauderdale', 'Rancho Cucamonga', 'Santa Rosa', 'Port St. Lucie',
+    'Ontario', 'Tempe', 'Vancouver', 'Springfield', 'Pembroke Pines', 'Elk Grove', 'Salem', 'Lancaster',
+    'Corona', 'Eugene', 'Palmdale', 'Salinas', 'Springfield', 'Pasadena', 'Rockford', 'Pomona', 'Hayward',
+    'Fort Collins', 'Joliet', 'Escondido', 'Kansas City', 'Torrance', 'Bridgeport', 'Alexandria', 'Sunnyvale',
+    'Cary', 'Lakewood', 'Hollywood', 'Paterson', 'Syracuse', 'Naperville', 'McKinney', 'Mesquite', 'Clarksville',
+    'Savannah', 'Dayton', 'Orange', 'Fullerton', 'Pasadena', 'Hampton', 'McAllen', 'Killeen', 'Warren', 'West Valley City',
+    'Columbia', 'New Haven', 'Sterling Heights', 'Olathe', 'Miramar', 'Thousand Oaks', 'Frisco', 'Cedar Rapids',
+    'Topeka', 'Visalia', 'Waco', 'Elizabeth', 'Bellevue', 'Gainesville', 'Simi Valley', 'Charleston', 'Carrollton',
+    'Coral Springs', 'Stamford', 'Hartford', 'Concord', 'Roseville', 'Thornton', 'Kent', 'Lafayette', 'Surprise',
+    'Denton', 'Victorville', 'Evansville', 'Midland', 'Santa Clara', 'Athens', 'Allentown', 'Abilene', 'Beaumont',
+    'Vallejo', 'Independence', 'Springfield', 'Ann Arbor', 'Provo', 'Peoria', 'Norman', 'Berkeley', 'El Monte',
+    'Murfreesboro', 'Lansing', 'Columbia', 'Downey', 'Costa Mesa', 'Inglewood', 'Miami Gardens', 'Manchester',
+    'Elgin', 'Wilmington', 'Waterbury', 'Fargo', 'Arvada', 'Carlsbad', 'Westminster', 'Rochester', 'Gresham',
+    'Clearwater', 'Lowell', 'West Jordan', 'Pueblo', 'San Buenaventura', 'Fairfield', 'West Covina', 'Billings',
+    'Murrieta', 'High Point', 'Round Rock', 'Richmond', 'Cambridge', 'Norwalk', 'Odessa', 'Antioch', 'Temecula',
+    'Green Bay', 'Everett', 'Wichita Falls', 'Burbank', 'Palm Bay', 'Centennial', 'Daly City', 'Richardson',
+    'Pompano Beach', 'Broken Arrow', 'North Charleston', 'West Palm Beach', 'Boulder', 'Rialto', 'Santa Maria',
+    'El Cajon', 'Davenport', 'Erie', 'Las Cruces', 'South Bend', 'Flint', 'Kenosha', 'Prescott'
+  ];
+  
+  // Try to extract location from URL
+  try {
+    const domain = new URL(url).hostname;
+    
+    // Check for city or state in domain
+    for (const city of commonUsCities) {
+      const cityLower = city.toLowerCase().replace(/\s+/g, '');
+      if (domain.toLowerCase().includes(cityLower)) {
+        locationInfo.city = city;
+        break;
+      }
+    }
+    
+    // Check for state in domain
+    for (let i = 0; i < usStates.length; i++) {
+      const state = usStates[i].toLowerCase().replace(/\s+/g, '');
+      const abbr = stateAbbreviations[i].toLowerCase();
+      
+      if (domain.toLowerCase().includes(state) || domain.toLowerCase().includes(abbr)) {
+        locationInfo.state = usStates[i];
+        break;
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing URL for location:', error);
+  }
+  
+  // Try to extract location from business description
+  if (businessDescription) {
+    // Check for cities
+    for (const city of commonUsCities) {
+      if (businessDescription.includes(city)) {
+        locationInfo.city = city;
+        break;
+      }
+    }
+    
+    // Check for states
+    for (let i = 0; i < usStates.length; i++) {
+      const state = usStates[i];
+      const abbr = stateAbbreviations[i];
+      
+      if (businessDescription.includes(state) || 
+          businessDescription.includes(` ${abbr} `) || 
+          businessDescription.includes(`, ${abbr}`) || 
+          businessDescription.includes(`. ${abbr}`)) {
+        locationInfo.state = state;
+        break;
+      }
     }
   }
   
-  // If we found strengths, use them
-  if (extractedStrengths.size >= 3) {
-    return Array.from(extractedStrengths).slice(0, 5);
-  }
-  
-  // Otherwise use fallback strengths
-  const fallbackStrengths = [
-    'Professional design',
-    'Custom development',
-    'Responsive websites',
-    'SEO optimization',
-    'Local expertise',
-    'Client testimonials',
-    'Portfolio showcases',
-    'Fast turnaround',
-    'Affordable pricing',
-    'Ongoing support'
-  ];
-  
-  // Randomly select 3-5 strengths
-  const count = Math.floor(Math.random() * 3) + 3; // 3-5
-  const shuffled = [...fallbackStrengths].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count);
+  return locationInfo;
 }
 
-// Helper function to extract differentiators from a snippet
-function extractDifferentiators(snippet: string): string[] {
-  const differentiators = [
-    'Specialized in small businesses',
-    'Industry-specific expertise',
-    'Proprietary development framework',
-    'All-inclusive pricing',
-    'Rapid deployment process',
-    'Local market knowledge',
-    'Award-winning designs',
-    'Integrated marketing services'
-  ];
-  
-  // Randomly select 2-3 differentiators
-  const count = Math.floor(Math.random() * 2) + 2; // 2-3
-  const shuffled = [...differentiators].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count);
-}
-
-// Helper function to generate fallback competitors when API fails
+// Fallback function to generate sample competitors when API fails
 function generateFallbackCompetitors(
   url: string, 
   industry?: string,
-  location?: string
-): CompetitorSuggestion[] {
-  console.log(`Generating fallback competitors for ${url} in ${location || 'unknown location'}`);
+  locationInfo?: { city?: string; state?: string; country?: string },
+  existingCompetitors: string[] = [],
+  analysisDepth: string = 'basic'
+): Response {
+  console.log(`Generating fallback competitors for ${url}`);
   
-  // Define location-specific competitors
-  const localCompetitors: Record<string, CompetitorSuggestion[]> = {
-    'prescott': [
-      {
-        name: 'Prescott Web Design',
-        url: 'https://prescottwebdesign.com',
-        type: 'local',
-        relevanceScore: 95,
-        reason: 'Local web design company based in Prescott, AZ offering similar services',
-        marketPosition: 'Established local web design firm with small business focus',
-        keyStrengths: ['Local expertise', 'Custom website design', 'Small business focus'],
-        differentiators: ['Prescott-specific knowledge', 'In-person meetings'],
-        location: 'Prescott, AZ'
-      },
-      {
-        name: 'Prescott Marketing Group',
-        url: 'https://prescottmarketinggroup.com',
-        type: 'local',
-        relevanceScore: 92,
-        reason: 'Local marketing agency in Prescott offering web design services',
-        marketPosition: 'Full-service marketing agency with web design division',
-        keyStrengths: ['Integrated marketing', 'Local business network', 'Web design services'],
-        differentiators: ['Marketing-first approach', 'Local business connections'],
-        location: 'Prescott, AZ'
-      },
-      {
-        name: 'Quad Cities Web Solutions',
-        url: 'https://quadcitieswebsolutions.com',
-        type: 'local',
-        relevanceScore: 90,
-        reason: 'Web design company serving Prescott and surrounding areas',
-        marketPosition: 'Regional web design provider for the Quad Cities area',
-        keyStrengths: ['Regional expertise', 'Affordable packages', 'Local support'],
-        differentiators: ['Focus on Prescott Valley and Quad Cities', 'Small business packages'],
-        location: 'Prescott Valley, AZ'
-      },
-      {
-        name: 'Northern AZ Web Services',
-        url: 'https://northernazwebservices.com',
-        type: 'local',
-        relevanceScore: 88,
-        reason: 'Web design company serving Northern Arizona including Prescott',
-        marketPosition: 'Regional provider covering Northern Arizona',
-        keyStrengths: ['Regional focus', 'Experience with local businesses', 'Custom websites'],
-        differentiators: ['Northern Arizona specialization', 'Tourism industry expertise'],
-        location: 'Flagstaff, AZ'
-      },
-      {
-        name: 'Yavapai Digital',
-        url: 'https://yavapaidigital.com',
-        type: 'local',
-        relevanceScore: 87,
-        reason: 'Digital agency serving Yavapai County including Prescott',
-        marketPosition: 'County-wide digital services provider',
-        keyStrengths: ['Local market knowledge', 'Digital marketing integration', 'Web design'],
-        differentiators: ['Yavapai County focus', 'Government/municipal experience'],
-        location: 'Prescott, AZ'
-      }
-    ],
-    'phoenix': [
-      {
-        name: 'Phoenix Web Design Co',
-        url: 'https://phoenixwebdesignco.com',
-        type: 'local',
-        relevanceScore: 85,
-        reason: 'Web design company based in Phoenix serving Arizona businesses',
-        marketPosition: 'Established Phoenix-based web design firm',
-        keyStrengths: ['Metro Phoenix expertise', 'Full-service web design', 'SEO services'],
-        differentiators: ['Phoenix business network', 'Industry specializations'],
-        location: 'Phoenix, AZ'
-      }
-    ],
-    'arizona': [
-      {
-        name: 'AZ Web Company',
-        url: 'https://azwebcompany.com',
-        type: 'local',
-        relevanceScore: 82,
-        reason: 'Arizona-based web design company serving the entire state',
-        marketPosition: 'Statewide web design provider',
-        keyStrengths: ['Arizona market knowledge', 'Diverse portfolio', 'Statewide service'],
-        differentiators: ['Arizona business focus', 'Multiple office locations'],
-        location: 'Arizona'
-      }
-    ]
-  };
-  
-  // Industry-specific competitors
+  // Define industry-specific competitors
   const industryCompetitors: Record<string, CompetitorSuggestion[]> = {
-    'web design': [
+    'Technology & Software': [
       {
-        name: 'Design Studio Pro',
-        url: 'https://designstudiopro.com',
+        name: 'TechSolutions Inc',
+        url: 'https://techsolutions-inc.com',
         type: 'direct',
-        relevanceScore: 80,
-        reason: 'Web design agency offering similar services',
-        marketPosition: 'Mid-sized design studio with premium positioning',
-        keyStrengths: ['Custom website design', 'Brand identity', 'User experience focus'],
-        differentiators: ['Design-first approach', 'Creative direction'],
-        location: 'Remote/National'
+        relevanceScore: 92,
+        reason: 'Offers nearly identical software solutions targeting the same customer base',
+        marketPosition: 'Established market leader with 15% market share',
+        keyStrengths: ['Strong brand recognition', 'Comprehensive feature set', 'Enterprise client base'],
+        differentiators: ['24/7 premium support', 'Custom implementation services']
       },
       {
-        name: 'WebCraft Solutions',
-        url: 'https://webcraftsolutions.com',
+        name: 'SoftwareGuru',
+        url: 'https://softwareguru.io',
         type: 'direct',
-        relevanceScore: 78,
-        reason: 'Web development company with similar service offerings',
-        marketPosition: 'Technical-focused web development firm',
-        keyStrengths: ['Custom development', 'Technical expertise', 'Complex solutions'],
-        differentiators: ['Developer-led process', 'Technical specialization'],
-        location: 'Remote/National'
+        relevanceScore: 88,
+        reason: 'Competing directly with similar product offerings and pricing',
+        marketPosition: 'Fast-growing challenger with innovative features',
+        keyStrengths: ['Modern UI/UX', 'Aggressive pricing', 'Strong mobile support'],
+        differentiators: ['AI-powered features', 'Freemium model']
+      },
+      {
+        name: 'Enterprise Systems',
+        url: 'https://enterprise-systems.com',
+        type: 'industry_leader',
+        relevanceScore: 75,
+        reason: 'Major player setting standards in the industry',
+        marketPosition: 'Market leader with comprehensive enterprise solutions',
+        keyStrengths: ['Massive client base', 'Extensive integration ecosystem', 'Industry reputation'],
+        differentiators: ['Full-service consulting', 'Legacy system support']
+      },
+      {
+        name: 'InnovateTech',
+        url: 'https://innovatetech.dev',
+        type: 'emerging',
+        relevanceScore: 65,
+        reason: 'Startup with innovative approach to the same problems',
+        marketPosition: 'Emerging disruptor with novel technology approach',
+        keyStrengths: ['Cutting-edge technology', 'Agile development', 'Lower cost structure'],
+        differentiators: ['Open source core', 'Developer-first approach']
       }
     ],
-    'digital marketing': [
+    'Web Design': [
       {
-        name: 'Growth Marketing Partners',
-        url: 'https://growthmarketingpartners.com',
+        name: 'PixelPerfect Design',
+        url: 'https://pixelperfectdesign.com',
+        type: 'direct',
+        relevanceScore: 95,
+        reason: 'Local web design agency offering similar services to the same target market',
+        marketPosition: 'Boutique agency with focus on small businesses',
+        keyStrengths: ['Custom designs', 'Local client base', 'Personalized service'],
+        differentiators: ['In-person consultations', 'Fixed-price packages']
+      },
+      {
+        name: 'Digital Craftsmen',
+        url: 'https://digitalcraftsmen.co',
+        type: 'direct',
+        relevanceScore: 90,
+        reason: 'Web design studio with overlapping service offerings',
+        marketPosition: 'Mid-sized agency with diverse client portfolio',
+        keyStrengths: ['Award-winning designs', 'Full-service digital marketing', 'Strong technical skills'],
+        differentiators: ['Industry specialization', 'Performance guarantees']
+      },
+      {
+        name: 'WebWorks Studio',
+        url: 'https://webworksstudio.com',
         type: 'indirect',
         relevanceScore: 75,
-        reason: 'Digital marketing agency offering web design as part of services',
-        marketPosition: 'Full-service digital marketing agency',
-        keyStrengths: ['Integrated marketing', 'Data-driven approach', 'Multi-channel campaigns'],
-        differentiators: ['Marketing-first approach', 'Performance metrics'],
-        location: 'Remote/National'
+        reason: 'Focuses on development rather than design but competes for same clients',
+        marketPosition: 'Technical development shop with growing design services',
+        keyStrengths: ['Technical expertise', 'Custom application development', 'Ongoing support'],
+        differentiators: ['Development-first approach', 'Technology specialization']
       }
     ]
   };
   
-  // Industry leaders (always include these)
-  const industryLeaders = [
+  // Location-based competitors for web design in Arizona
+  const azWebDesignCompetitors = [
     {
-      name: 'Wix',
-      url: 'https://wix.com',
-      type: 'industry_leader',
-      relevanceScore: 70,
-      reason: 'Major website builder platform competing for small business customers',
-      marketPosition: 'Leading DIY website platform',
-      keyStrengths: ['Easy-to-use builder', 'Template variety', 'Integrated hosting'],
-      differentiators: ['No coding required', 'All-in-one platform'],
-      location: 'Global'
+      name: 'Prescott Web Design',
+      url: 'https://prescottwebdesign.com',
+      type: 'direct',
+      relevanceScore: 98,
+      reason: 'Local competitor in Prescott offering identical services to the same client base',
+      marketPosition: 'Established local provider with strong community ties',
+      keyStrengths: ['Local reputation', 'Community connections', 'Personalized service'],
+      differentiators: ['Prescott-specific expertise', 'Face-to-face meetings']
     },
     {
-      name: 'Squarespace',
-      url: 'https://squarespace.com',
-      type: 'industry_leader',
-      relevanceScore: 68,
-      reason: 'Premium website builder targeting professional sites',
-      marketPosition: 'Design-focused website platform',
-      keyStrengths: ['Professional templates', 'Integrated commerce', 'Content tools'],
-      differentiators: ['Design-forward approach', 'All-inclusive pricing'],
-      location: 'Global'
+      name: 'Arizona Digital Solutions',
+      url: 'https://arizonadigitalsolutions.com',
+      type: 'direct',
+      relevanceScore: 92,
+      reason: 'Regional competitor covering Prescott and surrounding areas',
+      marketPosition: 'Growing regional agency with multiple Arizona locations',
+      keyStrengths: ['Regional brand recognition', 'Diverse portfolio', 'Full-service capabilities'],
+      differentiators: ['Arizona business focus', 'Industry specialization']
+    },
+    {
+      name: 'Sedona Web Pro',
+      url: 'https://sedonawebpro.com',
+      type: 'direct',
+      relevanceScore: 85,
+      reason: 'Nearby competitor in Sedona that serves clients in Prescott',
+      marketPosition: 'Boutique agency with high-end positioning',
+      keyStrengths: ['Premium design aesthetic', 'Tourism industry expertise', 'SEO specialization'],
+      differentiators: ['Luxury brand positioning', 'Tourism focus']
+    },
+    {
+      name: 'Flagstaff Digital',
+      url: 'https://flagstaffdigital.com',
+      type: 'direct',
+      relevanceScore: 82,
+      reason: 'Competitor in nearby Flagstaff with overlapping service area',
+      marketPosition: 'Tech-forward agency with university connections',
+      keyStrengths: ['Technical innovation', 'Educational sector expertise', 'Modern design approach'],
+      differentiators: ['Research partnerships', 'Technology focus']
+    },
+    {
+      name: 'Verde Valley Websites',
+      url: 'https://verdevalleywebsites.com',
+      type: 'direct',
+      relevanceScore: 80,
+      reason: 'Local competitor serving the Verde Valley and Prescott areas',
+      marketPosition: 'Small agency focused on local small businesses',
+      keyStrengths: ['Affordable packages', 'Quick turnaround', 'Local focus'],
+      differentiators: ['Budget-friendly options', 'Small business specialization']
     }
   ];
   
-  // Start with local competitors if location is detected
-  let competitors: CompetitorSuggestion[] = [];
-  
-  if (location) {
-    const normalizedLocation = location.toLowerCase();
-    
-    // Check for exact location match
-    if (localCompetitors[normalizedLocation]) {
-      competitors = [...localCompetitors[normalizedLocation]];
-    } 
-    // Check for partial location matches
-    else {
-      for (const [loc, comps] of Object.entries(localCompetitors)) {
-        if (normalizedLocation.includes(loc) || loc.includes(normalizedLocation)) {
-          competitors = [...comps];
-          break;
-        }
-      }
+  // Default competitors if industry not specified or not in our list
+  const defaultCompetitors: CompetitorSuggestion[] = [
+    {
+      name: 'DirectCompetitor',
+      url: 'https://directcompetitor.com',
+      type: 'direct',
+      relevanceScore: 90,
+      reason: 'Offers similar products/services to the same target market',
+      marketPosition: 'Established player with significant market share',
+      keyStrengths: ['Brand recognition', 'Product quality', 'Customer service'],
+      differentiators: ['Premium positioning', 'Loyalty program']
+    },
+    {
+      name: 'IndustryLeader',
+      url: 'https://industryleader.com',
+      type: 'industry_leader',
+      relevanceScore: 85,
+      reason: 'Major player setting standards in the industry',
+      marketPosition: 'Market leader with broad product/service range',
+      keyStrengths: ['Market dominance', 'R&D capabilities', 'Distribution network'],
+      differentiators: ['Scale advantages', 'Vertical integration']
+    },
+    {
+      name: 'IndirectSolution',
+      url: 'https://indirectsolution.com',
+      type: 'indirect',
+      relevanceScore: 70,
+      reason: 'Solves the same customer problems with different approach',
+      marketPosition: 'Alternative solution provider with unique approach',
+      keyStrengths: ['Innovative methodology', 'Niche expertise', 'Cost efficiency'],
+      differentiators: ['Alternative technology', 'Specialized focus']
+    },
+    {
+      name: 'EmergingPlayer',
+      url: 'https://emergingplayer.io',
+      type: 'emerging',
+      relevanceScore: 65,
+      reason: 'Startup with innovative approach gaining traction',
+      marketPosition: 'Emerging disruptor with novel business model',
+      keyStrengths: ['Cutting-edge technology', 'Agility', 'Modern user experience'],
+      differentiators: ['Subscription model', 'Mobile-first approach']
     }
-  }
+  ];
   
-  // Add industry-specific competitors
-  if (industry) {
+  // Determine which competitors to use
+  let competitorSuggestions: CompetitorSuggestion[] = [];
+  
+  // If we have location info and it's in Arizona, use the AZ web design competitors
+  if (locationInfo?.state === 'Arizona' || 
+      (locationInfo?.city && ['Prescott', 'Sedona', 'Flagstaff', 'Phoenix'].includes(locationInfo.city))) {
+    competitorSuggestions = [...azWebDesignCompetitors];
+  }
+  // Otherwise use industry-specific competitors if available
+  else if (industry) {
     const normalizedIndustry = industry.toLowerCase();
-    if (industryCompetitors[normalizedIndustry]) {
-      competitors = [...competitors, ...industryCompetitors[normalizedIndustry]];
+    if (normalizedIndustry.includes('web') && 
+        (normalizedIndustry.includes('design') || normalizedIndustry.includes('development'))) {
+      competitorSuggestions = [...industryCompetitors['Web Design']];
+    } else if (normalizedIndustry.includes('tech') || 
+               normalizedIndustry.includes('software') || 
+               normalizedIndustry.includes('it')) {
+      competitorSuggestions = [...industryCompetitors['Technology & Software']];
+    } else {
+      competitorSuggestions = [...defaultCompetitors];
     }
+  } else {
+    competitorSuggestions = [...defaultCompetitors];
   }
   
-  // Add industry leaders
-  competitors = [...competitors, ...industryLeaders];
-  
-  // If we still don't have enough competitors, add generic ones
-  if (competitors.length < 5) {
-    const genericCompetitors = [
+  // Add more competitors for comprehensive analysis
+  if (analysisDepth === 'comprehensive') {
+    competitorSuggestions.push(
       {
-        name: 'WebSolutions Pro',
-        url: 'https://websolutionspro.com',
-        type: 'direct',
-        relevanceScore: 75,
-        reason: 'Web design and development company offering similar services',
-        marketPosition: 'Mid-market web solutions provider',
-        keyStrengths: ['Custom websites', 'E-commerce solutions', 'CMS development'],
-        differentiators: ['Technology specialization', 'Industry expertise'],
-        location: 'Remote/National'
+        name: 'GlobalPlayer',
+        url: 'https://globalplayer.com',
+        type: 'industry_leader',
+        relevanceScore: 72,
+        reason: 'International competitor with growing presence in your market',
+        marketPosition: 'Global enterprise expanding into regional markets',
+        keyStrengths: ['Global resources', 'Economies of scale', 'Brand recognition'],
+        differentiators: ['International expertise', 'Multi-language support']
       },
       {
-        name: 'Digital Craft Agency',
-        url: 'https://digitalcraftagency.com',
-        type: 'direct',
-        relevanceScore: 73,
-        reason: 'Creative digital agency with web design services',
-        marketPosition: 'Boutique creative agency',
-        keyStrengths: ['Creative design', 'Brand development', 'Digital strategy'],
-        differentiators: ['Creative-led process', 'Brand storytelling'],
-        location: 'Remote/National'
+        name: 'PlatformProvider',
+        url: 'https://platformprovider.com',
+        type: 'indirect',
+        relevanceScore: 68,
+        reason: 'Platform that enables customers to solve problems themselves',
+        marketPosition: 'Leading platform with marketplace model',
+        keyStrengths: ['Large user base', 'Network effects', 'Ecosystem of partners'],
+        differentiators: ['Self-service options', 'Community support']
+      },
+      {
+        name: 'TechDisruptor',
+        url: 'https://techdisruptor.io',
+        type: 'emerging',
+        relevanceScore: 60,
+        reason: 'Using new technology to solve the same problems differently',
+        marketPosition: 'Technology innovator with disruptive potential',
+        keyStrengths: ['Proprietary technology', 'Venture funding', 'Technical expertise'],
+        differentiators: ['AI-first approach', 'Blockchain integration']
       }
-    ];
+    );
+  }
+  
+  // Filter out any existing competitors
+  competitorSuggestions = competitorSuggestions.filter(comp => 
+    !existingCompetitors.some(existing => 
+      existing.toLowerCase().includes(comp.name.toLowerCase()) || 
+      comp.url.toLowerCase().includes(existing.toLowerCase())
+    )
+  );
+  
+  // Ensure we have at least 3-8 competitors
+  while (competitorSuggestions.length < 3) {
+    const names = ['Acme', 'Apex', 'Summit', 'Prime', 'Elite', 'Nova', 'Zenith', 'Pinnacle'];
+    const domains = ['.com', '.io', '.co', '.net', '.org'];
     
-    competitors = [...competitors, ...genericCompetitors];
+    const randomName = names[Math.floor(Math.random() * names.length)];
+    const randomDomain = domains[Math.floor(Math.random() * domains.length)];
+    const randomScore = Math.floor(Math.random() * 30) + 60; // 60-90
+    
+    competitorSuggestions.push({
+      name: `${randomName} Solutions`,
+      url: `https://${randomName.toLowerCase()}solutions${randomDomain}`,
+      type: Math.random() > 0.5 ? 'direct' : 'indirect',
+      relevanceScore: randomScore,
+      reason: 'Competes in the same market space with similar offerings',
+      marketPosition: 'Mid-sized player with growing market presence',
+      keyStrengths: ['Solid product offering', 'Competitive pricing', 'Good customer service'],
+      differentiators: ['Specialized features', 'Industry focus']
+    });
   }
   
-  // Ensure we don't have duplicates
-  const uniqueCompetitors: CompetitorSuggestion[] = [];
-  const urls = new Set<string>();
+  // Limit to a reasonable number
+  competitorSuggestions = competitorSuggestions.slice(0, 8);
   
-  for (const competitor of competitors) {
-    if (!urls.has(competitor.url)) {
-      urls.add(competitor.url);
-      uniqueCompetitors.push(competitor);
+  // Group by type
+  const competitorsByType = competitorSuggestions.reduce((acc, comp) => {
+    if (!acc[comp.type]) {
+      acc[comp.type] = [];
     }
-  }
+    acc[comp.type].push(comp);
+    return acc;
+  }, {} as Record<string, CompetitorSuggestion[]>);
+
+  // Calculate insights
+  const averageRelevance = competitorSuggestions.length > 0 ? 
+    Math.round(competitorSuggestions.reduce((sum, comp) => sum + comp.relevanceScore, 0) / competitorSuggestions.length) : 0;
+
+  const competitiveIntensity = averageRelevance >= 80 ? 'High' : 
+                              averageRelevance >= 60 ? 'Medium' : 'Low';
   
-  return uniqueCompetitors;
+  return new Response(
+    JSON.stringify({
+      businessUrl: url,
+      industry,
+      analysisDepth,
+      totalSuggestions: competitorSuggestions.length,
+      averageRelevance,
+      competitiveIntensity,
+      competitorSuggestions,
+      competitorsByType,
+      locationInfo,
+      insights: {
+        directCompetitors: competitorsByType.direct?.length || 0,
+        indirectCompetitors: competitorsByType.indirect?.length || 0,
+        industryLeaders: competitorsByType.industry_leader?.length || 0,
+        emergingPlayers: competitorsByType.emerging?.length || 0,
+        highRelevanceCompetitors: competitorSuggestions.filter(c => c.relevanceScore >= 80).length,
+        marketGaps: competitorSuggestions.length < 5 ? 'Low competitive density - potential market opportunity' : 
+                   competitorSuggestions.length > 7 ? 'High competitive density - crowded market' : 
+                   'Moderate competitive density - balanced market'
+      },
+      recommendations: [
+        'Monitor high-relevance competitors for strategic insights',
+        'Analyze competitor strengths to identify improvement opportunities',
+        'Track emerging players for early competitive intelligence',
+        'Consider partnerships with indirect competitors',
+        'Differentiate from industry leaders through unique value propositions'
+      ],
+      analyzedAt: new Date().toISOString(),
+      note: 'This is fallback competitor data as the API request failed'
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
 }
