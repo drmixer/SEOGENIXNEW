@@ -82,7 +82,7 @@ export const reportService = {
   /**
    * View a report in the browser (HTML) or download it
    */
-  async viewReport(reportId: string, format: 'html' | 'csv' | 'json' = 'html', download: boolean = false): Promise<void> {
+  async viewReport(reportId: string, format: 'html' | 'csv' | 'json' = 'html', download: boolean = false): Promise<string> {
     try {
       // Get auth token for API calls
       const { data: { session } } = await supabase.auth.getSession();
@@ -93,35 +93,69 @@ export const reportService = {
       // Create the viewer URL with proper authentication
       const viewerUrl = `${API_URL}/report-viewer?reportId=${reportId}&format=${format}&download=${download}`;
       
-      // For security, we'll create a server-side proxy request with proper auth
-      const response = await fetch(viewerUrl, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
+      if (format === 'html' && !download) {
+        // For HTML viewing in browser, we need to handle it differently
+        const response = await fetch(viewerUrl, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to access report: ${response.statusText}`);
         }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to access report: ${response.statusText}`);
-      }
-      
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      
-      if (download) {
-        // For downloads, create a temporary link and click it
-        const a = document.createElement('a');
-        a.href = objectUrl;
-        a.download = `report_${reportId.substring(0, 8)}.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        
+        // Get the HTML content
+        const htmlContent = await response.text();
+        
+        // Create a new window/tab and write the HTML content to it
+        const newWindow = window.open('', '_blank');
+        if (newWindow) {
+          newWindow.document.write(htmlContent);
+          newWindow.document.close();
+        } else {
+          // If popup is blocked, create a blob URL and open it
+          const blob = new Blob([htmlContent], { type: 'text/html' });
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, '_blank');
+          // Clean up the URL after a delay
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+        }
+        
+        return viewerUrl;
       } else {
-        // For viewing, open in a new tab
-        window.open(objectUrl, '_blank');
+        // For downloads or non-HTML formats, use the blob approach
+        const response = await fetch(viewerUrl, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to access report: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        
+        if (download) {
+          // For downloads, create a temporary link and click it
+          const a = document.createElement('a');
+          a.href = objectUrl;
+          a.download = `report_${reportId.substring(0, 8)}.${format}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } else {
+          // For viewing, open in a new tab
+          window.open(objectUrl, '_blank');
+        }
+        
+        // Clean up the object URL after a delay
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 100);
+        
+        return viewerUrl;
       }
-      
-      // Clean up the object URL after a delay
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 100);
     } catch (error) {
       console.error('Report viewing error:', error);
       throw error;
