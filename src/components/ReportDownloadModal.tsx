@@ -17,7 +17,7 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
   reportType,
   downloadUrl
 }) => {
-  const [selectedFormat, setSelectedFormat] = useState<'html' | 'csv' | 'json'>('html');
+  const [selectedFormat, setSelectedFormat] = useState<'html' | 'csv' | 'json' | 'pdf'>('html');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +40,7 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
     setError(null);
     
     try {
-      await reportService.viewReport(reportId, 'html', false);
+      await reportService.viewReport(reportId, selectedFormat, false);
     } catch (err) {
       console.error('View error:', err);
       setError(err instanceof Error ? err.message : 'Failed to view report');

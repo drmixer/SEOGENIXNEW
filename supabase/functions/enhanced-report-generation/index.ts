@@ -143,6 +143,8 @@ Deno.serve(async (req: Request) => {
     // Create a storage path for the user
     const storagePath = `reports/${user.id}/${fileName}`;
     
+    console.log(`Uploading report to storage path: ${storagePath}`);
+    
     // Upload the file to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('reports')
@@ -161,6 +163,7 @@ Deno.serve(async (req: Request) => {
       .getPublicUrl(storagePath);
     
     const downloadUrl = urlData.publicUrl;
+    console.log(`Report uploaded successfully. Download URL: ${downloadUrl}`);
 
     // Save enhanced report metadata with storage path
     const { data: reportRecord, error: dbError } = await supabase

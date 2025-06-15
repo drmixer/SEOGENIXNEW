@@ -8,6 +8,7 @@ interface ReportViewRequest {
 }
 
 Deno.serve(async (req: Request) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -88,10 +89,19 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log('Found report:', {
+      id: report.id,
+      type: report.report_type,
+      name: report.report_name,
+      storage_path: report.storage_path,
+      file_url: report.file_url
+    });
+
     // Use storage_path if available, otherwise fall back to file_url
-    let fileContent: string;
+    let fileContent: string | Uint8Array;
     
     if (report.storage_path) {
+      console.log('Using storage path to download report:', report.storage_path);
       // Use Supabase's internal download method for better reliability
       const { data: fileData, error: downloadError } = await supabase.storage
         .from('reports')
@@ -102,9 +112,15 @@ Deno.serve(async (req: Request) => {
         throw new Error(`Failed to download report file: ${downloadError.message}`);
       }
       
-      // Convert the blob to text
-      fileContent = await fileData.text();
+      // Keep as blob/arrayBuffer for binary formats like PDF
+      if (format === 'pdf') {
+        fileContent = new Uint8Array(await fileData.arrayBuffer());
+      } else {
+        // Convert the blob to text for text-based formats
+        fileContent = await fileData.text();
+      }
     } else if (report.file_url) {
+      console.log('Using public URL to fetch report:', report.file_url);
       // Fallback to public URL fetch
       const fileResponse = await fetch(report.file_url);
       
@@ -112,7 +128,11 @@ Deno.serve(async (req: Request) => {
         throw new Error(`Failed to fetch report file: ${fileResponse.statusText}`);
       }
       
-      fileContent = await fileResponse.text();
+      if (format === 'pdf') {
+        fileContent = new Uint8Array(await fileResponse.arrayBuffer());
+      } else {
+        fileContent = await fileResponse.text();
+      }
     } else {
       throw new Error('No file path or URL found for report');
     }
@@ -137,17 +157,13 @@ Deno.serve(async (req: Request) => {
       case 'pdf':
         contentType = 'application/pdf';
         fileName = `${report.report_name.replace(/\s+/g, '_')}.pdf`;
-        
-        // For PDF, we would need to convert HTML to PDF
-        // For now, return HTML content with PDF content type
-        // In production, you'd want to use a proper HTML-to-PDF service
-        contentType = 'text/html; charset=utf-8';
-        fileName = `${report.report_name.replace(/\s+/g, '_')}.html`;
         break;
       default:
         contentType = 'text/plain; charset=utf-8';
         fileName = `${report.report_name.replace(/\s+/g, '_')}.txt`;
     }
+    
+    console.log('Serving report with content type:', contentType);
     
     // Return the file with proper headers
     const headers = {
