@@ -91,6 +91,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
         <ChatbotPopup 
           onClose={() => setShowChatbot(false)}
           type="landing"
+          user={user}
         />
       )}
     </div>

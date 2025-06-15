@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Sparkles, Loader, ExternalLink } from 'lucide-react';
+import { X, Send, Sparkles, Loader, ExternalLink, LogIn } from 'lucide-react';
 import { apiService } from '../services/api';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
@@ -9,6 +9,7 @@ interface ChatbotPopupProps {
   type: 'landing' | 'dashboard';
   userPlan?: 'free' | 'core' | 'pro' | 'agency';
   onToolLaunch?: (toolId: string) => void;
+  user?: any;
 }
 
 interface Message {
@@ -22,7 +23,7 @@ interface Message {
   }>;
 }
 
-const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, onToolLaunch }) => {
+const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, onToolLaunch, user }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       type: 'bot',
@@ -37,25 +38,25 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
   const [userData, setUserData] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Check if user is authenticated for landing page
+  const isAuthenticatedForLanding = type === 'dashboard' || (type === 'landing' && user);
+
   // Load user data for personalization
   useEffect(() => {
     const loadUserData = async () => {
-      if (type === 'dashboard') {
+      if (type === 'dashboard' && user) {
         try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const profile = await userDataService.getUserProfile(user.id);
-            const recentActivity = await userDataService.getRecentActivity(user.id, 10);
-            const auditHistory = await userDataService.getAuditHistory(user.id, 3);
-            
-            setUserData({
-              websites: profile?.websites || [],
-              industry: profile?.industry,
-              recentActivity,
-              lastAuditScore: auditHistory[0]?.overall_score,
-              lastAuditRecommendations: auditHistory[0]?.recommendations || []
-            });
-          }
+          const profile = await userDataService.getUserProfile(user.id);
+          const recentActivity = await userDataService.getRecentActivity(user.id, 10);
+          const auditHistory = await userDataService.getAuditHistory(user.id, 3);
+          
+          setUserData({
+            websites: profile?.websites || [],
+            industry: profile?.industry,
+            recentActivity,
+            lastAuditScore: auditHistory[0]?.overall_score,
+            lastAuditRecommendations: auditHistory[0]?.recommendations || []
+          });
         } catch (error) {
           console.error('Error loading user data:', error);
         }
@@ -63,7 +64,7 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
     };
 
     loadUserData();
-  }, [type]);
+  }, [type, user]);
 
   // Scroll to bottom of messages when new messages are added
   useEffect(() => {
@@ -77,6 +78,17 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
 
+    // Check authentication for landing page
+    if (type === 'landing' && !user) {
+      const authMessage: Message = {
+        type: 'bot',
+        content: "Please log in or sign up to continue chatting with me. I'd love to help you with personalized insights!",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, authMessage]);
+      return;
+    }
+
     const userMessage: Message = {
       type: 'user',
       content: inputValue,
@@ -89,16 +101,13 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
     scrollToBottom();
 
     // Track user activity
-    if (type === 'dashboard') {
+    if (user) {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await userDataService.trackActivity({
-            user_id: user.id,
-            activity_type: 'genie_chat',
-            activity_data: { message: inputValue, context: type }
-          });
-        }
+        await userDataService.trackActivity({
+          user_id: user.id,
+          activity_type: 'genie_chat',
+          activity_data: { message: inputValue, context: type }
+        });
       } catch (error) {
         console.error('Error tracking activity:', error);
       }
@@ -236,24 +245,36 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
         </div>
         
         <div className="p-4 border-t border-gray-200">
-          <div className="flex space-x-2">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Ask me anything..."
-              disabled={isLoading}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-            />
-            <button
-              onClick={handleSend}
-              disabled={isLoading || !inputValue.trim()}
-              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white p-2 rounded-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </div>
+          {!isAuthenticatedForLanding ? (
+            <div className="text-center">
+              <div className="flex items-center justify-center space-x-2 text-gray-500 mb-2">
+                <LogIn className="w-4 h-4" />
+                <span className="text-sm">Please log in to continue chatting</span>
+              </div>
+              <p className="text-xs text-gray-400">
+                Sign up or log in to get personalized AI assistance
+              </p>
+            </div>
+          ) : (
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Ask me anything..."
+                disabled={isLoading}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+              />
+              <button
+                onClick={handleSend}
+                disabled={isLoading || !inputValue.trim()}
+                className="bg-gradient-to-r from-teal-500 to-purple-600 text-white p-2 rounded-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
