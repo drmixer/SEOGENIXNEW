@@ -193,6 +193,28 @@ export const reportService = {
    */
   async deleteReport(reportId: string): Promise<boolean> {
     try {
+      // First get the report to get the storage path
+      const { data: report, error: fetchError } = await supabase
+        .from('reports')
+        .select('storage_path')
+        .eq('id', reportId)
+        .single();
+        
+      if (fetchError) throw fetchError;
+      
+      // Delete the file from storage if storage_path exists
+      if (report?.storage_path) {
+        const { error: storageError } = await supabase.storage
+          .from('reports')
+          .remove([report.storage_path]);
+          
+        if (storageError) {
+          console.error('Error deleting report file:', storageError);
+          // Continue with database deletion even if storage deletion fails
+        }
+      }
+
+      // Delete the report record from the database
       const { error } = await supabase
         .from('reports')
         .delete()

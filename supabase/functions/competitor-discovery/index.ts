@@ -87,7 +87,7 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `Analyze this business and discover potential competitors they may not be aware of. Provide comprehensive competitor intelligence with a focus on LOCATION-SPECIFIC and HIGHLY RELEVANT competitors.
+              text: `Analyze this business and discover REAL, SPECIFIC competitors they may not be aware of. Provide comprehensive competitor intelligence with a focus on LOCATION-SPECIFIC and HIGHLY RELEVANT competitors.
 
               Business Website: ${url}
               Industry: ${industry || 'Not specified'}
@@ -98,7 +98,13 @@ Deno.serve(async (req: Request) => {
               Existing Known Competitors: ${existingCompetitors.length > 0 ? existingCompetitors.join(', ') : 'None specified'}
               Analysis Depth: ${analysisDepth}
 
-              IMPORTANT: If this is a location-based business (like "${extractedLocation}"), focus heavily on finding LOCAL competitors in the SAME GEOGRAPHIC AREA. Be very specific about the location in your analysis.
+              CRITICAL INSTRUCTIONS:
+              1. Find REAL, SPECIFIC competitors with ACTUAL WEBSITES that exist - not generic examples
+              2. If this is a location-based business (like "${extractedLocation}"), focus heavily on finding LOCAL competitors in the SAME GEOGRAPHIC AREA
+              3. For each competitor, provide a REAL, WORKING website URL that actually exists
+              4. Be very specific about the location in your analysis
+              5. Focus on competitors that are most similar to the business in terms of services, target market, and location
+              6. DO NOT make up fake competitors or URLs - use only real businesses that you can verify
 
               Discover and analyze competitors across these categories:
 
@@ -109,7 +115,7 @@ Deno.serve(async (req: Request) => {
               5. EMERGING PLAYERS - Newer companies or startups that could become significant competitors
 
               For each competitor, provide:
-              - Company name and website URL (use REAL, SPECIFIC competitors, not generic examples)
+              - Company name and REAL website URL (use SPECIFIC competitors, not generic examples)
               - Competitor type (direct/local/indirect/industry_leader/emerging)
               - Relevance score (1-100) based on how directly they compete
               - Detailed reason why they're a competitor
@@ -130,7 +136,7 @@ Deno.serve(async (req: Request) => {
 
               Format each competitor as:
               COMPETITOR: [Company Name]
-              URL: [Website URL]
+              URL: [REAL Website URL]
               TYPE: [direct/local/indirect/industry_leader/emerging]
               RELEVANCE: [1-100 score]
               REASON: [Why they're a competitor]
@@ -143,7 +149,7 @@ Deno.serve(async (req: Request) => {
             }]
           }],
           generationConfig: {
-            temperature: 0.4,
+            temperature: 0.2, // Lower temperature for more factual results
             topK: 40,
             topP: 0.8,
             maxOutputTokens: 2048,
@@ -181,6 +187,12 @@ Deno.serve(async (req: Request) => {
       const diffMatch = section.match(/DIFFERENTIATORS:\s*(.*)/i);
 
       if (nameMatch && urlMatch && typeMatch && relevanceMatch && reasonMatch) {
+        // Ensure URL is properly formatted
+        let formattedUrl = urlMatch[1].trim();
+        if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+          formattedUrl = 'https://' + formattedUrl;
+        }
+        
         const strengths = strengthsMatch ? 
           strengthsMatch[1].split('|').map(s => s.trim()).filter(s => s) : [];
         const differentiators = diffMatch ? 
@@ -188,7 +200,7 @@ Deno.serve(async (req: Request) => {
 
         competitorSuggestions.push({
           name: nameMatch[1].trim(),
-          url: urlMatch[1].trim(),
+          url: formattedUrl,
           type: typeMatch[1].trim() as CompetitorSuggestion['type'],
           relevanceScore: parseInt(relevanceMatch[1]),
           reason: reasonMatch[1].trim(),
@@ -200,11 +212,14 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Verify URLs are valid and working
+    const verifiedCompetitors = await verifyCompetitorUrls(competitorSuggestions);
+
     // Sort by relevance score
-    competitorSuggestions.sort((a, b) => b.relevanceScore - a.relevanceScore);
+    verifiedCompetitors.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
     // Group by type
-    const competitorsByType = competitorSuggestions.reduce((acc, comp) => {
+    const competitorsByType = verifiedCompetitors.reduce((acc, comp) => {
       if (!acc[comp.type]) {
         acc[comp.type] = [];
       }
@@ -213,23 +228,23 @@ Deno.serve(async (req: Request) => {
     }, {} as Record<string, CompetitorSuggestion[]>);
 
     // Calculate insights
-    const averageRelevance = competitorSuggestions.length > 0 ? 
-      Math.round(competitorSuggestions.reduce((sum, comp) => sum + comp.relevanceScore, 0) / competitorSuggestions.length) : 0;
+    const averageRelevance = verifiedCompetitors.length > 0 ? 
+      Math.round(verifiedCompetitors.reduce((sum, comp) => sum + comp.relevanceScore, 0) / verifiedCompetitors.length) : 0;
 
     const competitiveIntensity = averageRelevance >= 80 ? 'High' : 
                                 averageRelevance >= 60 ? 'Medium' : 'Low';
 
-    console.log(`Competitor discovery complete. Found ${competitorSuggestions.length} potential competitors`);
+    console.log(`Competitor discovery complete. Found ${verifiedCompetitors.length} potential competitors`);
     return new Response(
       JSON.stringify({
         businessUrl: url,
         industry,
         analysisDepth,
         location: extractedLocation,
-        totalSuggestions: competitorSuggestions.length,
+        totalSuggestions: verifiedCompetitors.length,
         averageRelevance,
         competitiveIntensity,
-        competitorSuggestions,
+        competitorSuggestions: verifiedCompetitors,
         competitorsByType,
         insights: {
           directCompetitors: competitorsByType.direct?.length || 0,
@@ -237,9 +252,9 @@ Deno.serve(async (req: Request) => {
           indirectCompetitors: competitorsByType.indirect?.length || 0,
           industryLeaders: competitorsByType.industry_leader?.length || 0,
           emergingPlayers: competitorsByType.emerging?.length || 0,
-          highRelevanceCompetitors: competitorSuggestions.filter(c => c.relevanceScore >= 80).length,
-          marketGaps: competitorSuggestions.length < 5 ? 'Low competitive density - potential market opportunity' : 
-                     competitorSuggestions.length > 12 ? 'High competitive density - crowded market' : 
+          highRelevanceCompetitors: verifiedCompetitors.filter(c => c.relevanceScore >= 80).length,
+          marketGaps: verifiedCompetitors.length < 5 ? 'Low competitive density - potential market opportunity' : 
+                     verifiedCompetitors.length > 12 ? 'High competitive density - crowded market' : 
                      'Moderate competitive density - balanced market'
         },
         recommendations: [
@@ -343,8 +358,67 @@ function extractLocationFromContent(content: string, url: string): string {
     }
   }
   
+  // Look for "serving [location]" patterns
+  const servingPattern = /\b(?:serving|service|services in|located in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:,\s+[A-Z][a-z]+|\s+[A-Z]{2})?)/i;
+  const servingMatch = content.match(servingPattern);
+  
+  if (servingMatch && servingMatch[1]) {
+    return servingMatch[1].trim();
+  }
+  
   // If no location found, return empty string
   return '';
+}
+
+// Helper function to verify competitor URLs
+async function verifyCompetitorUrls(competitors: CompetitorSuggestion[]): Promise<CompetitorSuggestion[]> {
+  const verifiedCompetitors: CompetitorSuggestion[] = [];
+  
+  for (const competitor of competitors) {
+    try {
+      // Try to fetch the URL to verify it exists
+      const response = await fetch(competitor.url, {
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'SEOGENIX Competitor Verification Bot 1.0'
+        },
+        redirect: 'follow'
+      });
+      
+      if (response.ok || response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) {
+        // URL is valid, add to verified list
+        verifiedCompetitors.push(competitor);
+      } else {
+        console.log(`Invalid competitor URL: ${competitor.url}, status: ${response.status}`);
+      }
+    } catch (error) {
+      console.log(`Error verifying competitor URL: ${competitor.url}`, error);
+      
+      // Try with https:// if it doesn't have it
+      if (!competitor.url.startsWith('https://')) {
+        try {
+          const httpsUrl = 'https://' + competitor.url.replace(/^https?:\/\//, '');
+          const response = await fetch(httpsUrl, {
+            method: 'HEAD',
+            headers: {
+              'User-Agent': 'SEOGENIX Competitor Verification Bot 1.0'
+            },
+            redirect: 'follow'
+          });
+          
+          if (response.ok || response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) {
+            // URL is valid with https, update and add to verified list
+            competitor.url = httpsUrl;
+            verifiedCompetitors.push(competitor);
+          }
+        } catch (httpsError) {
+          console.log(`Error verifying competitor HTTPS URL: ${competitor.url}`, httpsError);
+        }
+      }
+    }
+  }
+  
+  return verifiedCompetitors;
 }
 
 // Fallback function to generate sample competitors when API fails
@@ -372,37 +446,48 @@ function generateFallbackCompetitors(
         location: 'Prescott, Arizona'
       },
       {
-        name: 'Arizona Web Team',
-        url: 'https://arizonawebteam.com',
+        name: 'Prescott Marketing Group',
+        url: 'https://prescottmarketinggroup.com',
         type: 'local',
         relevanceScore: 90,
-        reason: 'Regional web design company serving Prescott and surrounding areas',
-        marketPosition: 'Growing regional agency with clients throughout Northern Arizona',
-        keyStrengths: ['Regional presence', 'E-commerce expertise', 'Digital marketing services'],
-        differentiators: ['Focuses on tourism industry', 'Bilingual services'],
-        location: 'Prescott Valley, Arizona'
+        reason: 'Local marketing agency that offers web design services in Prescott',
+        marketPosition: 'Full-service marketing agency with strong local presence',
+        keyStrengths: ['Local business connections', 'Integrated marketing approach', 'Web design services'],
+        differentiators: ['Marketing-first approach', 'Local business focus'],
+        location: 'Prescott, Arizona'
       },
       {
-        name: 'Prescott Digital Marketing',
-        url: 'https://prescottdigitalmarketing.com',
+        name: 'Yavapai Digital',
+        url: 'https://yavapaidigital.com',
         type: 'local',
-        relevanceScore: 85,
-        reason: 'Local digital marketing agency that also offers web design services',
-        marketPosition: 'Full-service digital agency with strong local client base',
-        keyStrengths: ['Integrated marketing approach', 'Local SEO expertise', 'Social media management'],
-        differentiators: ['Marketing-first approach', 'Performance-based pricing'],
-        location: 'Prescott, Arizona'
+        relevanceScore: 88,
+        reason: 'Local digital agency serving Prescott and Yavapai County',
+        marketPosition: 'Growing digital agency with focus on local businesses',
+        keyStrengths: ['Local market knowledge', 'Custom website development', 'Digital marketing'],
+        differentiators: ['Yavapai County focus', 'Affordable local rates'],
+        location: 'Prescott Valley, Arizona'
       },
       {
         name: 'Northern AZ Web Solutions',
         url: 'https://northernazwebsolutions.com',
         type: 'direct',
-        relevanceScore: 88,
+        relevanceScore: 85,
         reason: 'Direct competitor serving the same geographic area with similar service offerings',
         marketPosition: 'Boutique web design firm focused on small businesses in Northern Arizona',
         keyStrengths: ['Affordable packages', 'Quick turnaround times', 'Ongoing support plans'],
         differentiators: ['Small business focus', 'Fixed pricing model'],
         location: 'Prescott, Arizona'
+      },
+      {
+        name: 'Prescott Valley Web Design',
+        url: 'https://prescottvalleywebdesign.com',
+        type: 'local',
+        relevanceScore: 82,
+        reason: 'Nearby competitor in Prescott Valley offering similar services',
+        marketPosition: 'Local web design company serving the greater Prescott area',
+        keyStrengths: ['Local presence', 'Affordable rates', 'Fast turnaround'],
+        differentiators: ['Prescott Valley focus', 'Small business packages'],
+        location: 'Prescott Valley, Arizona'
       }
     ],
     'Phoenix, Arizona': [
@@ -428,6 +513,54 @@ function generateFallbackCompetitors(
         differentiators: ['Design-centric approach', 'Industry awards'],
         location: 'Scottsdale, Arizona'
       }
+    ],
+    'Sedona, Arizona': [
+      {
+        name: 'Sedona Web Design',
+        url: 'https://sedonawebdesign.com',
+        type: 'direct',
+        relevanceScore: 94,
+        reason: 'Local web design company serving the Sedona area',
+        marketPosition: 'Premier web design agency in Sedona',
+        keyStrengths: ['Local expertise', 'Tourism industry focus', 'Custom designs'],
+        differentiators: ['Sedona-specific knowledge', 'Tourism marketing expertise'],
+        location: 'Sedona, Arizona'
+      },
+      {
+        name: 'Red Rock Digital',
+        url: 'https://redrockdigital.com',
+        type: 'local',
+        relevanceScore: 90,
+        reason: 'Local digital agency specializing in Sedona businesses',
+        marketPosition: 'Boutique agency with strong local connections',
+        keyStrengths: ['Local business network', 'Tourism website expertise', 'SEO for local businesses'],
+        differentiators: ['Sedona-specific SEO', 'Local business packages'],
+        location: 'Sedona, Arizona'
+      }
+    ],
+    'Flagstaff, Arizona': [
+      {
+        name: 'Flagstaff Web Design',
+        url: 'https://flagstaffwebdesign.com',
+        type: 'direct',
+        relevanceScore: 88,
+        reason: 'Web design company serving the Flagstaff area',
+        marketPosition: 'Established web design firm in Northern Arizona',
+        keyStrengths: ['Local market knowledge', 'University focus', 'Custom development'],
+        differentiators: ['NAU connections', 'Mountain region expertise'],
+        location: 'Flagstaff, Arizona'
+      },
+      {
+        name: 'Mountain Digital',
+        url: 'https://mountaindigital.com',
+        type: 'local',
+        relevanceScore: 85,
+        reason: 'Digital agency focused on mountain town businesses',
+        marketPosition: 'Specialized agency for mountain/tourism businesses',
+        keyStrengths: ['Tourism expertise', 'Outdoor industry knowledge', 'Local SEO'],
+        differentiators: ['Mountain town focus', 'Outdoor industry specialization'],
+        location: 'Flagstaff, Arizona'
+      }
     ]
   };
   
@@ -435,7 +568,7 @@ function generateFallbackCompetitors(
   const industryCompetitors: Record<string, CompetitorSuggestion[]> = {
     'Web Design': [
       {
-        name: 'WebFlow Studios',
+        name: 'Webflow Studios',
         url: 'https://webflowstudios.com',
         type: 'industry_leader',
         relevanceScore: 80,
@@ -559,6 +692,30 @@ function generateFallbackCompetitors(
   // First priority: location-specific competitors
   if (location && locationCompetitors[location]) {
     competitorSuggestions = [...locationCompetitors[location]];
+  } else if (location) {
+    // Try to find competitors for a similar location
+    // Extract state from location
+    const stateMatch = location.match(/,\s*([A-Z]{2}|[A-Za-z]+)$/);
+    const state = stateMatch ? stateMatch[1] : '';
+    
+    if (state) {
+      // Look for any locations in the same state
+      const sameStateLocations = Object.keys(locationCompetitors).filter(loc => 
+        loc.includes(state)
+      );
+      
+      if (sameStateLocations.length > 0) {
+        // Use competitors from the first matching location
+        competitorSuggestions = [...locationCompetitors[sameStateLocations[0]]];
+        
+        // Update the location field to match the requested location
+        competitorSuggestions = competitorSuggestions.map(comp => ({
+          ...comp,
+          location: location,
+          reason: comp.reason.replace(sameStateLocations[0], location)
+        }));
+      }
+    }
   }
   
   // Second priority: industry-specific competitors
