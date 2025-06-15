@@ -731,6 +731,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
               </div>
             </div>
 
+            {/* Site Selector - Show if user has completed onboarding */}
+            {userProfile && userProfile.websites && userProfile.websites.length > 0 && (
+              <SiteSelector
+                websites={userProfile.websites}
+                competitors={userProfile.competitors || []}
+                selectedWebsite={selectedWebsite}
+                onWebsiteChange={setSelectedWebsite}
+                userPlan={userPlan}
+              />
+            )}
+
             {/* Goal Tracker */}
             {userGoals.length > 0 && (
               <GoalTracker 
@@ -816,17 +827,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   })}
                 </div>
               </div>
-            )}
-
-            {/* Site Selector - Show if user has completed onboarding */}
-            {userProfile && userProfile.websites && userProfile.websites.length > 0 && (
-              <SiteSelector
-                websites={userProfile.websites}
-                competitors={userProfile.competitors || []}
-                selectedWebsite={selectedWebsite}
-                onWebsiteChange={setSelectedWebsite}
-                userPlan={userPlan}
-              />
             )}
             
             {hasRunTools ? (

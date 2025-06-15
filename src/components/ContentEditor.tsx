@@ -44,36 +44,6 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const analysisTimeoutRef = useRef<NodeJS.Timeout>();
-  const [initialContentAdded, setInitialContentAdded] = useState(false);
-
-  // Add sample content on first load to help users get started
-  useEffect(() => {
-    if (!initialContentAdded && !content) {
-      const sampleContent = `# Introduction to AI Visibility
-
-AI visibility refers to how well your content is structured and optimized for AI systems like ChatGPT, Google Bard, and voice assistants. As more people use AI to find information, traditional SEO isn't enough - your content needs to be easily understood and cited by AI systems.
-
-## Why AI Visibility Matters
-
-When users ask questions to AI systems, those systems need to:
-1. Understand your content correctly
-2. Consider it authoritative and relevant
-3. Be able to extract and cite specific information
-
-Poor AI visibility means your content might be ignored or misinterpreted, even if it contains valuable information.
-
-## Key Components of AI Visibility
-
-* AI Understanding - How well AI systems comprehend your content
-* Citation Likelihood - How likely AI systems are to cite your content
-* Conversational Readiness - How well your content answers natural language questions
-* Content Structure - How well-organized your content is for AI parsing`;
-
-      setContent(sampleContent);
-      setTargetKeywords('AI visibility, SEO, content optimization');
-      setInitialContentAdded(true);
-    }
-  }, [initialContentAdded, content]);
 
   // Debounced analysis
   const analyzeContent = useCallback(async () => {

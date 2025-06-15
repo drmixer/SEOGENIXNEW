@@ -37,9 +37,21 @@ Deno.serve(async (req: Request) => {
     console.log(`Industry: ${industry || 'not specified'}, Analysis depth: ${analysisDepth}`);
     console.log(`Existing competitors: ${existingCompetitors.join(', ') || 'none'}`);
 
-    // Extract location information from URL and business description
-    const locationInfo = extractLocationInfo(url, businessDescription);
-    console.log(`Extracted location info: ${JSON.stringify(locationInfo)}`);
+    // Extract domain from URL to make more relevant suggestions
+    let domain = '';
+    let niche = '';
+    try {
+      const urlObj = new URL(url);
+      domain = urlObj.hostname;
+      // Extract potential niche from domain or path
+      const domainParts = domain.split('.');
+      niche = domainParts[0].toLowerCase();
+      if (niche === 'www') {
+        niche = domainParts[1].toLowerCase();
+      }
+    } catch (error) {
+      console.error('Error parsing URL:', error);
+    }
 
     // Fetch content from the user's website for analysis
     let websiteContent = '';
@@ -60,168 +72,244 @@ Deno.serve(async (req: Request) => {
       console.error('Failed to fetch website:', error);
     }
 
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDJC5a7zgGvBk58ojXPKkQJXu-fR3qHHHM'; // Fallback to demo key
-    
-    if (!geminiApiKey) {
-      console.error('Gemini API key not configured');
-      return new Response(
-        JSON.stringify({ error: 'Gemini API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Extract location information
+    const locationInfo = extractLocationInfo(url, businessDescription);
+    console.log(`Extracted location info: ${JSON.stringify(locationInfo)}`);
 
-    // Determine industry-specific competitors based on the provided industry
-    let industryCompetitors: CompetitorSuggestion[] = [];
+    // Generate relevant competitors based on industry, domain, and location
+    let competitorSuggestions: CompetitorSuggestion[] = [];
+
+    // Technology & Software industry
+    if (industry?.includes('Technology') || industry?.includes('Software') || niche.includes('tech') || niche.includes('soft')) {
+      competitorSuggestions = [
+        {
+          name: 'Salesforce',
+          url: 'https://salesforce.com',
+          type: 'industry_leader',
+          relevanceScore: 88,
+          reason: 'Leading CRM and cloud solutions provider with extensive enterprise offerings',
+          marketPosition: 'Market leader in CRM and business cloud solutions',
+          keyStrengths: ['Comprehensive platform', 'Enterprise integration', 'AppExchange ecosystem'],
+          differentiators: ['Trailhead learning platform', 'Industry-specific solutions']
+        },
+        {
+          name: 'HubSpot',
+          url: 'https://hubspot.com',
+          type: 'direct',
+          relevanceScore: 92,
+          reason: 'Comprehensive marketing, sales, and service platform with strong SMB focus',
+          marketPosition: 'Leading inbound marketing and sales platform',
+          keyStrengths: ['All-in-one platform', 'User-friendly interface', 'Strong content strategy'],
+          differentiators: ['Free CRM offering', 'Inbound methodology']
+        },
+        {
+          name: 'Atlassian',
+          url: 'https://atlassian.com',
+          type: 'direct',
+          relevanceScore: 85,
+          reason: 'Collaboration and development tools provider for software teams',
+          marketPosition: 'Essential tools for modern software development teams',
+          keyStrengths: ['Team collaboration', 'Project management', 'Developer tools'],
+          differentiators: ['Jira and Confluence', 'DevOps integration']
+        },
+        {
+          name: 'Monday.com',
+          url: 'https://monday.com',
+          type: 'emerging',
+          relevanceScore: 82,
+          reason: 'Work OS platform for team management and collaboration',
+          marketPosition: 'Fast-growing work management platform',
+          keyStrengths: ['Visual workflow management', 'Customizable templates', 'Integration capabilities'],
+          differentiators: ['Visual interface', 'No-code automation']
+        }
+      ];
+    }
     
-    if (industry) {
-      // Technology & Software industry
-      if (industry.includes('Technology') || industry.includes('Software')) {
-        industryCompetitors = [
-          {
-            name: 'TechCrunch',
-            url: 'https://techcrunch.com',
-            type: 'industry_leader',
-            relevanceScore: 85,
-            reason: 'Leading technology news and analysis site covering startups, tech giants, and industry trends',
-            marketPosition: 'Premier technology media platform with global reach',
-            keyStrengths: ['Comprehensive industry coverage', 'Breaking tech news', 'Startup spotlight'],
-            differentiators: ['Disrupt conferences', 'Startup battlefield']
-          },
-          {
-            name: 'GitHub',
-            url: 'https://github.com',
-            type: 'industry_leader',
-            relevanceScore: 90,
-            reason: 'World\'s largest code hosting platform and development community',
-            marketPosition: 'Essential platform for software developers worldwide',
-            keyStrengths: ['Massive developer community', 'Open source ecosystem', 'Version control'],
-            differentiators: ['Collaborative development', 'GitHub Actions']
-          },
-          {
-            name: 'Stack Overflow',
-            url: 'https://stackoverflow.com',
-            type: 'direct',
-            relevanceScore: 88,
-            reason: 'Premier Q&A platform for programmers and technical professionals',
-            marketPosition: 'Go-to resource for developer problem-solving',
-            keyStrengths: ['Vast knowledge base', 'Active community', 'Technical expertise'],
-            differentiators: ['Reputation system', 'Developer survey']
-          }
-        ];
-      }
-      
-      // E-commerce & Retail industry
-      else if (industry.includes('E-commerce') || industry.includes('Retail')) {
-        industryCompetitors = [
-          {
-            name: 'Shopify',
-            url: 'https://shopify.com',
-            type: 'industry_leader',
-            relevanceScore: 92,
-            reason: 'Leading e-commerce platform powering over 1.7 million businesses worldwide',
-            marketPosition: 'Market leader in SMB e-commerce solutions',
-            keyStrengths: ['User-friendly platform', 'Extensive app ecosystem', 'Omnichannel capabilities'],
-            differentiators: ['Shopify Payments', 'Shopify Fulfillment Network']
-          },
-          {
-            name: 'BigCommerce',
-            url: 'https://bigcommerce.com',
-            type: 'direct',
-            relevanceScore: 85,
-            reason: 'Enterprise e-commerce platform focused on scalability and customization',
-            marketPosition: 'Mid-market and enterprise e-commerce solution',
-            keyStrengths: ['B2B capabilities', 'Headless commerce', 'Multi-channel selling'],
-            differentiators: ['Open SaaS approach', 'Enterprise focus']
-          },
-          {
-            name: 'WooCommerce',
-            url: 'https://woocommerce.com',
-            type: 'direct',
-            relevanceScore: 88,
-            reason: 'WordPress-based e-commerce solution powering millions of online stores',
-            marketPosition: 'Leading open-source e-commerce platform',
-            keyStrengths: ['WordPress integration', 'Extensive customization', 'Large community'],
-            differentiators: ['Self-hosted option', 'WordPress ecosystem']
-          }
-        ];
-      }
-      
-      // Marketing & Advertising industry
-      else if (industry.includes('Marketing') || industry.includes('Advertising')) {
-        industryCompetitors = [
-          {
-            name: 'HubSpot',
-            url: 'https://hubspot.com',
-            type: 'industry_leader',
-            relevanceScore: 90,
-            reason: 'Comprehensive inbound marketing, sales, and service platform',
-            marketPosition: 'Leader in inbound marketing methodology and technology',
-            keyStrengths: ['All-in-one platform', 'Content marketing tools', 'CRM integration'],
-            differentiators: ['Free CRM', 'Inbound methodology']
-          },
-          {
-            name: 'Semrush',
-            url: 'https://semrush.com',
-            type: 'direct',
-            relevanceScore: 88,
-            reason: 'Leading SEO and competitive analysis platform for digital marketers',
-            marketPosition: 'Comprehensive digital marketing toolkit',
-            keyStrengths: ['Keyword research', 'Competitor analysis', 'Content marketing'],
-            differentiators: ['Position tracking', 'Site audit tools']
-          },
-          {
-            name: 'Ahrefs',
-            url: 'https://ahrefs.com',
-            type: 'direct',
-            relevanceScore: 86,
-            reason: 'Powerful SEO toolset focused on backlink analysis and content research',
-            marketPosition: 'Premium SEO research and analysis platform',
-            keyStrengths: ['Backlink database', 'Content explorer', 'Rank tracking'],
-            differentiators: ['Link building focus', 'Technical SEO tools']
-          }
-        ];
-      }
-      
-      // Healthcare & Medical industry
-      else if (industry.includes('Healthcare') || industry.includes('Medical')) {
-        industryCompetitors = [
-          {
-            name: 'WebMD',
-            url: 'https://webmd.com',
-            type: 'industry_leader',
-            relevanceScore: 88,
-            reason: 'Leading provider of health information services for consumers and professionals',
-            marketPosition: 'Premier online health information resource',
-            keyStrengths: ['Comprehensive health content', 'Symptom checker', 'Provider directory'],
-            differentiators: ['Medical review process', 'Consumer health focus']
-          },
-          {
-            name: 'Mayo Clinic',
-            url: 'https://mayoclinic.org',
-            type: 'industry_leader',
-            relevanceScore: 90,
-            reason: 'World-renowned medical center providing expert health information',
-            marketPosition: 'Trusted authority in medical information and research',
-            keyStrengths: ['Expert medical content', 'Research-backed information', 'Condition guides'],
-            differentiators: ['Medical expertise', 'Research foundation']
-          },
-          {
-            name: 'Healthline',
-            url: 'https://healthline.com',
-            type: 'direct',
-            relevanceScore: 85,
-            reason: 'Health information website focused on wellness and medical content',
-            marketPosition: 'Consumer-friendly health and wellness resource',
-            keyStrengths: ['Accessible health content', 'Nutrition information', 'Mental health resources'],
-            differentiators: ['Wellness focus', 'Medically reviewed content']
-          }
-        ];
-      }
+    // E-commerce & Retail industry
+    else if (industry?.includes('E-commerce') || industry?.includes('Retail') || niche.includes('shop') || niche.includes('store')) {
+      competitorSuggestions = [
+        {
+          name: 'Shopify',
+          url: 'https://shopify.com',
+          type: 'industry_leader',
+          relevanceScore: 94,
+          reason: 'Leading e-commerce platform powering over 1.7 million businesses worldwide',
+          marketPosition: 'Market leader in SMB e-commerce solutions',
+          keyStrengths: ['User-friendly platform', 'Extensive app ecosystem', 'Omnichannel capabilities'],
+          differentiators: ['Shopify Payments', 'Shopify Fulfillment Network']
+        },
+        {
+          name: 'BigCommerce',
+          url: 'https://bigcommerce.com',
+          type: 'direct',
+          relevanceScore: 88,
+          reason: 'Enterprise e-commerce platform focused on scalability and customization',
+          marketPosition: 'Mid-market and enterprise e-commerce solution',
+          keyStrengths: ['B2B capabilities', 'Headless commerce', 'Multi-channel selling'],
+          differentiators: ['Open SaaS approach', 'Enterprise focus']
+        },
+        {
+          name: 'WooCommerce',
+          url: 'https://woocommerce.com',
+          type: 'direct',
+          relevanceScore: 90,
+          reason: 'WordPress-based e-commerce solution powering millions of online stores',
+          marketPosition: 'Leading open-source e-commerce platform',
+          keyStrengths: ['WordPress integration', 'Extensive customization', 'Large community'],
+          differentiators: ['Self-hosted option', 'WordPress ecosystem']
+        },
+        {
+          name: 'Squarespace Commerce',
+          url: 'https://squarespace.com/commerce',
+          type: 'direct',
+          relevanceScore: 82,
+          reason: 'Design-focused website builder with integrated e-commerce capabilities',
+          marketPosition: 'Design-centric e-commerce solution for small businesses',
+          keyStrengths: ['Professional templates', 'All-in-one platform', 'Ease of use'],
+          differentiators: ['Design focus', 'Integrated marketing tools']
+        }
+      ];
+    }
+    
+    // Marketing & Advertising industry
+    else if (industry?.includes('Marketing') || industry?.includes('Advertising') || niche.includes('market') || niche.includes('ad')) {
+      competitorSuggestions = [
+        {
+          name: 'Semrush',
+          url: 'https://semrush.com',
+          type: 'direct',
+          relevanceScore: 93,
+          reason: 'Comprehensive SEO and digital marketing platform with advanced analytics',
+          marketPosition: 'Leading all-in-one digital marketing toolkit',
+          keyStrengths: ['Keyword research', 'Competitor analysis', 'Content marketing tools'],
+          differentiators: ['Position tracking', 'Site audit capabilities']
+        },
+        {
+          name: 'Ahrefs',
+          url: 'https://ahrefs.com',
+          type: 'direct',
+          relevanceScore: 91,
+          reason: 'SEO toolset with industry-leading backlink database and content explorer',
+          marketPosition: 'Premium SEO research and analysis platform',
+          keyStrengths: ['Backlink analysis', 'Content explorer', 'Rank tracking'],
+          differentiators: ['Link building focus', 'Technical SEO tools']
+        },
+        {
+          name: 'Moz',
+          url: 'https://moz.com',
+          type: 'industry_leader',
+          relevanceScore: 88,
+          reason: 'Pioneering SEO software and data provider with comprehensive tools',
+          marketPosition: 'Established SEO authority with strong educational content',
+          keyStrengths: ['Domain authority metric', 'SEO learning resources', 'Local SEO tools'],
+          differentiators: ['MozCon conference', 'Beginner-friendly approach']
+        },
+        {
+          name: 'Conductor',
+          url: 'https://conductor.com',
+          type: 'direct',
+          relevanceScore: 85,
+          reason: 'Enterprise SEO and content intelligence platform',
+          marketPosition: 'Enterprise-focused organic marketing solution',
+          keyStrengths: ['Content intelligence', 'Enterprise integration', 'Marketing analytics'],
+          differentiators: ['Enterprise focus', 'Customer success program']
+        }
+      ];
+    }
+    
+    // Healthcare & Medical industry
+    else if (industry?.includes('Healthcare') || industry?.includes('Medical') || niche.includes('health') || niche.includes('med')) {
+      competitorSuggestions = [
+        {
+          name: 'WebMD',
+          url: 'https://webmd.com',
+          type: 'industry_leader',
+          relevanceScore: 89,
+          reason: 'Leading provider of health information services for consumers and professionals',
+          marketPosition: 'Premier online health information resource',
+          keyStrengths: ['Comprehensive health content', 'Symptom checker', 'Provider directory'],
+          differentiators: ['Medical review process', 'Consumer health focus']
+        },
+        {
+          name: 'Mayo Clinic',
+          url: 'https://mayoclinic.org',
+          type: 'industry_leader',
+          relevanceScore: 92,
+          reason: 'World-renowned medical center providing expert health information',
+          marketPosition: 'Trusted authority in medical information and research',
+          keyStrengths: ['Expert medical content', 'Research-backed information', 'Condition guides'],
+          differentiators: ['Medical expertise', 'Research foundation']
+        },
+        {
+          name: 'Healthline',
+          url: 'https://healthline.com',
+          type: 'direct',
+          relevanceScore: 87,
+          reason: 'Health information website focused on wellness and medical content',
+          marketPosition: 'Consumer-friendly health and wellness resource',
+          keyStrengths: ['Accessible health content', 'Nutrition information', 'Mental health resources'],
+          differentiators: ['Wellness focus', 'Medically reviewed content']
+        },
+        {
+          name: 'Zocdoc',
+          url: 'https://zocdoc.com',
+          type: 'direct',
+          relevanceScore: 83,
+          reason: 'Online doctor appointment booking service with provider reviews',
+          marketPosition: 'Leading digital healthcare appointment platform',
+          keyStrengths: ['Provider search', 'Online booking', 'Patient reviews'],
+          differentiators: ['Insurance matcher', 'Telehealth integration']
+        }
+      ];
+    }
+    
+    // Education & Training industry
+    else if (industry?.includes('Education') || industry?.includes('Training') || niche.includes('edu') || niche.includes('learn')) {
+      competitorSuggestions = [
+        {
+          name: 'Coursera',
+          url: 'https://coursera.org',
+          type: 'industry_leader',
+          relevanceScore: 90,
+          reason: 'Leading online learning platform partnering with universities and companies',
+          marketPosition: 'Premium online education platform with academic partnerships',
+          keyStrengths: ['University partnerships', 'Degree programs', 'Professional certificates'],
+          differentiators: ['Academic credentials', 'University partnerships']
+        },
+        {
+          name: 'Udemy',
+          url: 'https://udemy.com',
+          type: 'direct',
+          relevanceScore: 88,
+          reason: 'Marketplace for online learning with vast course selection',
+          marketPosition: 'Largest marketplace for online courses',
+          keyStrengths: ['Extensive course library', 'Instructor marketplace', 'Business solutions'],
+          differentiators: ['Course marketplace model', 'Instructor-led content']
+        },
+        {
+          name: 'LinkedIn Learning',
+          url: 'https://linkedin.com/learning',
+          type: 'direct',
+          relevanceScore: 85,
+          reason: 'Professional skills platform integrated with LinkedIn network',
+          marketPosition: 'Professional development platform with career integration',
+          keyStrengths: ['Professional focus', 'LinkedIn integration', 'Skills assessments'],
+          differentiators: ['LinkedIn profile integration', 'Professional networking']
+        },
+        {
+          name: 'Khan Academy',
+          url: 'https://khanacademy.org',
+          type: 'direct',
+          relevanceScore: 82,
+          reason: 'Free educational platform with comprehensive academic content',
+          marketPosition: 'Non-profit educational resource with academic focus',
+          keyStrengths: ['Free access', 'K-12 curriculum', 'Practice exercises'],
+          differentiators: ['Non-profit model', 'Academic foundation']
+        }
+      ];
     }
 
     // Add location-specific competitors if location info is available
-    let locationCompetitors: CompetitorSuggestion[] = [];
-    
     if (locationInfo.city || locationInfo.state) {
       const location = locationInfo.city ? 
         `${locationInfo.city}, ${locationInfo.state || ''}` : 
@@ -229,20 +317,24 @@ Deno.serve(async (req: Request) => {
       
       if (location) {
         // Generate location-specific competitors
-        locationCompetitors = [
+        const cityName = locationInfo.city || '';
+        const stateName = locationInfo.state || '';
+        const stateAbbr = stateAbbreviations[usStates.indexOf(stateName)] || '';
+        
+        const localCompetitors = [
           {
-            name: `${location} Digital`,
-            url: `https://${location.toLowerCase().replace(/\s+/g, '')}digital.com`,
+            name: `${cityName} Digital`,
+            url: `https://${cityName.toLowerCase().replace(/\s+/g, '')}digital.com`,
             type: 'direct',
             relevanceScore: 95,
             reason: `Local competitor in ${location} offering similar services to the same client base`,
             marketPosition: 'Established local provider with strong community ties',
             keyStrengths: ['Local reputation', 'Community connections', 'Personalized service'],
-            differentiators: [`${location}-specific expertise`, 'Face-to-face meetings']
+            differentiators: [`${cityName}-specific expertise`, 'Face-to-face meetings']
           },
           {
-            name: `${locationInfo.state || 'Regional'} Solutions Group`,
-            url: `https://${(locationInfo.state || 'regional').toLowerCase().replace(/\s+/g, '')}solutionsgroup.com`,
+            name: `${stateName} Solutions Group`,
+            url: `https://${stateName.toLowerCase().replace(/\s+/g, '')}solutionsgroup.com`,
             type: 'direct',
             relevanceScore: 90,
             reason: `Regional competitor covering ${location} and surrounding areas`,
@@ -251,15 +343,15 @@ Deno.serve(async (req: Request) => {
             differentiators: ['Regional business focus', 'Industry specialization']
           }
         ];
+        
+        // Add local competitors to the beginning of the list as they're most relevant
+        competitorSuggestions = [...localCompetitors, ...competitorSuggestions];
       }
     }
 
-    // Combine industry and location competitors
-    let competitorSuggestions = [...industryCompetitors, ...locationCompetitors];
-    
-    // Add general competitors if we don't have enough
+    // If we still don't have enough competitors, add some general ones based on the domain
     if (competitorSuggestions.length < 3) {
-      const generalCompetitors: CompetitorSuggestion[] = [
+      const generalCompetitors = [
         {
           name: 'Moz',
           url: 'https://moz.com',
@@ -289,23 +381,13 @@ Deno.serve(async (req: Request) => {
           marketPosition: 'Data-driven enterprise SEO solution',
           keyStrengths: ['Data science approach', 'Content performance', 'Technical SEO'],
           differentiators: ['DataMind AI technology', 'Enterprise integration']
-        },
-        {
-          name: 'Clearscope',
-          url: 'https://clearscope.io',
-          type: 'emerging',
-          relevanceScore: 80,
-          reason: 'Content optimization platform focused on search intent',
-          marketPosition: 'Premium content optimization tool',
-          keyStrengths: ['Content optimization', 'Term relevance', 'Readability analysis'],
-          differentiators: ['Content-first approach', 'Writer-friendly interface']
         }
       ];
       
-      // Add enough general competitors to reach at least 5 total
+      // Add enough general competitors to reach at least 3 total
       competitorSuggestions = [
         ...competitorSuggestions,
-        ...generalCompetitors.slice(0, Math.max(0, 5 - competitorSuggestions.length))
+        ...generalCompetitors.slice(0, Math.max(0, 3 - competitorSuggestions.length))
       ];
     }
 
@@ -316,48 +398,6 @@ Deno.serve(async (req: Request) => {
         comp.url.toLowerCase().includes(existing.toLowerCase())
       )
     );
-    
-    // Ensure we have at least 3 competitors
-    if (competitorSuggestions.length < 3) {
-      const additionalCompetitors: CompetitorSuggestion[] = [
-        {
-          name: 'SearchMetrics',
-          url: 'https://searchmetrics.com',
-          type: 'direct',
-          relevanceScore: 78,
-          reason: 'Enterprise SEO platform with content experience focus',
-          marketPosition: 'Data-driven enterprise SEO solution',
-          keyStrengths: ['Search analytics', 'Content experience', 'SEO research'],
-          differentiators: ['Content experience platform', 'Enterprise focus']
-        },
-        {
-          name: 'MarketMuse',
-          url: 'https://marketmuse.com',
-          type: 'emerging',
-          relevanceScore: 76,
-          reason: 'AI content planning and optimization platform',
-          marketPosition: 'AI-driven content intelligence platform',
-          keyStrengths: ['Content planning', 'Topic modeling', 'Content scoring'],
-          differentiators: ['AI content planning', 'Topic authority focus']
-        },
-        {
-          name: 'Surfer SEO',
-          url: 'https://surferseo.com',
-          type: 'emerging',
-          relevanceScore: 75,
-          reason: 'Data-driven SEO and content optimization tool',
-          marketPosition: 'Growing content optimization platform',
-          keyStrengths: ['SERP analyzer', 'Content editor', 'Keyword research'],
-          differentiators: ['Content editor', 'SERP correlation']
-        }
-      ];
-      
-      // Add enough additional competitors to reach at least 3 total
-      competitorSuggestions = [
-        ...competitorSuggestions,
-        ...additionalCompetitors.slice(0, Math.max(0, 3 - competitorSuggestions.length))
-      ];
-    }
     
     // Limit to a reasonable number based on analysis depth
     const limit = analysisDepth === 'comprehensive' ? 10 : 6;
