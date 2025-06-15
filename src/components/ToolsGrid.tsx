@@ -134,9 +134,9 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       isNew: true
     },
     {
-      id: 'optimizer',
-      name: 'Content Optimizer',
-      description: 'Score and rewrite your content to maximize AI visibility',
+      id: 'editor',
+      name: 'Content Editor',
+      description: 'Real-time analysis and suggestions for your content',
       icon: TrendingUp,
       color: 'from-orange-500 to-orange-600',
       planRequired: 'core'
@@ -170,6 +170,9 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
   // Filter tools based on user plan
   const availableTools = tools.filter(tool => {
+    // Remove the optimizer tool as it's redundant with the editor
+    if (tool.id === 'optimizer') return false;
+    
     const planHierarchy = { free: 0, core: 1, pro: 2, agency: 3 };
     const userLevel = planHierarchy[userPlan];
     const requiredLevel = planHierarchy[tool.planRequired];
@@ -246,9 +249,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             'medium'
           );
           break;
-        case 'optimizer':
-          // Content optimizer is handled in ContentEditor component
-          break;
         case 'competitive':
           const competitors = userProfile?.competitors?.map((c: any) => c.url) || [];
           result = await apiService.performCompetitiveAnalysis(
@@ -263,6 +263,12 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             userProfile?.industry,
             userProfile?.business_description,
             userProfile?.competitors?.map((c: any) => c.url) || []
+          );
+          break;
+        case 'prompts':
+          result = await apiService.generatePromptSuggestions(
+            selectedWebsite.split('//')[1].split('/')[0].replace('www.', ''),
+            userProfile?.industry
           );
           break;
         default:
@@ -650,7 +656,340 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 </div>
               )}
               
-              {/* Add more tool-specific result displays as needed */}
+              {activeToolId === 'entities' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-center bg-white p-4 rounded-lg shadow-sm">
+                      <div className="text-3xl font-bold text-purple-600 mb-2">{toolData.coverageScore || 0}</div>
+                      <p className="text-gray-600">Entity Coverage Score</p>
+                    </div>
+                    <div className="text-center bg-white p-4 rounded-lg shadow-sm">
+                      <div className="text-3xl font-bold text-blue-600 mb-2">{toolData.mentionedCount || 0}</div>
+                      <p className="text-gray-600">Entities Mentioned</p>
+                    </div>
+                    <div className="text-center bg-white p-4 rounded-lg shadow-sm">
+                      <div className="text-3xl font-bold text-red-600 mb-2">{toolData.missingCount || 0}</div>
+                      <p className="text-gray-600">Entities Missing</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <h4 className="font-medium mb-4 text-green-700">Mentioned Entities</h4>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {toolData.mentionedEntities?.map((entity: any, i: number) => (
+                          <div key={i} className="border-l-4 border-green-400 pl-3 py-1">
+                            <div className="flex justify-between">
+                              <h5 className="font-medium text-gray-900">{entity.name}</h5>
+                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">{entity.type}</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">{entity.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <h4 className="font-medium mb-4 text-red-700">Missing Entities</h4>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {toolData.missingEntities?.map((entity: any, i: number) => (
+                          <div key={i} className="border-l-4 border-red-400 pl-3 py-1">
+                            <div className="flex justify-between">
+                              <h5 className="font-medium text-gray-900">{entity.name}</h5>
+                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">{entity.type}</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">{entity.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-3">Recommendations</h4>
+                    <ul className="space-y-2">
+                      {toolData.recommendations?.map((rec: string, i: number) => (
+                        <li key={i} className="flex items-start">
+                          <span className="text-purple-600 mr-2">•</span>
+                          <span className="text-gray-700">{rec}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+              
+              {activeToolId === 'competitive' && (
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-3">Competitive Analysis</h4>
+                    
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Website</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overall Score</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">AI Understanding</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Citation</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Conversational</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Structure</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {/* Primary site */}
+                          {toolData.primarySiteAnalysis && (
+                            <tr className="bg-purple-50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {toolData.primarySiteAnalysis.name} (You)
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-purple-700">
+                                {toolData.primarySiteAnalysis.overallScore}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {toolData.primarySiteAnalysis.subscores.aiUnderstanding}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {toolData.primarySiteAnalysis.subscores.citationLikelihood}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {toolData.primarySiteAnalysis.subscores.conversationalReadiness}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {toolData.primarySiteAnalysis.subscores.contentStructure}
+                              </td>
+                            </tr>
+                          )}
+                          
+                          {/* Competitors */}
+                          {toolData.competitorAnalyses?.map((comp: any, i: number) => (
+                            <tr key={i}>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {comp.name}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {comp.overallScore}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {comp.subscores.aiUnderstanding}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {comp.subscores.citationLikelihood}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {comp.subscores.conversationalReadiness}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {comp.subscores.contentStructure}
+                              </td>
+                            </tr>
+                          ))}
+                          
+                          {/* Industry average */}
+                          <tr className="bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              Industry Average
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700">
+                              {toolData.benchmarks?.industryAverage || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" colSpan={4}>
+                              
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-3">Competitive Insights</h4>
+                    <p className="text-gray-700 mb-4">
+                      {toolData.summary?.competitivePosition === 'Leading' ? 
+                        `You're leading your competitive set with a score of ${toolData.primarySiteAnalysis?.overallScore}. You're ${toolData.summary?.averageCompetitorScore ? toolData.primarySiteAnalysis?.overallScore - toolData.summary?.averageCompetitorScore : 0} points above the industry average.` :
+                        toolData.summary?.competitivePosition === 'Competitive' ?
+                        `You're competitive in your market with a score of ${toolData.primarySiteAnalysis?.overallScore}. The industry average is ${toolData.summary?.averageCompetitorScore}.` :
+                        `You're currently behind competitors with a score of ${toolData.primarySiteAnalysis?.overallScore}. The industry average is ${toolData.summary?.averageCompetitorScore}.`
+                      }
+                    </p>
+                    
+                    <h5 className="font-medium text-gray-800 mb-2">Recommendations:</h5>
+                    <ul className="space-y-1">
+                      {toolData.recommendations?.map((rec: string, i: number) => (
+                        <li key={i} className="flex items-start">
+                          <span className="text-purple-600 mr-2">•</span>
+                          <span className="text-gray-700">{rec}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+              
+              {activeToolId === 'citations' && (
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-3">Citation Results</h4>
+                    <p className="text-gray-700 mb-4">
+                      Found {toolData.citations?.length || 0} mentions of your content across various platforms.
+                    </p>
+                    
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {toolData.citations?.map((citation: any, i: number) => (
+                        <div key={i} className="border border-gray-200 rounded-lg p-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h5 className="font-medium text-gray-900">{citation.source}</h5>
+                              <a href={citation.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">{citation.url}</a>
+                            </div>
+                            <div className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">
+                              {citation.type}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-2 border-l-4 border-gray-200 pl-3 py-1">
+                            "{citation.snippet}"
+                          </p>
+                          <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+                            <span>Confidence: {citation.confidence_score || 0}%</span>
+                            <span>{new Date(citation.date).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {activeToolId === 'voice' && (
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-3">Voice Assistant Test Results</h4>
+                    <p className="text-gray-700 mb-4">
+                      Query: "{toolData.query}"
+                    </p>
+                    
+                    <div className="space-y-4">
+                      {toolData.results?.map((result: any, i: number) => (
+                        <div key={i} className={`border rounded-lg p-4 ${result.mentioned ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
+                          <div className="flex justify-between items-start">
+                            <h5 className="font-medium text-gray-900">{result.assistant}</h5>
+                            {result.mentioned && (
+                              <div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                                Mentioned Your Site
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 mt-2 border-l-4 border-gray-200 pl-3 py-1">
+                            "{result.response}"
+                          </p>
+                          <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+                            <span>Confidence: {result.confidence}%</span>
+                            {result.mentioned && (
+                              <span>Ranking: #{result.ranking}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-3">Summary</h4>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold text-gray-900">{toolData.summary?.totalMentions || 0}/{toolData.summary?.assistantsTested || 0}</div>
+                        <p className="text-sm text-gray-600">Assistants Mentioning You</p>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-gray-900">{toolData.summary?.averageRanking || 0}</div>
+                        <p className="text-sm text-gray-600">Average Ranking</p>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-gray-900">{toolData.summary?.averageConfidence || 0}%</div>
+                        <p className="text-sm text-gray-600">Average Confidence</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {activeToolId === 'summaries' && (
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-3">{toolData.summaryType?.charAt(0).toUpperCase() + toolData.summaryType?.slice(1)} Summary</h4>
+                    <div className="bg-gray-50 p-4 rounded border border-gray-200 mb-4">
+                      <p className="text-gray-700">{toolData.summary}</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <h5 className="font-medium text-gray-800 mb-2">Key Entities</h5>
+                        <ul className="space-y-1">
+                          {toolData.entities?.map((entity: string, i: number) => (
+                            <li key={i} className="text-sm text-gray-600 flex items-start">
+                              <span className="text-purple-600 mr-2">•</span>
+                              <span>{entity}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h5 className="font-medium text-gray-800 mb-2">Main Topics</h5>
+                        <ul className="space-y-1">
+                          {toolData.topics?.map((topic: string, i: number) => (
+                            <li key={i} className="text-sm text-gray-600 flex items-start">
+                              <span className="text-purple-600 mr-2">•</span>
+                              <span>{topic}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <h5 className="font-medium text-gray-800 mb-2">AI Optimization Notes</h5>
+                      <p className="text-sm text-gray-600">{toolData.optimizationNotes}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {activeToolId === 'prompts' && (
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-3">Prompt Match Suggestions</h4>
+                    <p className="text-gray-700 mb-4">
+                      Generated {toolData.totalPrompts} prompt suggestions for your content.
+                    </p>
+                    
+                    <div className="space-y-4">
+                      {Object.entries(toolData.promptsByCategory || {}).map(([category, prompts]: [string, any]) => (
+                        <div key={category} className="border border-gray-200 rounded-lg p-4">
+                          <h5 className="font-medium text-gray-900 mb-3">{category}</h5>
+                          <div className="space-y-2">
+                            {prompts.map((prompt: any, i: number) => (
+                              <div key={i} className="bg-gray-50 p-3 rounded">
+                                <div className="flex justify-between items-start">
+                                  <p className="text-gray-800 font-medium">{prompt.prompt}</p>
+                                  <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                                    {prompt.intent}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-2">{prompt.optimization}</p>
+                                <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+                                  <span>Best for: {prompt.aiSystem}</span>
+                                  <span>Likelihood: {prompt.likelihood}%</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="mt-6">
                 <button

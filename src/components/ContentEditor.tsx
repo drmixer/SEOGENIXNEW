@@ -55,14 +55,14 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
 
     setIsAnalyzing(true);
     try {
-      // Generate real-time suggestions
-      const keywords = targetKeywords.split(',').map(k => k.trim()).filter(k => k);
-      
       // Call the real-time analysis API
+      const keywords = targetKeywords.split(',').map(k => k.trim()).filter(k => k);
       const result = await apiService.analyzeContentRealTime(content, keywords);
+      
+      // Set real-time suggestions
       setRealTimeSuggestions(result.suggestions || []);
       
-      // Simulate real-time analysis using the audit API
+      // Simulate audit result for overall analysis
       const auditResult = await apiService.runAudit('https://example.com', content);
       
       // Convert audit result to content analysis format
