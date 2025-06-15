@@ -632,10 +632,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
               
               {activeToolId === 'discovery' && (
                 <div className="space-y-4">
-                  <p className="text-gray-700">Found {toolData.totalSuggestions} potential competitors for {selectedWebsite}</p>
+                  <p className="text-gray-700">Found {toolData.totalSuggestions || 0} potential competitors for {selectedWebsite}</p>
                   
                   <div className="space-y-3">
-                    {toolData.competitorSuggestions.map((comp: any, i: number) => (
+                    {toolData.competitorSuggestions?.map((comp: any, i: number) => (
                       <div key={i} className="bg-white p-4 rounded-lg shadow-sm">
                         <div className="flex justify-between items-start">
                           <div>
@@ -651,7 +651,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                           <div className="text-xs text-gray-500">Relevance Score: {comp.relevanceScore}/100</div>
                         </div>
                       </div>
-                    ))}
+                    )) || (
+                      <div className="text-center py-8">
+                        <p className="text-gray-500">No competitor suggestions found.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
