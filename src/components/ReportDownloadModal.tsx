@@ -26,13 +26,7 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
     setError(null);
     
     try {
-      if (selectedFormat === 'html') {
-        await reportService.viewReport(reportId, 'html', true);
-      } else {
-        // For other formats, we would need to implement specific handlers
-        // This is a placeholder for CSV and JSON downloads
-        alert(`Download in ${selectedFormat.toUpperCase()} format is not implemented in this demo`);
-      }
+      await reportService.viewReport(reportId, selectedFormat, true);
     } catch (err) {
       console.error('Download error:', err);
       setError(err instanceof Error ? err.message : 'Failed to download report');
@@ -42,11 +36,16 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
   };
 
   const handleViewInBrowser = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
       await reportService.viewReport(reportId, 'html', false);
     } catch (err) {
       console.error('View error:', err);
       setError(err instanceof Error ? err.message : 'Failed to view report');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -156,6 +155,7 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
             {selectedFormat === 'html' && (
               <button
                 onClick={handleViewInBrowser}
+                disabled={loading}
                 className="w-full border border-gray-300 bg-white text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2"
               >
                 <ExternalLink className="w-5 h-5" />

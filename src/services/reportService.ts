@@ -90,28 +90,43 @@ export const reportService = {
         throw new Error('Authentication required');
       }
 
-      // Get the report from the database to get the file URL
-      const { data: report, error } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('id', reportId)
-        .single();
-
-      if (error || !report) {
-        throw new Error('Report not found');
-      }
-
       // Create the viewer URL with proper authentication
       const viewerUrl = `${API_URL}/report-viewer?reportId=${reportId}&format=${format}&download=${download}`;
       
-      if (download) {
-        // For downloads, use a direct approach
-        window.location.href = viewerUrl;
-      } else {
-        // For viewing in browser, open in a new tab
-        window.open(viewerUrl, '_blank');
-      }
+      // Create a temporary link with the auth token in the header
+      const openWithAuth = async () => {
+        // For security, we'll create a server-side proxy request with proper auth
+        const response = await fetch(viewerUrl, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to access report: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        
+        if (download) {
+          // For downloads, create a temporary link and click it
+          const a = document.createElement('a');
+          a.href = objectUrl;
+          a.download = `report_${reportId.substring(0, 8)}.${format}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } else {
+          // For viewing, open in a new tab
+          window.open(objectUrl, '_blank');
+        }
+        
+        // Clean up the object URL after a delay
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 100);
+      };
       
+      await openWithAuth();
       return viewerUrl;
     } catch (error) {
       console.error('Report viewing error:', error);

@@ -50,6 +50,15 @@ const ReportList: React.FC = () => {
     }
   };
 
+  const handleViewReport = async (reportId: string) => {
+    try {
+      await reportService.viewReport(reportId, 'html', false);
+    } catch (err) {
+      console.error('Error viewing report:', err);
+      alert('Failed to view report: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
   const getReportIcon = (type: string) => {
     switch (type) {
       case 'audit': return <FileText className="w-5 h-5 text-blue-600" />;
@@ -177,7 +186,7 @@ const ReportList: React.FC = () => {
                         <Download className="w-5 h-5" />
                       </button>
                       <button
-                        onClick={() => reportService.viewReport(report.id, 'html', false)}
+                        onClick={() => handleViewReport(report.id)}
                         className="text-blue-600 hover:text-blue-900"
                         title="View"
                       >

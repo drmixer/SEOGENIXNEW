@@ -39,6 +39,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Get auth token from request header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -48,12 +57,24 @@ Deno.serve(async (req: Request) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Verify the user's token
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid authentication', details: authError?.message }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Get report metadata from database
     const { data: report, error: reportError } = await supabase
       .from('reports')
       .select('*')
       .eq('id', reportId)
+      .eq('user_id', user.id) // Ensure the report belongs to the authenticated user
       .single();
 
     if (reportError || !report) {
@@ -64,50 +85,50 @@ Deno.serve(async (req: Request) => {
     }
 
     // Get the file URL from the report record
-    if (report.file_url) {
-      // If we have a direct file URL, fetch the content and serve it with proper headers
-      const response = await fetch(report.file_url);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch report file: ${response.statusText}`);
-      }
-      
-      const fileContent = await response.text();
-      
-      // Set appropriate content type and disposition headers
-      let contentType;
-      switch (format) {
-        case 'html':
-          contentType = 'text/html; charset=utf-8';
-          break;
-        case 'csv':
-          contentType = 'text/csv; charset=utf-8';
-          break;
-        case 'json':
-          contentType = 'application/json; charset=utf-8';
-          break;
-        default:
-          contentType = 'text/plain; charset=utf-8';
-      }
-      
-      const disposition = download ? 'attachment' : 'inline';
-      const filename = `${report.report_name.replace(/\s+/g, '_')}.${format}`;
-      
-      // Return the file with proper headers
-      return new Response(fileContent, {
-        headers: {
-          'Content-Type': contentType,
-          'Content-Disposition': `${disposition}; filename="${filename}"`,
-          'Cache-Control': 'no-cache',
-          ...corsHeaders
-        }
-      });
-    } else {
+    if (!report.file_url) {
       return new Response(
         JSON.stringify({ error: 'Report file URL not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Fetch the file content directly
+    const fileResponse = await fetch(report.file_url);
+    
+    if (!fileResponse.ok) {
+      throw new Error(`Failed to fetch report file: ${fileResponse.statusText}`);
+    }
+    
+    const fileContent = await fileResponse.text();
+    
+    // Set appropriate content type and disposition headers
+    let contentType;
+    switch (format) {
+      case 'html':
+        contentType = 'text/html; charset=utf-8';
+        break;
+      case 'csv':
+        contentType = 'text/csv; charset=utf-8';
+        break;
+      case 'json':
+        contentType = 'application/json; charset=utf-8';
+        break;
+      default:
+        contentType = 'text/plain; charset=utf-8';
+    }
+    
+    const disposition = download ? 'attachment' : 'inline';
+    const filename = `${report.report_name.replace(/\s+/g, '_')}.${format}`;
+    
+    // Return the file with proper headers
+    return new Response(fileContent, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': `${disposition}; filename="${filename}"`,
+        'Cache-Control': 'no-cache',
+        ...corsHeaders
+      }
+    });
   } catch (error) {
     console.error('Report viewer error:', error);
     return new Response(
