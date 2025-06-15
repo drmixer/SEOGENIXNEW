@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Download, Trash2, Eye, Calendar, Loader, RefreshCw } from 'lucide-react';
+import { FileText, Download, Loader, X, Star, RefreshCw, AlertTriangle, Eye, Trash2, Calendar } from 'lucide-react';
 import { reportService, type GeneratedReport } from '../services/reportService';
 import ReportDownloadModal from './ReportDownloadModal';
 
