@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 
 export interface ReportOptions {
-  format?: 'html' | 'csv' | 'json' | 'pdf';
+  format?: 'html' | 'csv' | 'json';
   includeRecommendations?: boolean;
   includeCharts?: boolean;
   includeHistory?: boolean;
@@ -43,8 +43,8 @@ export const reportService = {
         throw new Error('Authentication required');
       }
 
-      // Call the enhanced-report-generation function
-      const response = await fetch(`${API_URL}/enhanced-report-generation`, {
+      // Call the generate-report function
+      const response = await fetch(`${API_URL}/generate-report`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -82,7 +82,7 @@ export const reportService = {
   /**
    * View a report in the browser (HTML) or download it
    */
-  async viewReport(reportId: string, format: 'html' | 'csv' | 'json' | 'pdf' = 'html', download: boolean = false): Promise<string> {
+  async viewReport(reportId: string, format: 'html' | 'csv' | 'json' = 'html', download: boolean = false): Promise<void> {
     try {
       // Get auth token for API calls
       const { data: { session } } = await supabase.auth.getSession();
@@ -122,8 +122,6 @@ export const reportService = {
       
       // Clean up the object URL after a delay
       setTimeout(() => URL.revokeObjectURL(objectUrl), 100);
-      
-      return viewerUrl;
     } catch (error) {
       console.error('Report viewing error:', error);
       throw error;
