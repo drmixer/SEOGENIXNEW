@@ -188,7 +188,12 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
     setError(null);
     
     try {
-      const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(planId, user);
+      const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(
+        planId, 
+        user, 
+        isAnnual ? 'annual' : 'monthly'
+      );
+      
       if (checkoutUrl) {
         // Redirect to checkout
         window.location.href = checkoutUrl;

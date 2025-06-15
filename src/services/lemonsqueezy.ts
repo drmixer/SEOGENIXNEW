@@ -139,18 +139,25 @@ export const lemonsqueezyService = {
   /**
    * Get checkout URL for a specific plan
    */
-  async getCheckoutUrl(plan: 'core' | 'pro' | 'agency', user: any) {
+  async getCheckoutUrl(plan: 'core' | 'pro' | 'agency', user: any, billingCycle: 'monthly' | 'annual' = 'monthly') {
     try {
-      // Map plans to variant IDs (you'll need to replace these with your actual variant IDs)
-      const variantMap: Record<string, string> = {
-        core: import.meta.env.VITE_LEMONSQUEEZY_CORE_VARIANT_ID || '',
-        pro: import.meta.env.VITE_LEMONSQUEEZY_PRO_VARIANT_ID || '',
-        agency: import.meta.env.VITE_LEMONSQUEEZY_AGENCY_VARIANT_ID || ''
+      // Map plans to variant IDs based on billing cycle
+      const variantMap: Record<string, Record<string, string>> = {
+        monthly: {
+          core: import.meta.env.VITE_LEMONSQUEEZY_CORE_MONTHLY_VARIANT_ID || '',
+          pro: import.meta.env.VITE_LEMONSQUEEZY_PRO_MONTHLY_VARIANT_ID || '',
+          agency: import.meta.env.VITE_LEMONSQUEEZY_AGENCY_MONTHLY_VARIANT_ID || ''
+        },
+        annual: {
+          core: import.meta.env.VITE_LEMONSQUEEZY_CORE_ANNUAL_VARIANT_ID || '',
+          pro: import.meta.env.VITE_LEMONSQUEEZY_PRO_ANNUAL_VARIANT_ID || '',
+          agency: import.meta.env.VITE_LEMONSQUEEZY_AGENCY_ANNUAL_VARIANT_ID || ''
+        }
       };
       
-      const variantId = variantMap[plan];
+      const variantId = variantMap[billingCycle][plan];
       if (!variantId) {
-        throw new Error(`No variant ID found for plan: ${plan}`);
+        throw new Error(`No variant ID found for plan: ${plan} (${billingCycle})`);
       }
       
       // Create checkout

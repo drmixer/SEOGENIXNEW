@@ -115,7 +115,12 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
       setLoading(plan);
       setError(null);
       
-      const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(plan, user);
+      const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(
+        plan, 
+        user, 
+        isAnnual ? 'annual' : 'monthly'
+      );
+      
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
       } else {
