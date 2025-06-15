@@ -44,6 +44,36 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const analysisTimeoutRef = useRef<NodeJS.Timeout>();
+  const [initialContentAdded, setInitialContentAdded] = useState(false);
+
+  // Add sample content on first load to help users get started
+  useEffect(() => {
+    if (!initialContentAdded && !content) {
+      const sampleContent = `# Introduction to AI Visibility
+
+AI visibility refers to how well your content is structured and optimized for AI systems like ChatGPT, Google Bard, and voice assistants. As more people use AI to find information, traditional SEO isn't enough - your content needs to be easily understood and cited by AI systems.
+
+## Why AI Visibility Matters
+
+When users ask questions to AI systems, those systems need to:
+1. Understand your content correctly
+2. Consider it authoritative and relevant
+3. Be able to extract and cite specific information
+
+Poor AI visibility means your content might be ignored or misinterpreted, even if it contains valuable information.
+
+## Key Components of AI Visibility
+
+* AI Understanding - How well AI systems comprehend your content
+* Citation Likelihood - How likely AI systems are to cite your content
+* Conversational Readiness - How well your content answers natural language questions
+* Content Structure - How well-organized your content is for AI parsing`;
+
+      setContent(sampleContent);
+      setTargetKeywords('AI visibility, SEO, content optimization');
+      setInitialContentAdded(true);
+    }
+  }, [initialContentAdded, content]);
 
   // Debounced analysis
   const analyzeContent = useCallback(async () => {
@@ -662,8 +692,21 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 text-center">
               <FileText className="w-8 h-8 text-gray-400 mx-auto mb-3" />
               <p className="text-gray-600 text-sm">
-                Start writing content to see AI visibility analysis
+                {content.length > 0 ? 'Analyzing your content...' : 'Start writing content to see AI visibility analysis'}
               </p>
+              {content.length > 0 && (
+                <div className="mt-4">
+                  <div className="animate-pulse flex space-x-4">
+                    <div className="flex-1 space-y-4 py-1">
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mx-auto"></div>
+                      <div className="space-y-2">
+                        <div className="h-4 bg-gray-200 rounded"></div>
+                        <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

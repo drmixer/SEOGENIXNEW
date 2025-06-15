@@ -28,8 +28,8 @@ interface Goal {
 
 const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete, onClose }) => {
   const [step, setStep] = useState(1);
-  const [websites, setWebsites] = useState<Website[]>([{ url: '', name: '' }]);
-  const [competitors, setCompetitors] = useState<Competitor[]>([{ url: '', name: '' }]);
+  const [websites, setWebsites] = useState<Website[]>([{ url: 'https://', name: '' }]);
+  const [competitors, setCompetitors] = useState<Competitor[]>([{ url: 'https://', name: '' }]);
   const [industry, setIndustry] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -97,7 +97,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
 
   const addWebsite = () => {
     if (websites.length < currentLimits.websites) {
-      setWebsites([...websites, { url: '', name: '' }]);
+      setWebsites([...websites, { url: 'https://', name: '' }]);
     }
   };
 
@@ -116,7 +116,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
 
   const addCompetitor = () => {
     if (competitors.length < currentLimits.competitors) {
-      setCompetitors([...competitors, { url: '', name: '' }]);
+      setCompetitors([...competitors, { url: 'https://', name: '' }]);
     }
   };
 
@@ -184,7 +184,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         });
         
         // Check for existing profile
-        const { data: existingProfiles } = await supabase
+        const { data: existingProfiles, error } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('user_id', user.id)
@@ -540,7 +540,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
             )}
           </div>
 
-          <div className="flex items-center justify-between p-6 pt-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-end space-x-3 p-6 pt-4 border-t border-gray-200">
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
