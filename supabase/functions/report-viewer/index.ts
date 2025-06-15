@@ -1,9 +1,5 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { serve } from 'npm:@hono/node-server';
-import { Hono } from 'npm:hono';
-import puppeteer from 'npm:puppeteer-core';
-import chromium from 'npm:@sparticuz/chromium';
 
 interface ReportViewRequest {
   reportId: string;
@@ -11,40 +7,37 @@ interface ReportViewRequest {
   download?: boolean;
 }
 
-const app = new Hono();
-
-// CORS middleware
-app.use('*', async (c, next) => {
-  if (c.req.method === 'OPTIONS') {
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
-  await next();
-  Object.entries(corsHeaders).forEach(([key, value]) => {
-    c.header(key, value);
-  });
-});
 
-// Main report viewer endpoint
-app.get('/', async (c) => {
   try {
     // Get parameters from query string
-    const reportId = c.req.query('reportId');
-    const format = (c.req.query('format') || 'html') as 'html' | 'csv' | 'json' | 'pdf';
-    const download = c.req.query('download') === 'true';
+    const url = new URL(req.url);
+    const reportId = url.searchParams.get('reportId');
+    const format = (url.searchParams.get('format') || 'html') as 'html' | 'csv' | 'json' | 'pdf';
+    const download = url.searchParams.get('download') === 'true';
     
     if (!reportId) {
-      return c.json({ error: 'Report ID is required' }, 400);
+      return new Response(
+        JSON.stringify({ error: 'Report ID is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Get auth token from request header
-    const authHeader = c.req.header('Authorization');
+    const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return c.json({ error: 'Missing authorization header' }, 401);
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Initialize Supabase client using environment variables that are automatically available
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://your-project.supabase.co';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY');
+    // Initialize Supabase client using environment variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
     if (!supabaseUrl || !supabaseServiceKey) {
       console.error('Supabase environment variables:', {
@@ -52,10 +45,13 @@ app.get('/', async (c) => {
         key: !!supabaseServiceKey,
         availableEnvVars: Object.keys(Deno.env.toObject())
       });
-      return c.json({ 
-        error: 'Supabase configuration missing',
-        details: 'Environment variables not properly configured'
-      }, 500);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Supabase configuration missing',
+          details: 'Environment variables not properly configured'
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -65,10 +61,13 @@ app.get('/', async (c) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
     if (authError || !user) {
-      return c.json({ 
-        error: 'Invalid authentication', 
-        details: authError?.message 
-      }, 401);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid authentication', 
+          details: authError?.message 
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Get report metadata from database
@@ -80,30 +79,47 @@ app.get('/', async (c) => {
       .single();
 
     if (reportError || !report) {
-      return c.json({ 
-        error: 'Report not found', 
-        details: reportError?.message 
-      }, 404);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Report not found', 
+          details: reportError?.message 
+        }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Get the file URL from the report record
-    if (!report.file_url) {
-      return c.json({ error: 'Report file URL not found' }, 404);
-    }
-
-    // Fetch the file content directly
-    const fileResponse = await fetch(report.file_url);
+    // Use storage_path if available, otherwise fall back to file_url
+    let fileContent: string;
     
-    if (!fileResponse.ok) {
-      throw new Error(`Failed to fetch report file: ${fileResponse.statusText}`);
+    if (report.storage_path) {
+      // Use Supabase's internal download method for better reliability
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('reports')
+        .download(report.storage_path);
+      
+      if (downloadError) {
+        console.error('Storage download error:', downloadError);
+        throw new Error(`Failed to download report file: ${downloadError.message}`);
+      }
+      
+      // Convert the blob to text
+      fileContent = await fileData.text();
+    } else if (report.file_url) {
+      // Fallback to public URL fetch
+      const fileResponse = await fetch(report.file_url);
+      
+      if (!fileResponse.ok) {
+        throw new Error(`Failed to fetch report file: ${fileResponse.statusText}`);
+      }
+      
+      fileContent = await fileResponse.text();
+    } else {
+      throw new Error('No file path or URL found for report');
     }
-    
-    // Get the file content
-    let fileContent = await fileResponse.text();
     
     // Set appropriate content type and disposition headers
-    let contentType;
-    let fileName;
+    let contentType: string;
+    let fileName: string;
     
     switch (format) {
       case 'html':
@@ -122,49 +138,11 @@ app.get('/', async (c) => {
         contentType = 'application/pdf';
         fileName = `${report.report_name.replace(/\s+/g, '_')}.pdf`;
         
-        // Convert HTML to PDF using Puppeteer
-        try {
-          // Set up browser
-          chromium.setHeadlessMode = true;
-          const browser = await puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
-            headless: chromium.headless,
-          });
-          
-          const page = await browser.newPage();
-          
-          // Set content and wait for rendering
-          await page.setContent(fileContent, { waitUntil: 'networkidle0' });
-          
-          // Generate PDF
-          const pdfBuffer = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: {
-              top: '1cm',
-              right: '1cm',
-              bottom: '1cm',
-              left: '1cm'
-            }
-          });
-          
-          await browser.close();
-          
-          // Return PDF content
-          c.header('Content-Type', contentType);
-          c.header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${fileName}"`);
-          c.header('Cache-Control', 'no-cache');
-          
-          return new Response(pdfBuffer);
-        } catch (pdfError) {
-          console.error('PDF generation error:', pdfError);
-          return c.json({ 
-            error: 'Failed to generate PDF', 
-            details: pdfError.message 
-          }, 500);
-        }
+        // For PDF, we would need to convert HTML to PDF
+        // For now, return HTML content with PDF content type
+        // In production, you'd want to use a proper HTML-to-PDF service
+        contentType = 'text/html; charset=utf-8';
+        fileName = `${report.report_name.replace(/\s+/g, '_')}.html`;
         break;
       default:
         contentType = 'text/plain; charset=utf-8';
@@ -172,18 +150,23 @@ app.get('/', async (c) => {
     }
     
     // Return the file with proper headers
-    c.header('Content-Type', contentType);
-    c.header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${fileName}"`);
-    c.header('Cache-Control', 'no-cache');
+    const headers = {
+      ...corsHeaders,
+      'Content-Type': contentType,
+      'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="${fileName}"`,
+      'Cache-Control': 'no-cache'
+    };
     
-    return new Response(fileContent);
+    return new Response(fileContent, { headers });
+
   } catch (error) {
     console.error('Report viewer error:', error);
-    return c.json({ 
-      error: 'Failed to retrieve report', 
-      details: error.message 
-    }, 500);
+    return new Response(
+      JSON.stringify({ 
+        error: 'Failed to retrieve report', 
+        details: error.message 
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 });
-
-Deno.serve(app.fetch);

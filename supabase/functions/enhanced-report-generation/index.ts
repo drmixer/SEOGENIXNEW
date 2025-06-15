@@ -162,7 +162,7 @@ Deno.serve(async (req: Request) => {
     
     const downloadUrl = urlData.publicUrl;
 
-    // Save enhanced report metadata
+    // Save enhanced report metadata with storage path
     const { data: reportRecord, error: dbError } = await supabase
       .from('reports')
       .insert({
@@ -179,7 +179,8 @@ Deno.serve(async (req: Request) => {
             customBranding: config?.brandingOptions?.includeLogo
           }
         },
-        file_url: downloadUrl
+        file_url: downloadUrl,
+        storage_path: storagePath
       })
       .select()
       .single();
