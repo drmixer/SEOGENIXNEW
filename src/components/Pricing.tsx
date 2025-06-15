@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Check, X, Star } from 'lucide-react';
+import { lemonsqueezyService } from '../services/lemonsqueezy';
+import { supabase } from '../lib/supabase';
 
 interface PricingProps {
   onPlanSelect: (plan: 'free' | 'core' | 'pro' | 'agency') => void;
@@ -7,6 +9,8 @@ interface PricingProps {
 
 const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
   const [isAnnual, setIsAnnual] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const plans = [
     {
@@ -91,6 +95,40 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
     }
   ];
 
+  const handlePlanSelect = async (plan: 'free' | 'core' | 'pro' | 'agency') => {
+    if (plan === 'free') {
+      onPlanSelect(plan);
+      return;
+    }
+    
+    // For paid plans, check if user is logged in
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      // If not logged in, just call the regular onPlanSelect to show signup modal
+      onPlanSelect(plan);
+      return;
+    }
+    
+    // If logged in, redirect to LemonSqueezy checkout
+    try {
+      setLoading(plan);
+      setError(null);
+      
+      const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(plan, user);
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+      } else {
+        setError('Failed to create checkout. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error creating checkout:', err);
+      setError('An error occurred while setting up the checkout process.');
+    } finally {
+      setLoading(null);
+    }
+  };
+
   return (
     <section id="pricing" className="py-20 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -167,14 +205,17 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
                 </div>
                 
                 <button
-                  onClick={() => onPlanSelect(plan.id)}
+                  onClick={() => handlePlanSelect(plan.id)}
+                  disabled={loading === plan.id}
                   className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 ${
-                    plan.popular
-                      ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white hover:shadow-lg'
-                      : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                    loading === plan.id
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : plan.popular
+                        ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white hover:shadow-lg'
+                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
                   }`}
                 >
-                  {plan.name === 'Free' ? 'Start Free' : 'Choose Plan'}
+                  {loading === plan.id ? 'Processing...' : plan.name === 'Free' ? 'Start Free' : 'Choose Plan'}
                 </button>
                 
                 <div className="mt-8">
@@ -203,6 +244,12 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
             </div>
           ))}
         </div>
+        
+        {error && (
+          <div className="mt-8 max-w-md mx-auto bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800 text-sm text-center">{error}</p>
+          </div>
+        )}
       </div>
     </section>
   );

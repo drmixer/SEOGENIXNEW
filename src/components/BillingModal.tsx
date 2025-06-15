@@ -1,15 +1,41 @@
-import React, { useState } from 'react';
-import { X, CreditCard, Check, Star, Calendar, Download, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, CreditCard, Check, Star, Calendar, Download, ExternalLink, RefreshCw, Loader } from 'lucide-react';
+import { lemonsqueezyService } from '../services/lemonsqueezy';
+import { supabase } from '../lib/supabase';
 
 interface BillingModalProps {
   onClose: () => void;
   userPlan: 'free' | 'core' | 'pro' | 'agency';
   onPlanChange: (plan: 'free' | 'core' | 'pro' | 'agency') => void;
+  user: any;
 }
 
-const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanChange }) => {
+const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanChange, user }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'plans' | 'billing' | 'usage'>('overview');
   const [isAnnual, setIsAnnual] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [subscriptionData, setSubscriptionData] = useState<any>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(false);
+
+  useEffect(() => {
+    // Load subscription data when modal opens
+    const loadSubscriptionData = async () => {
+      if (!user?.id) return;
+      
+      setLoadingSubscription(true);
+      try {
+        const subscription = await lemonsqueezyService.getUserSubscription(user.id);
+        setSubscriptionData(subscription);
+      } catch (err) {
+        console.error('Error loading subscription:', err);
+      } finally {
+        setLoadingSubscription(false);
+      }
+    };
+    
+    loadSubscriptionData();
+  }, [user?.id]);
 
   const plans = [
     {
@@ -46,6 +72,11 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
         'Citation Tracker',
         'Voice Assistant Tester',
         'Genie Chatbot (Tool Guidance)'
+      ],
+      limitations: [
+        'No advanced analytics',
+        'Limited competitive analysis',
+        'No team access'
       ]
     },
     {
@@ -64,6 +95,10 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
         'Full Genie Chatbot Support',
         'Weekly Proactive Suggestions',
         'Priority support'
+      ],
+      limitations: [
+        'Single user account',
+        'No team collaboration'
       ]
     },
     {
@@ -109,10 +144,93 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
     { id: 'usage', label: 'Usage & Limits' }
   ];
 
-  const handlePlanUpgrade = (planId: 'free' | 'core' | 'pro' | 'agency') => {
-    // In a real app, this would integrate with Stripe or another payment processor
-    alert(`Upgrading to ${planId} plan would be handled by payment processor`);
-    onPlanChange(planId);
+  const handlePlanUpgrade = async (planId: 'free' | 'core' | 'pro' | 'agency') => {
+    if (planId === 'free') {
+      // For downgrading to free, we'll just cancel the subscription
+      if (subscriptionData?.id) {
+        setLoading(true);
+        try {
+          const success = await lemonsqueezyService.cancelSubscription(subscriptionData.id);
+          if (success) {
+            onPlanChange('free');
+            // Update local state
+            await supabase.auth.updateUser({
+              data: { plan: 'free' }
+            });
+            
+            // Update profile
+            await supabase
+              .from('user_profiles')
+              .update({ 
+                plan: 'free',
+                subscription_status: 'cancelled',
+                subscription_updated_at: new Date().toISOString()
+              })
+              .eq('user_id', user.id);
+          } else {
+            setError('Failed to cancel subscription. Please try again or contact support.');
+          }
+        } catch (err) {
+          console.error('Error cancelling subscription:', err);
+          setError('An error occurred while cancelling your subscription.');
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        // Already on free plan
+        onPlanChange('free');
+      }
+      return;
+    }
+    
+    // For upgrading to paid plans, redirect to LemonSqueezy checkout
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(planId, user);
+      if (checkoutUrl) {
+        // Redirect to checkout
+        window.location.href = checkoutUrl;
+      } else {
+        setError('Failed to create checkout. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error creating checkout:', err);
+      setError('An error occurred while setting up the checkout process.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
+  const getNextBillingDate = () => {
+    if (!subscriptionData) return 'N/A';
+    
+    const renewsAt = subscriptionData.attributes?.renews_at;
+    if (!renewsAt) return 'N/A';
+    
+    return formatDate(renewsAt);
+  };
+
+  const getSubscriptionStatus = () => {
+    if (!subscriptionData) return userPlan === 'free' ? 'Free Plan' : 'Active';
+    
+    const status = subscriptionData.attributes?.status;
+    if (status === 'active') return 'Active';
+    if (status === 'cancelled') return 'Cancelled (Expires on ' + getNextBillingDate() + ')';
+    if (status === 'expired') return 'Expired';
+    if (status === 'on_trial') return 'Trial (Ends on ' + getNextBillingDate() + ')';
+    
+    return status;
   };
 
   return (
@@ -172,11 +290,21 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
                             </span>
                           )}
                         </div>
+                        {loadingSubscription ? (
+                          <div className="mt-2 flex items-center text-sm text-gray-500">
+                            <RefreshCw className="w-3 h-3 animate-spin mr-1" />
+                            <span>Loading subscription details...</span>
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-sm text-gray-500">
+                            Status: {getSubscriptionStatus()}
+                          </div>
+                        )}
                       </div>
                       <div className="text-right">
                         <div className="text-sm text-gray-500">Next billing date</div>
                         <div className="font-medium text-gray-900">
-                          {userPlan === 'free' ? 'N/A' : 'February 1, 2025'}
+                          {userPlan === 'free' ? 'N/A' : getNextBillingDate()}
                         </div>
                       </div>
                     </div>
@@ -335,9 +463,10 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
                         </div>
                         
                         <button
-                          onClick={() => plan.id !== userPlan && handlePlanUpgrade(plan.id)}
-                          disabled={plan.id === userPlan}
+                          onClick={() => handlePlanUpgrade(plan.id)}
+                          disabled={plan.id === userPlan || loading}
                           className={`w-full py-2 px-4 rounded-lg font-medium transition-all duration-300 ${
+                            loading ? 'bg-gray-300 text-gray-500 cursor-not-allowed' :
                             plan.id === userPlan
                               ? 'bg-green-100 text-green-700 cursor-not-allowed'
                               : plan.popular
@@ -345,7 +474,14 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
                                 : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
                           }`}
                         >
-                          {plan.id === userPlan ? 'Current Plan' : plan.name === 'Free' ? 'Downgrade' : 'Upgrade'}
+                          {loading ? (
+                            <div className="flex items-center justify-center">
+                              <Loader className="w-4 h-4 animate-spin mr-2" />
+                              <span>Processing...</span>
+                            </div>
+                          ) : (
+                            plan.id === userPlan ? 'Current Plan' : plan.name === 'Free' ? 'Downgrade' : 'Upgrade'
+                          )}
                         </button>
                         
                         <div className="mt-6">
@@ -363,6 +499,12 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
                     </div>
                   ))}
                 </div>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+                    <p className="text-red-800 text-sm">{error}</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -398,20 +540,29 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {billingHistory.map((bill, index) => (
-                        <tr key={index}>
+                      {loadingSubscription ? (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-4 text-center">
+                            <div className="flex justify-center items-center">
+                              <RefreshCw className="w-5 h-5 animate-spin text-purple-600 mr-2" />
+                              <span>Loading billing history...</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : subscriptionData ? (
+                        <tr>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(bill.date).toLocaleDateString()}
+                            {formatDate(subscriptionData.attributes?.created_at || new Date().toISOString())}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {bill.plan}
+                            {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            ${bill.amount}
+                            ${currentPlan?.monthlyPrice}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                              {bill.status}
+                              {subscriptionData.attributes?.status || 'Active'}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -421,10 +572,79 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
                             </button>
                           </td>
                         </tr>
-                      ))}
+                      ) : userPlan !== 'free' ? (
+                        billingHistory.map((bill, index) => (
+                          <tr key={index}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {new Date(bill.date).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {bill.plan}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              ${bill.amount}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                {bill.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <button className="text-purple-600 hover:text-purple-700 flex items-center space-x-1">
+                                <ExternalLink className="w-3 h-3" />
+                                <span>View</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                            No billing history available for free plan
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
+
+                {userPlan !== 'free' && subscriptionData && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-6">
+                    <h4 className="font-medium text-gray-900 mb-4">Subscription Details</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Subscription ID</span>
+                        <span className="text-gray-900">{subscriptionData.id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Status</span>
+                        <span className="text-gray-900">{subscriptionData.attributes?.status || 'Active'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Next Renewal</span>
+                        <span className="text-gray-900">{getNextBillingDate()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Payment Method</span>
+                        <span className="text-gray-900 flex items-center">
+                          <CreditCard className="w-4 h-4 mr-1" />
+                          •••• 4242
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {subscriptionData.attributes?.status === 'active' && (
+                      <div className="mt-6 pt-6 border-t border-gray-200">
+                        <button
+                          onClick={() => handlePlanUpgrade('free')}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                        >
+                          Cancel Subscription
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

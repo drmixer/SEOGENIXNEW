@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
@@ -14,8 +14,62 @@ import Status from './components/pages/Status';
 import PrivacyPolicy from './components/pages/PrivacyPolicy';
 import TermsOfService from './components/pages/TermsOfService';
 import CookiePolicy from './components/pages/CookiePolicy';
+import { useToast } from './hooks/useToast';
+
+// Router wrapper to access location and navigate
+function AppWithRouter() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { addToast } = useToast();
+  
+  // Check for checkout success or cancel in URL params
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const checkoutSuccess = searchParams.get('checkout_success');
+    const checkoutCancelled = searchParams.get('checkout_cancelled');
+    const plan = searchParams.get('plan');
+    
+    if (checkoutSuccess === 'true' && plan) {
+      // Show success toast
+      addToast({
+        id: `checkout-success-${Date.now()}`,
+        type: 'success',
+        title: 'Subscription Activated',
+        message: `Your ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan has been activated successfully.`,
+        duration: 5000,
+        onClose: () => {}
+      });
+      
+      // Remove query params
+      navigate('/dashboard', { replace: true });
+    } else if (checkoutCancelled === 'true') {
+      // Show cancelled toast
+      addToast({
+        id: `checkout-cancelled-${Date.now()}`,
+        type: 'info',
+        title: 'Checkout Cancelled',
+        message: 'Your subscription checkout was cancelled. You can try again anytime.',
+        duration: 5000,
+        onClose: () => {}
+      });
+      
+      // Remove query params
+      navigate('/', { replace: true });
+    }
+  }, [location, navigate, addToast]);
+  
+  return <AppContent />;
+}
 
 function App() {
+  return (
+    <Router>
+      <AppWithRouter />
+    </Router>
+  );
+}
+
+function AppContent() {
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'pricing'>('landing');
   const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [user, setUser] = useState<any>(null);
@@ -27,6 +81,7 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const { toasts, addToast, removeToast } = useToast();
   
   // Use refs to prevent race conditions and duplicate initializations
   const authInitializedRef = useRef(false);
@@ -228,12 +283,41 @@ function App() {
     setCurrentView('pricing');
   };
 
-  const handlePlanSelect = (plan: 'free' | 'core' | 'pro' | 'agency') => {
+  const handlePlanSelect = async (plan: 'free' | 'core' | 'pro' | 'agency') => {
     setSelectedPlan(plan);
     if (user) {
-      // User is logged in, start onboarding
-      setUserPlan(plan);
-      setShowOnboarding(true);
+      if (plan === 'free') {
+        // User is logged in and selected free plan
+        setUserPlan(plan);
+        setShowOnboarding(true);
+      } else {
+        // For paid plans, redirect to LemonSqueezy checkout
+        try {
+          const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(plan, user);
+          if (checkoutUrl) {
+            window.location.href = checkoutUrl;
+          } else {
+            addToast({
+              id: `checkout-error-${Date.now()}`,
+              type: 'error',
+              title: 'Checkout Error',
+              message: 'Failed to create checkout. Please try again.',
+              duration: 5000,
+              onClose: () => {}
+            });
+          }
+        } catch (err) {
+          console.error('Error creating checkout:', err);
+          addToast({
+            id: `checkout-error-${Date.now()}`,
+            type: 'error',
+            title: 'Checkout Error',
+            message: 'An error occurred while setting up the checkout process.',
+            duration: 5000,
+            onClose: () => {}
+          });
+        }
+      }
     } else {
       // User not logged in, show signup first
       setAuthModalMode('signup');
@@ -452,60 +536,61 @@ function App() {
   }
 
   return (
-    <Router>
-      <WhiteLabelProvider user={user}>
-        <div className="min-h-screen bg-white">
-          <Routes>
-            <Route path="/" element={
-              currentView === 'landing' || currentView === 'pricing' ? (
-                <LandingPage 
-                  onNavigateToDashboard={handleNavigateToDashboard}
-                  onPlanSelect={handlePlanSelect}
-                  user={user}
-                  onShowSignup={handleShowSignup}
-                  onShowLogin={handleShowLogin}
-                  onSignOut={handleSignOut}
-                  initialView={currentView}
-                  onNavigateToLanding={() => setCurrentView('landing')}
-                />
-              ) : (
-                <Dashboard 
-                  userPlan={userPlan}
-                  onNavigateToLanding={() => setCurrentView('landing')}
-                  user={user}
-                  onSignOut={handleSignOut}
-                />
-              )
-            } />
-            <Route path="/integrations" element={<Integrations />} />
-            <Route path="/help-center" element={<HelpCenter />} />
-            <Route path="/documentation" element={<Documentation />} />
-            <Route path="/contact-us" element={<ContactUs />} />
-            <Route path="/status" element={<Status />} />
-            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-            <Route path="/terms-of-service" element={<TermsOfService />} />
-            <Route path="/cookie-policy" element={<CookiePolicy />} />
-          </Routes>
+    <WhiteLabelProvider user={user}>
+      <div className="min-h-screen bg-white">
+        <Routes>
+          <Route path="/" element={
+            currentView === 'landing' || currentView === 'pricing' ? (
+              <LandingPage 
+                onNavigateToDashboard={handleNavigateToDashboard}
+                onPlanSelect={handlePlanSelect}
+                user={user}
+                onShowSignup={handleShowSignup}
+                onShowLogin={handleShowLogin}
+                onSignOut={handleSignOut}
+                initialView={currentView}
+                onNavigateToLanding={() => setCurrentView('landing')}
+              />
+            ) : (
+              <Dashboard 
+                userPlan={userPlan}
+                onNavigateToLanding={() => setCurrentView('landing')}
+                user={user}
+                onSignOut={handleSignOut}
+              />
+            )
+          } />
+          <Route path="/integrations" element={<Integrations />} />
+          <Route path="/help-center" element={<HelpCenter />} />
+          <Route path="/documentation" element={<Documentation />} />
+          <Route path="/contact-us" element={<ContactUs />} />
+          <Route path="/status" element={<Status />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms-of-service" element={<TermsOfService />} />
+          <Route path="/cookie-policy" element={<CookiePolicy />} />
+        </Routes>
 
-          {showAuthModal && (
-            <AuthModal
-              onClose={() => setShowAuthModal(false)}
-              onSuccess={handleAuthSuccess}
-              initialMode={authModalMode}
-              selectedPlan={selectedPlan}
-            />
-          )}
+        {showAuthModal && (
+          <AuthModal
+            onClose={() => setShowAuthModal(false)}
+            onSuccess={handleAuthSuccess}
+            initialMode={authModalMode}
+            selectedPlan={selectedPlan}
+          />
+        )}
 
-          {showOnboarding && user && (
-            <OnboardingModal
-              userPlan={userPlan}
-              onComplete={handleOnboardingComplete}
-              onClose={() => setShowOnboarding(false)}
-            />
-          )}
-        </div>
-      </WhiteLabelProvider>
-    </Router>
+        {showOnboarding && user && (
+          <OnboardingModal
+            userPlan={userPlan}
+            onComplete={handleOnboardingComplete}
+            onClose={() => setShowOnboarding(false)}
+          />
+        )}
+        
+        {/* Toast Notifications */}
+        <ToastContainer toasts={toasts} onRemoveToast={removeToast} />
+      </div>
+    </WhiteLabelProvider>
   );
 }
 

@@ -14,9 +14,9 @@ import DashboardWalkthrough from './DashboardWalkthrough';
 import SiteSelector from './SiteSelector';
 import SettingsModal from './SettingsModal';
 import BillingModal from './BillingModal';
-import ToastContainer from './ToastContainer';
 import FeedbackModal from './FeedbackModal';
 import GoalTracker from './GoalTracker';
+import ToastContainer from './ToastContainer';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../hooks/useToast';
@@ -627,6 +627,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     setShowWalkthrough(true);
   };
 
+  // Open feedback modal
+  const handleOpenFeedback = () => {
+    setShowFeedback(true);
+  };
+
   // Enable chatbot for all users during development
   const isDevelopment = true; // Set to false for production
   const canAccessChatbot = isDevelopment || userPlan !== 'free';
@@ -646,11 +651,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     
     // Reload the page
     window.location.reload();
-  };
-
-  // Open feedback modal
-  const handleOpenFeedback = () => {
-    setShowFeedback(true);
   };
 
   // Don't render dashboard until we have user data
@@ -1056,6 +1056,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
               onClose: () => {}
             });
           }}
+          user={user}
         />
       )}
 

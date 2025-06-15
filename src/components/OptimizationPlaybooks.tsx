@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Target, TrendingUp, Users, Zap, CheckCircle, ArrowRight, Clock, Star, RefreshCw, AlertTriangle, Brain, FileText, Lightbulb, MessageSquare, Mic } from 'lucide-react';
+import { BookOpen, Target, TrendingUp, Users, Zap, CheckCircle, ArrowRight, Clock, Star, RefreshCw, AlertTriangle, Brain, FileText, Lightbulb } from 'lucide-react';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
+
+interface OptimizationPlaybooksProps {
+  userPlan: 'free' | 'core' | 'pro' | 'agency';
+  onSectionChange: (section: string) => void;
+  userGoals?: string[];
+  userProfile?: any;
+}
 
 interface PlaybookStep {
   id: string;
@@ -28,14 +35,7 @@ interface Playbook {
   benefits: string[];
   recommendedFor?: string[];
   matchScore?: number;
-  goalAlignment?: string[];
-}
-
-interface OptimizationPlaybooksProps {
-  userPlan: 'free' | 'core' | 'pro' | 'agency';
-  onSectionChange: (section: string) => void;
-  userGoals?: string[];
-  userProfile?: any;
+  relatedGoals?: string[];
 }
 
 const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({ 
@@ -92,19 +92,6 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
               setRecommendedPlaybook('voice-search-optimization');
             }
           }
-          
-          // Alternatively, recommend based on user goals
-          else if (userGoals.length > 0) {
-            if (userGoals.includes('increase_citations')) {
-              setRecommendedPlaybook('content-optimization-mastery');
-            } else if (userGoals.includes('voice_search')) {
-              setRecommendedPlaybook('voice-search-optimization');
-            } else if (userGoals.includes('competitive_edge')) {
-              setRecommendedPlaybook('competitive-intelligence');
-            } else {
-              setRecommendedPlaybook('ai-visibility-foundation');
-            }
-          }
         }
       } catch (error) {
         console.error('Error loading user data:', error);
@@ -115,6 +102,28 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
     
     loadUserData();
     loadPlaybooks();
+  }, []);
+
+  // Update playbook recommendations when user goals change
+  useEffect(() => {
+    if (userGoals && userGoals.length > 0) {
+      // Map goals to recommended playbooks
+      const goalPlaybookMap: Record<string, string> = {
+        'increase_citations': 'content-optimization-mastery',
+        'improve_understanding': 'ai-visibility-foundation',
+        'voice_search': 'voice-search-optimization',
+        'competitive_edge': 'competitive-intelligence',
+        'content_structure': 'ai-visibility-foundation'
+      };
+      
+      // Find the first matching goal
+      for (const goal of userGoals) {
+        if (goalPlaybookMap[goal]) {
+          setRecommendedPlaybook(goalPlaybookMap[goal]);
+          break;
+        }
+      }
+    }
   }, [userGoals]);
 
   const loadPlaybooks = () => {
@@ -129,7 +138,7 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
         category: 'Getting Started',
         icon: Target,
         color: 'from-blue-500 to-blue-600',
-        goalAlignment: ['improve_understanding', 'content_structure'],
+        relatedGoals: ['improve_understanding', 'content_structure'],
         steps: [
           {
             id: 'foundation-1',
@@ -202,7 +211,7 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
         category: 'Content Strategy',
         icon: Zap,
         color: 'from-yellow-500 to-yellow-600',
-        goalAlignment: ['increase_citations', 'improve_understanding'],
+        relatedGoals: ['increase_citations', 'improve_understanding'],
         steps: [
           {
             id: 'content-1',
@@ -275,7 +284,7 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
         category: 'Competitive Strategy',
         icon: Users,
         color: 'from-purple-500 to-purple-600',
-        goalAlignment: ['competitive_edge'],
+        relatedGoals: ['competitive_edge'],
         steps: [
           {
             id: 'competitive-1',
@@ -346,9 +355,9 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
         difficulty: 'intermediate',
         estimatedTime: '2-3 hours',
         category: 'Voice & Conversational',
-        icon: Mic,
+        icon: TrendingUp,
         color: 'from-green-500 to-green-600',
-        goalAlignment: ['voice_search', 'conversational_readiness'],
+        relatedGoals: ['voice_search', 'conversational_readiness'],
         steps: [
           {
             id: 'voice-1',
@@ -410,90 +419,8 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
           'Content publishers wanting voice assistant citations'
         ],
         matchScore: 80
-      },
-      {
-        id: 'citation-boost',
-        title: 'Citation Boost Strategy',
-        description: 'Dramatically increase how often AI systems cite your content',
-        goal: 'Double your citation rate and become a preferred source for AI systems',
-        difficulty: 'intermediate',
-        estimatedTime: '3-4 hours',
-        category: 'Citation Optimization',
-        icon: MessageSquare,
-        color: 'from-indigo-500 to-indigo-600',
-        goalAlignment: ['increase_citations'],
-        steps: [
-          {
-            id: 'citation-1',
-            title: 'Analyze Current Citations',
-            description: 'Understand your current citation patterns and opportunities',
-            action: 'Set up citation tracking and analyze existing mentions',
-            toolId: 'citations',
-            estimatedTime: '30 minutes',
-            priority: 1
-          },
-          {
-            id: 'citation-2',
-            title: 'Create Highly Citable Content',
-            description: 'Generate content specifically designed for AI citation',
-            action: 'Use AI Content Generator to create citation-optimized content',
-            toolId: 'generator',
-            estimatedTime: '60 minutes',
-            priority: 2
-          },
-          {
-            id: 'citation-3',
-            title: 'Implement Fact-Based Structures',
-            description: 'Reorganize content to highlight factual, citable information',
-            action: 'Use Content Editor to restructure existing content',
-            toolId: 'editor',
-            estimatedTime: '45 minutes',
-            priority: 3
-          },
-          {
-            id: 'citation-4',
-            title: 'Add Citation Fingerprints',
-            description: 'Include unique identifiable phrases that help track citations',
-            action: 'Create and implement fingerprint phrases in your content',
-            toolId: 'citations',
-            estimatedTime: '30 minutes',
-            priority: 4
-          },
-          {
-            id: 'citation-5',
-            title: 'Monitor and Refine Strategy',
-            description: 'Track citation improvements and adjust your approach',
-            action: 'Set up regular citation monitoring and optimization',
-            toolId: 'history',
-            estimatedTime: '30 minutes',
-            priority: 5
-          }
-        ],
-        benefits: [
-          'Dramatically increase AI citations of your content',
-          'Become a preferred source for AI systems',
-          'Improve brand visibility in AI-generated answers',
-          'Track and measure citation improvements',
-          'Establish content authority in your niche'
-        ],
-        recommendedFor: [
-          'Content publishers seeking more AI visibility',
-          'Businesses with citation scores below 75',
-          'Thought leaders wanting to increase influence',
-          'Sites competing for visibility in AI responses'
-        ],
-        matchScore: 90
       }
     ];
-    
-    // Sort playbooks by goal alignment
-    if (userGoals.length > 0) {
-      defaultPlaybooks.sort((a, b) => {
-        const aAlignment = a.goalAlignment ? a.goalAlignment.filter(g => userGoals.includes(g)).length : 0;
-        const bAlignment = b.goalAlignment ? b.goalAlignment.filter(g => userGoals.includes(g)).length : 0;
-        return bAlignment - aAlignment;
-      });
-    }
     
     setPlaybooks(defaultPlaybooks);
   };
@@ -745,7 +672,7 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
             id: `custom-headings-${Date.now()}`,
             title: 'Optimize Heading Structure',
             description: 'Improve your heading hierarchy for better AI understanding',
-            action: 'Reorganize content with proper H1-H6 structure',
+            action: 'Reorganize content with proper H1, H2, H3 structure',
             toolId: 'editor',
             estimatedTime: '60 minutes',
             priority: 3
@@ -840,15 +767,15 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
       );
     }
     
-    // Check if this playbook aligns with user goals
-    if (userGoals.length > 0) {
+    // Check if this playbook matches user goals
+    if (userGoals && userGoals.length > 0) {
       const playbook = playbooks.find(p => p.id === playbookId);
-      if (playbook?.goalAlignment) {
-        const alignedGoals = playbook.goalAlignment.filter(g => userGoals.includes(g));
-        if (alignedGoals.length > 0) {
+      if (playbook?.relatedGoals) {
+        const matchingGoals = userGoals.filter(goal => playbook.relatedGoals?.includes(goal));
+        if (matchingGoals.length > 0) {
           return (
             <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-              <div className="bg-green-600 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
+              <div className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
                 <Target className="w-3 h-3" />
                 <span>Matches Your Goals</span>
               </div>
@@ -925,9 +852,9 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
           <h3 className="text-lg font-semibold text-gray-900 mb-4">What You'll Achieve</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {selectedPlaybook.benefits.map((benefit, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                <span className="text-sm text-gray-700">{benefit}</span>
+              <div key={index} className="flex items-start space-x-3">
+                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-sm text-gray-600">{benefit}</span>
               </div>
             ))}
           </div>
@@ -1031,51 +958,6 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
         </div>
       </div>
 
-      {/* Goal-based recommendations */}
-      {userGoals.length > 0 && (
-        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 border border-purple-200">
-          <h3 className="font-semibold text-gray-900 mb-3">Recommended Based on Your Goals</h3>
-          <p className="text-gray-700 mb-4">
-            We've identified these playbooks to help you achieve your AI visibility goals.
-          </p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {playbooks
-              .filter(p => 
-                canUsePlaybook(p.id, userPlan) && 
-                p.goalAlignment && 
-                p.goalAlignment.some(g => userGoals.includes(g))
-              )
-              .slice(0, 3)
-              .map(playbook => {
-                const IconComponent = playbook.icon;
-                return (
-                  <div
-                    key={playbook.id}
-                    onClick={() => setSelectedPlaybook(playbook)}
-                    className="bg-white rounded-lg shadow-sm border border-purple-100 hover:border-purple-300 hover:shadow-md transition-all p-4 cursor-pointer"
-                  >
-                    <div className="flex items-center space-x-3 mb-2">
-                      <div className={`p-2 rounded-lg bg-gradient-to-r ${playbook.color}`}>
-                        <IconComponent className="w-4 h-4 text-white" />
-                      </div>
-                      <h4 className="font-medium text-gray-900">{playbook.title}</h4>
-                    </div>
-                    <p className="text-xs text-gray-600 mb-2">{playbook.description}</p>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-purple-600">Start Playbook</span>
-                      <span className={`px-2 py-0.5 rounded-full ${getDifficultyColor(playbook.difficulty)}`}>
-                        {playbook.difficulty}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            }
-          </div>
-        </div>
-      )}
-
       {/* Custom Playbook Form */}
       {showCustomPlaybookForm && (
         <div className="bg-white rounded-xl shadow-sm p-6 border border-purple-200">
@@ -1163,10 +1045,15 @@ const OptimizationPlaybooks: React.FC<OptimizationPlaybooksProps> = ({
             const IconComponent = playbook.icon;
             const progress = getPlaybookProgress(playbook);
             
+            // Check if this playbook matches user goals
+            const matchesUserGoals = userGoals.some(goal => playbook.relatedGoals?.includes(goal));
+            
             return (
               <div 
                 key={playbook.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 hover:border-purple-300 hover:shadow-lg transition-all duration-300 cursor-pointer relative"
+                className={`bg-white rounded-xl shadow-sm border border-gray-100 hover:border-purple-300 hover:shadow-lg transition-all duration-300 cursor-pointer relative ${
+                  matchesUserGoals ? 'border-green-200 bg-green-50' : ''
+                }`}
                 onClick={() => setSelectedPlaybook(playbook)}
               >
                 {getRecommendationBadge(playbook.id)}
@@ -1259,7 +1146,7 @@ const canUsePlaybook = (playbookId: string, userPlan: string): boolean => {
   if (userPlan === 'free') {
     return playbookId === 'ai-visibility-foundation';
   } else if (userPlan === 'core') {
-    return ['ai-visibility-foundation', 'voice-search-optimization', 'citation-boost'].includes(playbookId) || playbookId.startsWith('custom-');
+    return ['ai-visibility-foundation', 'voice-search-optimization'].includes(playbookId) || playbookId.startsWith('custom-');
   } else {
     return true; // Pro and Agency get all playbooks
   }

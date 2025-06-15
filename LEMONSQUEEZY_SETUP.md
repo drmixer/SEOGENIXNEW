@@ -1,0 +1,1 @@
+# LemonSqueezy Integration Setup Instructions
