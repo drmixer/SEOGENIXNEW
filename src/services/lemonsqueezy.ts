@@ -1,4 +1,4 @@
-import { createLemonSqueezy } from '@lemonsqueezy/lemonsqueezy.js';
+import createLemonSqueezy from '@lemonsqueezy/lemonsqueezy.js';
 import { supabase } from '../lib/supabase';
 
 // Initialize LemonSqueezy with your API key
