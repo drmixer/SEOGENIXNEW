@@ -42,12 +42,20 @@ app.get('/', async (c) => {
       return c.json({ error: 'Missing authorization header' }, 401);
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    // Initialize Supabase client using environment variables that are automatically available
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://your-project.supabase.co';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY');
     
     if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Supabase configuration missing');
+      console.error('Supabase environment variables:', {
+        url: !!supabaseUrl,
+        key: !!supabaseServiceKey,
+        availableEnvVars: Object.keys(Deno.env.toObject())
+      });
+      return c.json({ 
+        error: 'Supabase configuration missing',
+        details: 'Environment variables not properly configured'
+      }, 500);
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
