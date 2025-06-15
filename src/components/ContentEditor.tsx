@@ -58,89 +58,18 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
       // Generate real-time suggestions
       const keywords = targetKeywords.split(',').map(k => k.trim()).filter(k => k);
       
-      // Simulate real-time analysis
-      const suggestions: RealTimeSuggestion[] = [];
+      // Call the real-time analysis API
+      const result = await apiService.analyzeContentRealTime(content, keywords);
+      setRealTimeSuggestions(result.suggestions || []);
       
-      // Check for passive voice
-      const passivePattern = /\b(is|are|was|were|be|been|being)\s+\w+ed\b/gi;
-      let match;
-      while ((match = passivePattern.exec(content)) !== null) {
-        suggestions.push({
-          type: 'ai_clarity',
-          severity: 'warning',
-          message: 'Passive voice detected',
-          suggestion: 'Use active voice for better AI understanding',
-          position: { start: match.index, end: match.index + match[0].length },
-          replacement: 'Use active voice instead'
-        });
-      }
-      
-      // Check for long sentences
-      const sentences = content.split(/[.!?]+/).filter(s => s.trim());
-      sentences.forEach(sentence => {
-        if (sentence.trim().split(/\s+/).length > 25) {
-          const start = content.indexOf(sentence);
-          if (start !== -1) {
-            suggestions.push({
-              type: 'structure',
-              severity: 'suggestion',
-              message: 'Long sentence detected',
-              suggestion: 'Break into shorter sentences for better AI comprehension',
-              position: { start, end: start + sentence.length }
-            });
-          }
-        }
-      });
-      
-      // Check keyword density
-      keywords.forEach(keyword => {
-        if (keyword) {
-          const regex = new RegExp(keyword, 'gi');
-          const matches = content.match(regex) || [];
-          const words = content.split(/\s+/).length;
-          const density = words > 0 ? (matches.length / words) * 100 : 0;
-          
-          if (density > 3) {
-            suggestions.push({
-              type: 'keyword',
-              severity: 'warning',
-              message: `Keyword "${keyword}" appears too frequently (${density.toFixed(1)}%)`,
-              suggestion: 'Reduce keyword density to avoid appearing spammy to AI systems',
-              position: { start: 0, end: 0 }
-            });
-          } else if (density < 0.5 && content.length > 200) {
-            suggestions.push({
-              type: 'keyword',
-              severity: 'suggestion',
-              message: `Consider using "${keyword}" more frequently`,
-              suggestion: 'Increase keyword presence for better topic relevance',
-              position: { start: 0, end: 0 }
-            });
-          }
-        }
-      });
-      
-      // Check for missing question words for voice search
-      if (!content.match(/\b(who|what|when|where|why|how)\b/i) && content.length > 200) {
-        suggestions.push({
-          type: 'entity',
-          severity: 'suggestion',
-          message: 'Missing question words for voice search',
-          suggestion: 'Include "who, what, when, where, why, how" to match voice queries',
-          position: { start: 0, end: 0 }
-        });
-      }
-      
-      setRealTimeSuggestions(suggestions);
-
       // Simulate real-time analysis using the audit API
-      const result = await apiService.runAudit('https://example.com', content);
+      const auditResult = await apiService.runAudit('https://example.com', content);
       
       // Convert audit result to content analysis format
       const contentAnalysis: ContentAnalysis = {
-        overallScore: result.overallScore,
-        subscores: result.subscores,
-        suggestions: result.recommendations.slice(0, 5),
+        overallScore: auditResult.overallScore,
+        subscores: auditResult.subscores,
+        suggestions: auditResult.recommendations.slice(0, 5),
         keywordDensity: calculateKeywordDensity(content, targetKeywords),
         readabilityScore: calculateReadabilityScore(content)
       };

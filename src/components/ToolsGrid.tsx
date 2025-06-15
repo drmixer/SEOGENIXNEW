@@ -54,6 +54,12 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [toolData, setToolData] = useState<any>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
+  
+  // Generator tool specific state
+  const [generatorContentType, setGeneratorContentType] = useState<'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions'>('faq');
+  const [generatorTopic, setGeneratorTopic] = useState('');
+  const [generatorKeywords, setGeneratorKeywords] = useState('');
+  const [generatorTone, setGeneratorTone] = useState<'professional' | 'casual' | 'technical' | 'friendly'>('professional');
 
   // Update active tool when selectedTool changes
   useEffect(() => {
@@ -183,7 +189,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   };
 
   const handleRunTool = async (toolId: string) => {
-    if (!selectedWebsite) {
+    if (!selectedWebsite && toolId !== 'generator') {
       setError('Please select a website first');
       return;
     }
@@ -223,12 +229,25 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           );
           break;
         case 'generator':
+          // Parse keywords from comma-separated string
+          const keywords = generatorKeywords.split(',').map(k => k.trim()).filter(k => k);
+          
+          if (!generatorTopic || keywords.length === 0) {
+            throw new Error('Please provide a topic and at least one keyword');
+          }
+          
           result = await apiService.generateAIContent(
-            'faq',
-            'AI Visibility',
-            ['AI', 'SEO'],
-            selectedWebsite
+            generatorContentType,
+            generatorTopic,
+            keywords,
+            generatorTone,
+            userProfile?.industry,
+            undefined,
+            'medium'
           );
+          break;
+        case 'optimizer':
+          // Content optimizer is handled in ContentEditor component
           break;
         case 'competitive':
           const competitors = userProfile?.competitors?.map((c: any) => c.url) || [];
@@ -280,7 +299,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
     } catch (error) {
       console.error(`Error running ${toolId}:`, error);
-      setError(`Failed to run ${toolId}. Please try again.`);
+      setError(`Failed to run ${toolId}. Please try again. ${error instanceof Error ? error.message : ''}`);
       
       // Notify parent of failure
       if (onToolComplete) {
@@ -391,10 +410,75 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             </div>
           )}
 
+          {/* Generator Tool Form */}
+          {activeToolId === 'generator' && (
+            <div className="mb-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Content Type
+                  </label>
+                  <select
+                    value={generatorContentType}
+                    onChange={(e) => setGeneratorContentType(e.target.value as any)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="faq">FAQ Content</option>
+                    <option value="meta-tags">Meta Tags</option>
+                    <option value="snippets">Featured Snippets</option>
+                    <option value="headings">Heading Structure</option>
+                    <option value="descriptions">Descriptions</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tone
+                  </label>
+                  <select
+                    value={generatorTone}
+                    onChange={(e) => setGeneratorTone(e.target.value as any)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="professional">Professional</option>
+                    <option value="casual">Casual</option>
+                    <option value="technical">Technical</option>
+                    <option value="friendly">Friendly</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Topic
+                </label>
+                <input
+                  type="text"
+                  value={generatorTopic}
+                  onChange={(e) => setGeneratorTopic(e.target.value)}
+                  placeholder="e.g., AI Visibility, Content Optimization, Voice Search"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Target Keywords (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={generatorKeywords}
+                  onChange={(e) => setGeneratorKeywords(e.target.value)}
+                  placeholder="e.g., AI, SEO, optimization, visibility"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+          )}
+
           <div className="mb-6">
             <button
               onClick={() => handleRunTool(activeToolId)}
-              disabled={loading || !selectedWebsite}
+              disabled={loading || (!selectedWebsite && activeToolId !== 'generator') || (activeToolId === 'generator' && (!generatorTopic || !generatorKeywords))}
               className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
             >
               {loading && runningTool === activeToolId ? (
@@ -480,40 +564,63 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
               {activeToolId === 'generator' && (
                 <div className="space-y-4">
                   <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-2">Generated Content</h4>
-                    <div className="space-y-3">
-                      {toolData.content && toolData.content.map((item: any, i: number) => (
-                        <div key={i} className="border-l-4 border-yellow-400 pl-4">
-                          <h5 className="font-medium text-gray-900">{item.title || item.question}</h5>
-                          <p className="text-gray-700 mt-1">{item.content || item.answer}</p>
-                          {item.keywords && (
-                            <div className="mt-2">
-                              <span className="text-xs text-gray-500">Keywords: </span>
-                              {item.keywords.map((keyword: string, ki: number) => (
-                                <span key={ki} className="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full mr-1">
-                                  {keyword}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                    <h4 className="font-medium mb-4">Generated {generatorContentType.replace('-', ' ')} Content</h4>
+                    
+                    {generatorContentType === 'faq' && toolData.generatedContent?.faqs && (
+                      <div className="space-y-4">
+                        {toolData.generatedContent.faqs.map((faq: any, i: number) => (
+                          <div key={i} className="border-l-4 border-yellow-400 pl-4 py-1">
+                            <h5 className="font-medium text-gray-900">{faq.question}</h5>
+                            <p className="text-gray-700 mt-1">{faq.answer}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {generatorContentType === 'meta-tags' && toolData.generatedContent?.metaTags && (
+                      <div className="space-y-3">
+                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                          <div className="font-medium text-sm text-gray-500">Title Tag</div>
+                          <div className="text-gray-800">{toolData.generatedContent.metaTags.title}</div>
                         </div>
-                      ))}
-                    </div>
+                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                          <div className="font-medium text-sm text-gray-500">Meta Description</div>
+                          <div className="text-gray-800">{toolData.generatedContent.metaTags.description}</div>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                          <div className="font-medium text-sm text-gray-500">Keywords</div>
+                          <div className="text-gray-800">{toolData.generatedContent.metaTags.keywords}</div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {(generatorContentType === 'snippets' || generatorContentType === 'headings' || generatorContentType === 'descriptions') && (
+                      <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-wrap">
+                        {toolData.generatedContent.raw}
+                      </div>
+                    )}
                   </div>
                   
-                  {toolData.suggestions && (
-                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                      <h4 className="font-medium mb-2">Implementation Suggestions</h4>
-                      <ul className="space-y-2">
-                        {toolData.suggestions.map((suggestion: string, i: number) => (
-                          <li key={i} className="flex items-start">
-                            <span className="text-yellow-600 mr-2">•</span>
-                            <span className="text-gray-700">{suggestion}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-2">Optimization Tips</h4>
+                    <ul className="space-y-2">
+                      {toolData.optimizationTips?.map((tip: string, i: number) => (
+                        <li key={i} className="flex items-start">
+                          <span className="text-yellow-600 mr-2">•</span>
+                          <span className="text-gray-700">{tip}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => navigator.clipboard.writeText(toolData.generatedContent.raw)}
+                      className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+                    >
+                      Copy Generated Content
+                    </button>
+                  </div>
                 </div>
               )}
               
@@ -557,7 +664,9 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           ) : (
             <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
               <p className="text-gray-600 text-center">
-                Click the button above to run this tool on {selectedWebsite || 'your selected website'}.
+                {activeToolId === 'generator' ? 
+                  'Configure the options above and click the button to generate content.' : 
+                  `Click the button above to run this tool on ${selectedWebsite || 'your selected website'}.`}
               </p>
             </div>
           )}
