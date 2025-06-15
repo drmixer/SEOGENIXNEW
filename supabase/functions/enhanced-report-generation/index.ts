@@ -5,7 +5,7 @@ interface EnhancedReportRequest {
   reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive' | 'roi_focused';
   reportData: any;
   reportName: string;
-  format: 'pdf' | 'csv' | 'json';
+  format: 'html' | 'csv' | 'json' | 'pdf';
   template?: any;
   config?: any;
 }
@@ -120,7 +120,7 @@ Deno.serve(async (req: Request) => {
       contentType = 'text/csv';
       fileExtension = 'csv';
       reportContent = generateEnhancedCSVReport(reportType, reportData, config);
-    } else if (format === 'pdf') {
+    } else if (format === 'html') {
       // Use text/html content type so browser can render it properly
       contentType = 'text/html';
       fileExtension = 'html';
@@ -188,11 +188,15 @@ Deno.serve(async (req: Request) => {
       console.error('Error saving report metadata:', dbError);
     }
 
+    // Generate the viewer URL for the report
+    const viewerUrl = `${supabaseUrl}/functions/v1/report-viewer?reportId=${reportRecord?.id}&format=${format}`;
+
     return new Response(
       JSON.stringify({
         success: true,
         fileName,
         downloadUrl,
+        viewerUrl,
         reportType,
         format,
         template: template?.name,
@@ -472,6 +476,45 @@ function generateEnhancedPDFReport(
         }
         li {
           margin-bottom: 0.5em;
+        }
+        
+        /* Print-specific styles */
+        @media print {
+          body {
+            padding: 0;
+            font-size: 12pt;
+          }
+          
+          .header {
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          
+          .chart-placeholder {
+            height: 200px;
+            page-break-inside: avoid;
+          }
+          
+          .roi-section, .competitive-section, .recommendations {
+            page-break-inside: avoid;
+          }
+          
+          table {
+            page-break-inside: auto;
+          }
+          
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+          }
+          
+          thead {
+            display: table-header-group;
+          }
+          
+          tfoot {
+            display: table-footer-group;
+          }
         }
       </style>
     </head>

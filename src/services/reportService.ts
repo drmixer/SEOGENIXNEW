@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 
 export interface ReportOptions {
-  format?: 'html' | 'csv' | 'json';
+  format?: 'html' | 'csv' | 'json' | 'pdf';
   includeRecommendations?: boolean;
   includeCharts?: boolean;
   includeHistory?: boolean;
@@ -43,8 +43,8 @@ export const reportService = {
         throw new Error('Authentication required');
       }
 
-      // Call the generate-report function
-      const response = await fetch(`${API_URL}/generate-report`, {
+      // Call the enhanced-report-generation function
+      const response = await fetch(`${API_URL}/enhanced-report-generation`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -82,7 +82,7 @@ export const reportService = {
   /**
    * View a report in the browser (HTML) or download it
    */
-  async viewReport(reportId: string, format: 'html' | 'csv' | 'json' = 'html', download: boolean = false): Promise<string> {
+  async viewReport(reportId: string, format: 'html' | 'csv' | 'json' | 'pdf' = 'html', download: boolean = false): Promise<string> {
     try {
       // Get auth token for API calls
       const { data: { session } } = await supabase.auth.getSession();
