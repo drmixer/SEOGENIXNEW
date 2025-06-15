@@ -222,6 +222,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             userProfile?.industry
           );
           break;
+        case 'generator':
+          result = await apiService.generateAIContent(
+            'faq',
+            'AI Visibility',
+            ['AI', 'SEO'],
+            selectedWebsite
+          );
+          break;
         case 'competitive':
           const competitors = userProfile?.competitors?.map((c: any) => c.url) || [];
           result = await apiService.performCompetitiveAnalysis(
@@ -466,6 +474,46 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                   >
                     Copy Implementation Code
                   </button>
+                </div>
+              )}
+              
+              {activeToolId === 'generator' && (
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <h4 className="font-medium mb-2">Generated Content</h4>
+                    <div className="space-y-3">
+                      {toolData.content && toolData.content.map((item: any, i: number) => (
+                        <div key={i} className="border-l-4 border-yellow-400 pl-4">
+                          <h5 className="font-medium text-gray-900">{item.title || item.question}</h5>
+                          <p className="text-gray-700 mt-1">{item.content || item.answer}</p>
+                          {item.keywords && (
+                            <div className="mt-2">
+                              <span className="text-xs text-gray-500">Keywords: </span>
+                              {item.keywords.map((keyword: string, ki: number) => (
+                                <span key={ki} className="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full mr-1">
+                                  {keyword}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {toolData.suggestions && (
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <h4 className="font-medium mb-2">Implementation Suggestions</h4>
+                      <ul className="space-y-2">
+                        {toolData.suggestions.map((suggestion: string, i: number) => (
+                          <li key={i} className="flex items-start">
+                            <span className="text-yellow-600 mr-2">•</span>
+                            <span className="text-gray-700">{suggestion}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
               
