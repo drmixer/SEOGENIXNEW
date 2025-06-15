@@ -55,11 +55,23 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [toolData, setToolData] = useState<any>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
   
+  // Schema Generator specific state
+  const [schemaType, setSchemaType] = useState<'article' | 'product' | 'organization' | 'person' | 'faq' | 'howto'>('article');
+  
   // Generator tool specific state
   const [generatorContentType, setGeneratorContentType] = useState<'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions'>('faq');
   const [generatorTopic, setGeneratorTopic] = useState('');
   const [generatorKeywords, setGeneratorKeywords] = useState('');
   const [generatorTone, setGeneratorTone] = useState<'professional' | 'casual' | 'technical' | 'friendly'>('professional');
+
+  // Citation tracker specific state
+  const [citationKeywords, setCitationKeywords] = useState('');
+  const [fingerprintPhrases, setFingerprintPhrases] = useState('');
+
+  // Prompt suggestions specific state
+  const [promptTopic, setPromptTopic] = useState('');
+  const [promptContentType, setPromptContentType] = useState<'article' | 'product' | 'service' | 'faq' | 'guide'>('article');
+  const [promptUserIntent, setPromptUserIntent] = useState<'informational' | 'transactional' | 'navigational' | 'commercial'>('informational');
 
   // Update active tool when selectedTool changes
   useEffect(() => {
@@ -188,6 +200,26 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       setActiveToolId(toolId);
       setToolData(null);
       setError(null);
+      
+      // Set default values for tool-specific inputs
+      if (toolId === 'citations' && selectedWebsite) {
+        const domain = extractDomain(selectedWebsite);
+        setCitationKeywords(`${domain}, AI visibility, SEO`);
+      }
+      
+      if (toolId === 'prompts' && selectedWebsite) {
+        const domain = extractDomain(selectedWebsite);
+        setPromptTopic(domain);
+      }
+    }
+  };
+
+  const extractDomain = (url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.hostname.replace('www.', '');
+    } catch (e) {
+      return url;
     }
   };
 
@@ -209,15 +241,24 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           result = await apiService.runAudit(selectedWebsite);
           break;
         case 'schema':
-          result = await apiService.generateSchema(selectedWebsite, 'article');
+          result = await apiService.generateSchema(selectedWebsite, schemaType);
           break;
         case 'citations':
-          const domain = new URL(selectedWebsite).hostname;
-          result = await apiService.trackCitations(domain, ['AI visibility', 'SEO']);
+          const domain = extractDomain(selectedWebsite);
+          // Parse keywords from comma-separated string
+          const citationKeywordsList = citationKeywords.split(',').map(k => k.trim()).filter(k => k);
+          // Parse fingerprint phrases if any
+          const fingerprintList = fingerprintPhrases.split('\n').map(p => p.trim()).filter(p => p);
+          
+          result = await apiService.trackCitations(
+            domain, 
+            citationKeywordsList.length > 0 ? citationKeywordsList : ['AI visibility', 'SEO'],
+            fingerprintList.length > 0 ? fingerprintList : undefined
+          );
           break;
         case 'voice':
           result = await apiService.testVoiceAssistants(
-            `What is ${new URL(selectedWebsite).hostname}?`, 
+            `What is ${extractDomain(selectedWebsite)}?`, 
             ['siri', 'alexa', 'google']
           );
           break;
@@ -266,9 +307,16 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           );
           break;
         case 'prompts':
+          if (!promptTopic) {
+            setPromptTopic(extractDomain(selectedWebsite));
+          }
+          
           result = await apiService.generatePromptSuggestions(
-            selectedWebsite.split('//')[1].split('/')[0].replace('www.', ''),
-            userProfile?.industry
+            promptTopic || extractDomain(selectedWebsite),
+            userProfile?.industry,
+            undefined,
+            promptContentType,
+            promptUserIntent
           );
           break;
         default:
@@ -416,6 +464,32 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             </div>
           )}
 
+          {/* Schema Generator Tool Form */}
+          {activeToolId === 'schema' && (
+            <div className="mb-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Schema Type
+                </label>
+                <select
+                  value={schemaType}
+                  onChange={(e) => setSchemaType(e.target.value as any)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="article">Article</option>
+                  <option value="product">Product</option>
+                  <option value="organization">Organization</option>
+                  <option value="person">Person</option>
+                  <option value="faq">FAQ Page</option>
+                  <option value="howto">How-To Guide</option>
+                </select>
+                <p className="mt-1 text-sm text-gray-500">
+                  Select the type of schema markup you want to generate
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Generator Tool Form */}
           {activeToolId === 'generator' && (
             <div className="mb-6 space-y-4">
@@ -481,10 +555,106 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             </div>
           )}
 
+          {/* Citation Tracker Tool Form */}
+          {activeToolId === 'citations' && (
+            <div className="mb-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Keywords to Track (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={citationKeywords}
+                  onChange={(e) => setCitationKeywords(e.target.value)}
+                  placeholder="e.g., your brand name, product names, key topics"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  Enter keywords related to your brand and content that you want to track mentions for
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fingerprint Phrases (optional, one per line)
+                </label>
+                <textarea
+                  value={fingerprintPhrases}
+                  onChange={(e) => setFingerprintPhrases(e.target.value)}
+                  placeholder="Enter unique phrases that identify your content"
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  Unique phrases that can be used to detect when your content is being cited
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Prompt Match Suggestions Tool Form */}
+          {activeToolId === 'prompts' && (
+            <div className="mb-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Topic
+                </label>
+                <input
+                  type="text"
+                  value={promptTopic}
+                  onChange={(e) => setPromptTopic(e.target.value)}
+                  placeholder="e.g., your product, service, or topic area"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  The main topic you want to generate AI prompt suggestions for
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Content Type
+                  </label>
+                  <select
+                    value={promptContentType}
+                    onChange={(e) => setPromptContentType(e.target.value as any)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="article">Article</option>
+                    <option value="product">Product</option>
+                    <option value="service">Service</option>
+                    <option value="faq">FAQ</option>
+                    <option value="guide">Guide</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    User Intent
+                  </label>
+                  <select
+                    value={promptUserIntent}
+                    onChange={(e) => setPromptUserIntent(e.target.value as any)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="informational">Informational</option>
+                    <option value="transactional">Transactional</option>
+                    <option value="navigational">Navigational</option>
+                    <option value="commercial">Commercial</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="mb-6">
             <button
               onClick={() => handleRunTool(activeToolId)}
-              disabled={loading || (!selectedWebsite && activeToolId !== 'generator') || (activeToolId === 'generator' && (!generatorTopic || !generatorKeywords))}
+              disabled={loading || 
+                (!selectedWebsite && activeToolId !== 'generator') || 
+                (activeToolId === 'generator' && (!generatorTopic || !generatorKeywords)) ||
+                (activeToolId === 'prompts' && !promptTopic)}
               className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
             >
               {loading && runningTool === activeToolId ? (

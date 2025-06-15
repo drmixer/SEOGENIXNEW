@@ -162,8 +162,8 @@ export const apiService = {
   },
 
   // Citation Tracker
-  async trackCitations(domain: string, keywords: string[]) {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/citation-tracker`, { domain, keywords });
+  async trackCitations(domain: string, keywords: string[], fingerprintPhrases?: string[]) {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/citation-tracker`, { domain, keywords, fingerprintPhrases });
     
     if (pendingApiRequests.has(cacheKey)) {
       console.log('Citation tracker request already in progress, returning existing promise');
@@ -172,7 +172,7 @@ export const apiService = {
     
     const citationsPromise = apiCall(`${API_BASE_URL}/citation-tracker`, {
       method: 'POST',
-      body: JSON.stringify({ domain, keywords })
+      body: JSON.stringify({ domain, keywords, fingerprintPhrases })
     });
     
     pendingApiRequests.set(cacheKey, citationsPromise);
