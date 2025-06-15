@@ -453,33 +453,99 @@ function generateEnhancedPDFReport(
           display: flex;
           justify-content: space-between;
         }
-        .chart-placeholder {
+        
+        /* Chart styles */
+        .chart-container {
           background: white;
           border-radius: 12px;
           padding: 20px;
           margin: 20px 0;
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
           height: 300px;
+          position: relative;
+        }
+        
+        .chart-axis {
+          position: absolute;
+          background: #e5e7eb;
+        }
+        
+        .chart-y-axis {
+          width: 1px;
+          height: 240px;
+          bottom: 30px;
+          left: 50px;
+        }
+        
+        .chart-x-axis {
+          height: 1px;
+          width: calc(100% - 70px);
+          bottom: 30px;
+          left: 50px;
+        }
+        
+        .chart-y-label {
+          position: absolute;
+          font-size: 12px;
+          color: #6b7280;
+        }
+        
+        .chart-x-label {
+          position: absolute;
+          font-size: 12px;
+          color: #6b7280;
+          bottom: 10px;
+          text-align: center;
+          transform: translateX(-50%);
+        }
+        
+        .chart-line {
+          position: absolute;
+          height: 3px;
+          background: linear-gradient(to right, ${primaryColor}, #a78bfa);
+          bottom: 30px;
+          left: 50px;
+          border-radius: 3px;
+        }
+        
+        .chart-point {
+          position: absolute;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: ${primaryColor};
+          transform: translate(-50%, 50%);
+        }
+        
+        .chart-grid-line {
+          position: absolute;
+          left: 50px;
+          right: 20px;
+          height: 1px;
+          background: #f3f4f6;
+        }
+        
+        .chart-legend {
+          position: absolute;
+          right: 20px;
+          top: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        
+        .chart-legend-item {
           display: flex;
           align-items: center;
-          justify-content: center;
+          gap: 8px;
+          font-size: 12px;
           color: #6b7280;
-          border: 1px dashed #d1d5db;
         }
-        h1, h2, h3, h4, h5, h6 {
-          color: #1f2937;
-          margin-top: 1.5em;
-          margin-bottom: 0.5em;
-        }
-        p {
-          margin-bottom: 1em;
-        }
-        ul, ol {
-          margin-bottom: 1em;
-          padding-left: 1.5em;
-        }
-        li {
-          margin-bottom: 0.5em;
+        
+        .chart-legend-color {
+          width: 12px;
+          height: 3px;
+          border-radius: 3px;
         }
         
         /* Print-specific styles */
@@ -494,7 +560,7 @@ function generateEnhancedPDFReport(
             margin-bottom: 30px;
           }
           
-          .chart-placeholder {
+          .chart-container {
             height: 200px;
             page-break-inside: avoid;
           }
@@ -519,6 +585,22 @@ function generateEnhancedPDFReport(
           tfoot {
             display: table-footer-group;
           }
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+          color: #1f2937;
+          margin-top: 1.5em;
+          margin-bottom: 0.5em;
+        }
+        p {
+          margin-bottom: 1em;
+        }
+        ul, ol {
+          margin-bottom: 1em;
+          padding-left: 1.5em;
+        }
+        li {
+          margin-bottom: 0.5em;
         }
       </style>
     </head>
@@ -662,8 +744,57 @@ function generateEnhancedPDFReport(
           </tbody>
         </table>
         
-        <div class="chart-placeholder">
-          <p>Competitive Score Comparison Chart</p>
+        <!-- Competitive Score Comparison Chart -->
+        <div class="chart-container">
+          <!-- Chart axes -->
+          <div class="chart-y-axis"></div>
+          <div class="chart-x-axis"></div>
+          
+          <!-- Y-axis labels -->
+          <div class="chart-y-label" style="left: 20px; bottom: 30px;">0</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 90px;">25</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 150px;">50</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 210px;">75</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 270px;">100</div>
+          
+          <!-- Grid lines -->
+          <div class="chart-grid-line" style="bottom: 90px;"></div>
+          <div class="chart-grid-line" style="bottom: 150px;"></div>
+          <div class="chart-grid-line" style="bottom: 210px;"></div>
+          <div class="chart-grid-line" style="bottom: 270px;"></div>
+          
+          <!-- X-axis labels -->
+          ${['Your Website', ...data.competitiveBenchmarks.competitorScores.map((c: any) => c.name)].map((name, index, arr) => {
+            const position = 50 + (index * (100 - 50) / (arr.length - 1 || 1)) + '%';
+            return `<div class="chart-x-label" style="left: ${position};">${name.length > 10 ? name.substring(0, 10) + '...' : name}</div>`;
+          }).join('')}
+          
+          <!-- Chart points -->
+          ${[data.auditHistory?.[0]?.overall_score || 0, ...data.competitiveBenchmarks.competitorScores.map((c: any) => c.score)].map((score, index, arr) => {
+            const xPosition = 50 + (index * (100 - 50) / (arr.length - 1 || 1)) + '%';
+            const yPosition = 30 + ((100 - score) / 100 * 240) + 'px';
+            const color = index === 0 ? primaryColor : '#64748b';
+            return `<div class="chart-point" style="left: ${xPosition}; bottom: ${yPosition}; background: ${color};"></div>`;
+          }).join('')}
+          
+          <!-- Industry average line -->
+          <div style="position: absolute; left: 50px; right: 20px; height: 1px; border-top: 2px dashed #f59e0b; bottom: ${30 + ((100 - data.competitiveBenchmarks.industryAverage) / 100 * 240)}px;"></div>
+          
+          <!-- Chart legend -->
+          <div class="chart-legend">
+            <div class="chart-legend-item">
+              <div class="chart-legend-color" style="background: ${primaryColor};"></div>
+              <span>Your Website</span>
+            </div>
+            <div class="chart-legend-item">
+              <div class="chart-legend-color" style="background: #64748b;"></div>
+              <span>Competitors</span>
+            </div>
+            <div class="chart-legend-item">
+              <div class="chart-legend-color" style="background: #f59e0b; height: 2px; border-top: 2px dashed #f59e0b;"></div>
+              <span>Industry Avg (${data.competitiveBenchmarks.industryAverage})</span>
+            </div>
+          </div>
         </div>
         
         <div style="margin-top: 20px; background: white; padding: 15px; border-radius: 8px;">
@@ -698,12 +829,56 @@ function generateEnhancedPDFReport(
 
   // Historical Performance (if enabled)
   if (config?.includeHistory && data.auditHistory && data.auditHistory.length > 1) {
+    // Generate chart data
+    const auditData = [...data.auditHistory].reverse().slice(0, 10); // Get last 10 audits in chronological order
+    
     html += `
       <section>
         <h2>Historical Performance</h2>
         
-        <div class="chart-placeholder">
-          <p>Performance Trend Visualization</p>
+        <!-- Performance Trend Chart -->
+        <div class="chart-container">
+          <!-- Chart axes -->
+          <div class="chart-y-axis"></div>
+          <div class="chart-x-axis"></div>
+          
+          <!-- Y-axis labels -->
+          <div class="chart-y-label" style="left: 20px; bottom: 30px;">0</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 90px;">25</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 150px;">50</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 210px;">75</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 270px;">100</div>
+          
+          <!-- Grid lines -->
+          <div class="chart-grid-line" style="bottom: 90px;"></div>
+          <div class="chart-grid-line" style="bottom: 150px;"></div>
+          <div class="chart-grid-line" style="bottom: 210px;"></div>
+          <div class="chart-grid-line" style="bottom: 270px;"></div>
+          
+          <!-- X-axis labels -->
+          ${auditData.map((audit: any, index: number, arr) => {
+            const position = 50 + (index * (100 - 50) / (arr.length - 1 || 1)) + '%';
+            const date = new Date(audit.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            return `<div class="chart-x-label" style="left: ${position};">${date}</div>`;
+          }).join('')}
+          
+          <!-- Chart line -->
+          <div class="chart-line" style="width: calc(100% - 70px); transform: scaleX(${auditData.length > 1 ? 1 : 0.1});"></div>
+          
+          <!-- Chart points -->
+          ${auditData.map((audit: any, index: number, arr) => {
+            const xPosition = 50 + (index * (100 - 50) / (arr.length - 1 || 1)) + '%';
+            const yPosition = 30 + ((100 - audit.overall_score) / 100 * 240) + 'px';
+            return `<div class="chart-point" style="left: ${xPosition}; bottom: ${yPosition};"></div>`;
+          }).join('')}
+          
+          <!-- Chart legend -->
+          <div class="chart-legend">
+            <div class="chart-legend-item">
+              <div class="chart-legend-color" style="background: linear-gradient(to right, ${primaryColor}, #a78bfa);"></div>
+              <span>Overall Score</span>
+            </div>
+          </div>
         </div>
         
         <table>

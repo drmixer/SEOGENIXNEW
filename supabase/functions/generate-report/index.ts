@@ -104,7 +104,8 @@ Deno.serve(async (req: Request) => {
         report_type: reportType,
         report_name: reportName,
         report_data: reportData,
-        file_url: downloadUrl
+        file_url: downloadUrl,
+        storage_path: storagePath
       })
       .select()
       .single();
@@ -336,19 +337,140 @@ function generateHTMLReport(reportType: string, data: any, reportName: string): 
           display: flex;
           justify-content: space-between;
         }
-        .chart-placeholder {
+        
+        /* Chart styles */
+        .chart-container {
           background: white;
           border-radius: 12px;
           padding: 20px;
           margin: 20px 0;
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
           height: 300px;
+          position: relative;
+        }
+        
+        .chart-axis {
+          position: absolute;
+          background: #e5e7eb;
+        }
+        
+        .chart-y-axis {
+          width: 1px;
+          height: 240px;
+          bottom: 30px;
+          left: 50px;
+        }
+        
+        .chart-x-axis {
+          height: 1px;
+          width: calc(100% - 70px);
+          bottom: 30px;
+          left: 50px;
+        }
+        
+        .chart-y-label {
+          position: absolute;
+          font-size: 12px;
+          color: #6b7280;
+        }
+        
+        .chart-x-label {
+          position: absolute;
+          font-size: 12px;
+          color: #6b7280;
+          bottom: 10px;
+          text-align: center;
+          transform: translateX(-50%);
+        }
+        
+        .chart-line {
+          position: absolute;
+          height: 3px;
+          background: linear-gradient(to right, ${primaryColor}, #a78bfa);
+          bottom: 30px;
+          left: 50px;
+          border-radius: 3px;
+        }
+        
+        .chart-point {
+          position: absolute;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: ${primaryColor};
+          transform: translate(-50%, 50%);
+        }
+        
+        .chart-grid-line {
+          position: absolute;
+          left: 50px;
+          right: 20px;
+          height: 1px;
+          background: #f3f4f6;
+        }
+        
+        .chart-legend {
+          position: absolute;
+          right: 20px;
+          top: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        
+        .chart-legend-item {
           display: flex;
           align-items: center;
-          justify-content: center;
+          gap: 8px;
+          font-size: 12px;
           color: #6b7280;
-          border: 1px dashed #d1d5db;
         }
+        
+        .chart-legend-color {
+          width: 12px;
+          height: 3px;
+          border-radius: 3px;
+        }
+        
+        /* Print-specific styles */
+        @media print {
+          body {
+            padding: 0;
+            font-size: 12pt;
+          }
+          
+          .header {
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          
+          .chart-container {
+            height: 200px;
+            page-break-inside: avoid;
+          }
+          
+          .roi-section, .competitive-section, .recommendations {
+            page-break-inside: avoid;
+          }
+          
+          table {
+            page-break-inside: auto;
+          }
+          
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+          }
+          
+          thead {
+            display: table-header-group;
+          }
+          
+          tfoot {
+            display: table-footer-group;
+          }
+        }
+        
         h1, h2, h3, h4, h5, h6 {
           color: #1f2937;
           margin-top: 1.5em;
@@ -475,14 +597,59 @@ function generateHTMLReport(reportType: string, data: any, reportName: string): 
     `;
   }
 
-  // Historical Performance
+  // Historical Performance with actual chart
   if (data.auditHistory && data.auditHistory.length > 1) {
+    // Generate chart data
+    const auditData = [...data.auditHistory].reverse().slice(0, 10); // Get last 10 audits in chronological order
+    const chartWidth = 'calc(100% - 70px)';
+    const chartHeight = '240px';
+    
     html += `
       <section>
         <h2>Historical Performance</h2>
         
-        <div class="chart-placeholder">
-          <p>Performance Trend Visualization</p>
+        <div class="chart-container">
+          <!-- Chart axes -->
+          <div class="chart-y-axis"></div>
+          <div class="chart-x-axis"></div>
+          
+          <!-- Y-axis labels -->
+          <div class="chart-y-label" style="left: 20px; bottom: 30px;">0</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 90px;">25</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 150px;">50</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 210px;">75</div>
+          <div class="chart-y-label" style="left: 20px; bottom: 270px;">100</div>
+          
+          <!-- Grid lines -->
+          <div class="chart-grid-line" style="bottom: 90px;"></div>
+          <div class="chart-grid-line" style="bottom: 150px;"></div>
+          <div class="chart-grid-line" style="bottom: 210px;"></div>
+          <div class="chart-grid-line" style="bottom: 270px;"></div>
+          
+          <!-- X-axis labels -->
+          ${auditData.map((audit: any, index: number) => {
+            const position = 50 + (index * (100 - 50) / (auditData.length - 1 || 1)) + '%';
+            const date = new Date(audit.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            return `<div class="chart-x-label" style="left: ${position};">${date}</div>`;
+          }).join('')}
+          
+          <!-- Chart line -->
+          <div class="chart-line" style="width: ${chartWidth}; transform: scaleX(${auditData.length > 1 ? 1 : 0.1});"></div>
+          
+          <!-- Chart points -->
+          ${auditData.map((audit: any, index: number) => {
+            const xPosition = 50 + (index * (100 - 50) / (auditData.length - 1 || 1)) + '%';
+            const yPosition = 30 + ((100 - audit.overall_score) / 100 * 240) + 'px';
+            return `<div class="chart-point" style="left: ${xPosition}; bottom: ${yPosition};"></div>`;
+          }).join('')}
+          
+          <!-- Chart legend -->
+          <div class="chart-legend">
+            <div class="chart-legend-item">
+              <div class="chart-legend-color" style="background: linear-gradient(to right, ${primaryColor}, #a78bfa);"></div>
+              <span>Overall Score</span>
+            </div>
+          </div>
         </div>
         
         <table>
