@@ -3,28 +3,35 @@ import { supabase } from '../lib/supabase';
 const API_BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 // Add error handling wrapper with dynamic authentication
-const apiCall = async (url: string, options: RequestInit) => {
+const apiCall = async (url: string, options: RequestInit, authRequired: boolean = true) => {
   try {
     console.log(`Making API call to: ${url}`);
     
-    // Get current user session for authentication
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError) {
-      console.error('Session error:', sessionError);
-      throw new Error('Failed to get user session');
-    }
-    
-    if (!session?.access_token) {
-      throw new Error('User not authenticated. Please log in to continue.');
-    }
-    
-    // Create headers with user's access token
-    const headers = {
-      'Authorization': `Bearer ${session.access_token}`,
+    let headers = {
       'Content-Type': 'application/json',
       ...((options.headers as Record<string, string>) || {})
     };
+
+    // Only add authentication if required
+    if (authRequired) {
+      // Get current user session for authentication
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        throw new Error('Failed to get user session');
+      }
+      
+      if (!session?.access_token) {
+        throw new Error('User not authenticated. Please log in to continue.');
+      }
+      
+      // Add user's access token to headers
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    } else {
+      // For unauthenticated calls, use the anon key
+      headers['Authorization'] = `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`;
+    }
     
     const response = await fetch(url, {
       ...options,
@@ -232,10 +239,13 @@ export const apiService = {
     userData?: any
   ) {
     // Don't cache chat requests as they should always be unique
+    // Don't require authentication for landing page context
+    const authRequired = context !== 'landing';
+    
     return await apiCall(`${API_BASE_URL}/genie-chatbot`, {
       method: 'POST',
       body: JSON.stringify({ message, context, userPlan, conversationHistory, userData })
-    });
+    }, authRequired);
   },
 
   // LLM Site Summaries
