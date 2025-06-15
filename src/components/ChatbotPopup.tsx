@@ -38,9 +38,6 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
   const [userData, setUserData] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Check if user is authenticated for landing page
-  const isAuthenticatedForLanding = type === 'dashboard' || (type === 'landing' && user);
-
   // Load user data for personalization
   useEffect(() => {
     const loadUserData = async () => {
@@ -78,14 +75,15 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    // Check authentication for landing page
-    if (type === 'landing' && !user) {
+    // For dashboard chatbot, authentication is required
+    if (type === 'dashboard' && !user) {
       const authMessage: Message = {
         type: 'bot',
-        content: "Please log in or sign up to continue chatting with me. I'd love to help you with personalized insights!",
+        content: "You need to be logged in to use the dashboard assistant. Please log in and try again.",
         timestamp: new Date()
       };
       setMessages(prev => [...prev, authMessage]);
+      setInputValue('');
       return;
     }
 
@@ -100,7 +98,7 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
     setIsLoading(true);
     scrollToBottom();
 
-    // Track user activity
+    // Track user activity for authenticated users
     if (user) {
       try {
         await userDataService.trackActivity({
@@ -245,15 +243,12 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
         </div>
         
         <div className="p-4 border-t border-gray-200">
-          {!isAuthenticatedForLanding ? (
+          {type === 'dashboard' && !user ? (
             <div className="text-center">
               <div className="flex items-center justify-center space-x-2 text-gray-500 mb-2">
                 <LogIn className="w-4 h-4" />
-                <span className="text-sm">Please log in to continue chatting</span>
+                <span className="text-sm">Please log in to use the dashboard assistant</span>
               </div>
-              <p className="text-xs text-gray-400">
-                Sign up or log in to get personalized AI assistance
-              </p>
             </div>
           ) : (
             <div className="flex space-x-2">
