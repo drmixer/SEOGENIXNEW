@@ -12,12 +12,13 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfile, onProfileUpdate }) => {
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'websites' | 'competitors'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'websites' | 'competitors' | 'goals'>('profile');
   const [formData, setFormData] = useState({
     industry: userProfile?.industry || '',
     businessDescription: userProfile?.business_description || '',
     websites: userProfile?.websites || [{ url: '', name: '' }],
-    competitors: userProfile?.competitors || [{ url: '', name: '' }]
+    competitors: userProfile?.competitors || [{ url: '', name: '' }],
+    goals: userProfile?.goals || []
   });
 
   const industries = [
@@ -38,6 +39,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
     'Other'
   ];
 
+  const availableGoals = [
+    { 
+      id: 'increase_citations', 
+      name: 'Increase AI Citations', 
+      description: 'Get your content cited more frequently by AI systems like ChatGPT and Claude'
+    },
+    { 
+      id: 'improve_understanding', 
+      name: 'Improve AI Understanding', 
+      description: 'Make your content more comprehensible to AI systems'
+    },
+    { 
+      id: 'voice_search', 
+      name: 'Optimize for Voice Search', 
+      description: 'Make your content more discoverable through voice assistants'
+    },
+    { 
+      id: 'competitive_edge', 
+      name: 'Gain Competitive Edge', 
+      description: 'Outperform competitors in AI visibility metrics'
+    },
+    { 
+      id: 'content_structure', 
+      name: 'Improve Content Structure', 
+      description: 'Enhance how your content is organized for better AI comprehension'
+    }
+  ];
+
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -45,7 +74,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
         industry: formData.industry,
         business_description: formData.businessDescription,
         websites: formData.websites.filter(w => w.url.trim() && w.name.trim()),
-        competitors: formData.competitors.filter(c => c.url.trim() && c.name.trim())
+        competitors: formData.competitors.filter(c => c.url.trim() && c.name.trim()),
+        goals: formData.goals
       };
 
       const updatedProfile = await userDataService.updateUserProfile(user.id, updates);
@@ -60,7 +90,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
           activity_data: { 
             updatedFields: Object.keys(updates),
             websitesCount: updates.websites.length,
-            competitorsCount: updates.competitors.length
+            competitorsCount: updates.competitors.length,
+            goalsCount: updates.goals.length
           }
         });
         
@@ -116,10 +147,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
     setFormData({ ...formData, competitors: updated });
   };
 
+  const toggleGoal = (goalId: string) => {
+    if (formData.goals.includes(goalId)) {
+      setFormData({
+        ...formData,
+        goals: formData.goals.filter(id => id !== goalId)
+      });
+    } else {
+      setFormData({
+        ...formData,
+        goals: [...formData.goals, goalId]
+      });
+    }
+  };
+
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'websites', label: 'Websites', icon: Globe },
-    { id: 'competitors', label: 'Competitors', icon: Target }
+    { id: 'competitors', label: 'Competitors', icon: Target },
+    { id: 'goals', label: 'Goals', icon: Target }
   ];
 
   return (
@@ -340,6 +386,49 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'goals' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Your AI Visibility Goals</h3>
+                  <p className="text-gray-600 mb-4">
+                    Select the primary goals you want to achieve with SEOGENIX. This helps us tailor recommendations and track your progress.
+                  </p>
+                  
+                  <div className="space-y-3">
+                    {availableGoals.map((goal) => (
+                      <div 
+                        key={goal.id}
+                        onClick={() => toggleGoal(goal.id)}
+                        className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                          formData.goals.includes(goal.id) 
+                            ? 'border-purple-500 bg-purple-50' 
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <div className="flex items-start">
+                          <div className={`w-5 h-5 rounded-full flex-shrink-0 mt-0.5 border ${
+                            formData.goals.includes(goal.id) 
+                              ? 'bg-purple-600 border-purple-600' 
+                              : 'border-gray-300'
+                          }`}>
+                            {formData.goals.includes(goal.id) && (
+                              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="ml-3">
+                            <h4 className="font-medium text-gray-900">{goal.name}</h4>
+                            <p className="text-sm text-gray-600 mt-1">{goal.description}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

@@ -19,7 +19,8 @@ import {
   Brain,
   Eye,
   Layers,
-  BookOpen
+  BookOpen,
+  Target
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -28,6 +29,7 @@ interface SidebarProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
   onSettingsClick?: () => void;
   onBillingClick?: () => void;
+  userGoals?: string[];
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -35,7 +37,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onSectionChange, 
   userPlan, 
   onSettingsClick, 
-  onBillingClick 
+  onBillingClick,
+  userGoals = []
 }) => {
   // Enable all features for development/testing
   const isDevelopment = true; // Set to false for production
@@ -54,6 +57,29 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'competitive', label: 'Competitive Analysis', icon: BarChart3, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'discovery', label: 'Competitor Discovery', icon: Radar, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
   ];
+
+  // Highlight tools based on user goals
+  const getHighlightedTools = () => {
+    const toolMap: Record<string, string[]> = {
+      'increase_citations': ['citations', 'optimizer', 'generator'],
+      'improve_understanding': ['entities', 'summaries', 'optimizer'],
+      'voice_search': ['voice', 'prompts', 'generator'],
+      'competitive_edge': ['competitive', 'discovery', 'audit'],
+      'content_structure': ['schema', 'optimizer', 'audit']
+    };
+    
+    // Collect all tools that should be highlighted based on user goals
+    const highlightedTools = new Set<string>();
+    userGoals.forEach(goal => {
+      if (toolMap[goal]) {
+        toolMap[goal].forEach(tool => highlightedTools.add(tool));
+      }
+    });
+    
+    return highlightedTools;
+  };
+
+  const highlightedTools = getHighlightedTools();
 
   const newFeatures = [
     { id: 'playbooks', label: 'Optimization Playbooks', icon: BookOpen, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
@@ -102,6 +128,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             const IconComponent = item.icon;
             const isActive = activeSection === item.id;
             const isAvailable = item.available;
+            const isHighlighted = highlightedTools.has(item.id);
             
             return (
               <button
@@ -112,12 +139,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                   isActive 
                     ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white' 
                     : isAvailable
-                      ? 'text-gray-700 hover:bg-gray-100'
+                      ? isHighlighted 
+                        ? 'text-gray-700 bg-purple-50 border border-purple-200'
+                        : 'text-gray-700 hover:bg-gray-100'
                       : 'text-gray-400 cursor-not-allowed'
                 }`}
               >
                 <IconComponent className="w-5 h-5" />
                 <span className="text-sm font-medium">{item.label}</span>
+                {isHighlighted && !isActive && (
+                  <span className="ml-auto flex-shrink-0 w-2 h-2 rounded-full bg-purple-500"></span>
+                )}
                 {!isAvailable && !isDevelopment && (
                   <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full ml-auto">
                     Pro
@@ -139,6 +171,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               const IconComponent = item.icon;
               const isActive = activeSection === item.id;
               const isAvailable = item.available;
+              const isHighlighted = item.id === 'playbooks' && userGoals.length > 0;
               
               return (
                 <button
@@ -149,12 +182,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                     isActive 
                       ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white' 
                       : isAvailable
-                        ? 'text-gray-700 hover:bg-gray-100'
+                        ? isHighlighted 
+                          ? 'text-gray-700 bg-purple-50 border border-purple-200'
+                          : 'text-gray-700 hover:bg-gray-100'
                         : 'text-gray-400 cursor-not-allowed'
                   }`}
                 >
                   <IconComponent className="w-5 h-5" />
                   <span className="text-sm font-medium">{item.label}</span>
+                  {isHighlighted && !isActive && (
+                    <span className="ml-auto flex-shrink-0 w-2 h-2 rounded-full bg-purple-500"></span>
+                  )}
                   {!isAvailable && !isDevelopment && (
                     <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full ml-auto">
                       Core

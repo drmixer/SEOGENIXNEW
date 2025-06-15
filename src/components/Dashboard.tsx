@@ -15,10 +15,12 @@ import SiteSelector from './SiteSelector';
 import SettingsModal from './SettingsModal';
 import BillingModal from './BillingModal';
 import ToastContainer from './ToastContainer';
+import FeedbackModal from './FeedbackModal';
+import GoalTracker from './GoalTracker';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../hooks/useToast';
-import { TrendingUp, AlertTriangle, Target, Zap, Users, BarChart3, CheckCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Target, Zap, Users, BarChart3, CheckCircle, ArrowRight, RefreshCw, MessageSquare } from 'lucide-react';
 
 interface DashboardProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -52,11 +54,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [actionableInsights, setActionableInsights] = useState<ActionableInsight[]>([]);
   const { toasts, addToast, removeToast } = useToast();
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [profileFetchAttempted, setProfileFetchAttempted] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [userGoals, setUserGoals] = useState<string[]>([]);
+  const [goalProgress, setGoalProgress] = useState<Record<string, number>>({});
   
   // Use refs to prevent duplicate fetches and track component mount state
   const profileFetchedRef = useRef(false);
@@ -286,8 +291,69 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         });
       }
 
+      // 8. Playbook recommendations based on goals
+      if (userGoals.length > 0 && ['core', 'pro', 'agency'].includes(userPlan)) {
+        if (userGoals.includes('increase_citations')) {
+          insights.push({
+            id: 'goal-citations',
+            type: 'opportunity',
+            title: 'Boost Your Citation Rate',
+            description: 'Follow our Content Optimization Mastery playbook to increase AI citations.',
+            action: 'Start Playbook',
+            actionUrl: 'playbooks',
+            icon: MessageSquare,
+            color: 'from-yellow-500 to-yellow-600',
+            contextualTip: 'Our specialized playbook will guide you through creating content that AI systems prefer to cite, with step-by-step instructions.',
+            learnMoreLink: 'https://docs.seogenix.com/playbooks/content-optimization'
+          });
+        } else if (userGoals.includes('voice_search')) {
+          insights.push({
+            id: 'goal-voice',
+            type: 'opportunity',
+            title: 'Optimize for Voice Search',
+            description: 'Follow our Voice Search Optimization playbook to improve conversational readiness.',
+            action: 'Start Playbook',
+            actionUrl: 'playbooks',
+            icon: MessageSquare,
+            color: 'from-green-500 to-green-600',
+            contextualTip: 'Our voice search playbook will help you structure content for voice assistants and conversational AI.',
+            learnMoreLink: 'https://docs.seogenix.com/playbooks/voice-search'
+          });
+        }
+      }
+
       if (isMountedRef.current) {
         setActionableInsights(insights.slice(0, 3)); // Show top 3 insights
+      }
+
+      // Update goal progress
+      if (auditHistory.length > 0 && userGoals.length > 0) {
+        const latestAudit = auditHistory[0];
+        const progress: Record<string, number> = {};
+        
+        if (userGoals.includes('increase_citations')) {
+          progress['increase_citations'] = latestAudit.citation_likelihood;
+        }
+        
+        if (userGoals.includes('improve_understanding')) {
+          progress['improve_understanding'] = latestAudit.ai_understanding;
+        }
+        
+        if (userGoals.includes('voice_search')) {
+          progress['voice_search'] = latestAudit.conversational_readiness;
+        }
+        
+        if (userGoals.includes('content_structure')) {
+          progress['content_structure'] = latestAudit.content_structure;
+        }
+        
+        if (userGoals.includes('competitive_edge')) {
+          // For competitive edge, we'll need to calculate this differently
+          // For now, just use the overall score
+          progress['competitive_edge'] = latestAudit.overall_score;
+        }
+        
+        setGoalProgress(progress);
       }
 
     } catch (error) {
@@ -301,7 +367,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         insightsGeneratedRef.current = false;
       }, 60000); // 1 minute cooldown
     }
-  }, [user?.id, userProfile, userPlan]);
+  }, [user?.id, userProfile, userPlan, userGoals]);
 
   // Track component mount/unmount
   useEffect(() => {
@@ -340,6 +406,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         
         if (profile) {
           setUserProfile(profile);
+          
+          // Set user goals if available
+          if (profile.goals && Array.isArray(profile.goals)) {
+            setUserGoals(profile.goals);
+          }
           
           // Set default selected website if user has websites
           if (profile.websites && profile.websites.length > 0) {
@@ -403,7 +474,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     if (userProfile && user && user.id && !insightsGeneratedRef.current) {
       generateActionableInsights();
     }
-  }, [userProfile, user?.id, userPlan, generateActionableInsights]);
+  }, [userProfile, user?.id, userPlan, generateActionableInsights, userGoals]);
 
   // Centralized audit history fetching to prevent duplicate requests
   useEffect(() => {
@@ -577,6 +648,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     window.location.reload();
   };
 
+  // Open feedback modal
+  const handleOpenFeedback = () => {
+    setShowFeedback(true);
+  };
+
   // Don't render dashboard until we have user data
   if (!user) {
     return (
@@ -645,9 +721,25 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   >
                     Take Tour
                   </button>
+                  <button
+                    onClick={handleOpenFeedback}
+                    className="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-lg hover:bg-purple-200 transition-colors"
+                  >
+                    Give Feedback
+                  </button>
                 </div>
               </div>
             </div>
+
+            {/* Goal Tracker */}
+            {userGoals.length > 0 && (
+              <GoalTracker 
+                goals={userGoals} 
+                progress={goalProgress}
+                userPlan={userPlan}
+                onPlaybookStart={() => setActiveSection('playbooks')}
+              />
+            )}
 
             {/* Actionable Insights Section */}
             {actionableInsights.length > 0 && (
@@ -789,7 +881,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         );
       
       case 'playbooks':
-        return <OptimizationPlaybooks userPlan={userPlan} onSectionChange={setActiveSection} />;
+        return <OptimizationPlaybooks 
+                userPlan={userPlan} 
+                onSectionChange={setActiveSection} 
+                userGoals={userGoals}
+                userProfile={userProfile}
+               />;
       
       case 'history':
         return <HistoricalPerformance userPlan={userPlan} selectedWebsite={selectedWebsite} />;
@@ -862,6 +959,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           userPlan={userPlan}
           onSettingsClick={handleSettingsClick}
           onBillingClick={handleBillingClick}
+          userGoals={userGoals}
         />
         
         <main className="flex-1 p-8 overflow-y-auto">
@@ -914,6 +1012,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           userProfile={userProfile}
           onProfileUpdate={(profile) => {
             setUserProfile(profile);
+            
+            // Update user goals if they've changed
+            if (profile.goals && Array.isArray(profile.goals)) {
+              setUserGoals(profile.goals);
+            }
+            
             addToast({
               id: `settings-updated-${Date.now()}`,
               type: 'success',
@@ -954,6 +1058,15 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           }}
         />
       )}
+
+      {/* Feedback Modal */}
+      {showFeedback && (
+        <FeedbackModal
+          onClose={() => setShowFeedback(false)}
+          user={user}
+          userPlan={userPlan}
+        />
+      )}
       
       {/* Floating chatbot button */}
       {canAccessChatbot && (
@@ -974,6 +1087,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           type="dashboard"
           userPlan={userPlan}
           onToolLaunch={handleToolLaunch}
+          user={user}
         />
       )}
 

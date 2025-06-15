@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Globe, Target, ArrowRight, Building, FileText, Loader } from 'lucide-react';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
@@ -19,6 +19,13 @@ interface Competitor {
   name: string;
 }
 
+interface Goal {
+  id: string;
+  name: string;
+  description: string;
+  selected: boolean;
+}
+
 const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete, onClose }) => {
   const [step, setStep] = useState(1);
   const [websites, setWebsites] = useState<Website[]>([{ url: '', name: '' }]);
@@ -27,6 +34,38 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
   const [businessDescription, setBusinessDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [goals, setGoals] = useState<Goal[]>([
+    { 
+      id: 'increase_citations', 
+      name: 'Increase AI Citations', 
+      description: 'Get your content cited more frequently by AI systems like ChatGPT and Claude',
+      selected: false
+    },
+    { 
+      id: 'improve_understanding', 
+      name: 'Improve AI Understanding', 
+      description: 'Make your content more comprehensible to AI systems',
+      selected: false
+    },
+    { 
+      id: 'voice_search', 
+      name: 'Optimize for Voice Search', 
+      description: 'Make your content more discoverable through voice assistants',
+      selected: false
+    },
+    { 
+      id: 'competitive_edge', 
+      name: 'Gain Competitive Edge', 
+      description: 'Outperform competitors in AI visibility metrics',
+      selected: false
+    },
+    { 
+      id: 'content_structure', 
+      name: 'Improve Content Structure', 
+      description: 'Enhance how your content is organized for better AI comprehension',
+      selected: false
+    }
+  ]);
 
   // Plan limits
   const planLimits = {
@@ -94,8 +133,14 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
     setCompetitors(updated);
   };
 
+  const toggleGoal = (id: string) => {
+    setGoals(goals.map(goal => 
+      goal.id === id ? { ...goal, selected: !goal.selected } : goal
+    ));
+  };
+
   const handleNext = async () => {
-    if (step < 3) {
+    if (step < 4) {
       setStep(step + 1);
     } else {
       // Save data and complete onboarding
@@ -119,12 +164,15 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
           return;
         }
         
+        const selectedGoals = goals.filter(g => g.selected).map(g => g.id);
+        
         const onboardingData = {
           websites: websites.filter(w => w.url.trim() !== '' && w.name.trim() !== ''),
           competitors: competitors.filter(c => c.url.trim() !== '' && c.name.trim() !== ''),
           industry,
           businessDescription,
           plan: userPlan,
+          goals: selectedGoals,
           completedAt: new Date().toISOString()
         };
         
@@ -153,6 +201,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
               industry: onboardingData.industry,
               business_description: onboardingData.businessDescription,
               plan: userPlan,
+              goals: selectedGoals,
               onboarding_completed_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
@@ -168,6 +217,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
               industry: onboardingData.industry,
               business_description: onboardingData.businessDescription,
               plan: userPlan,
+              goals: selectedGoals,
               onboarding_completed_at: new Date().toISOString()
             });
         }
@@ -180,7 +230,8 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
             plan: userPlan,
             websitesCount: onboardingData.websites.length,
             competitorsCount: onboardingData.competitors.length,
-            industry: onboardingData.industry
+            industry: onboardingData.industry,
+            goals: selectedGoals
           }
         });
         
@@ -203,12 +254,14 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
       return websites.some(w => w.url.trim() !== '' && w.name.trim() !== '');
     } else if (step === 2) {
       return industry.trim() !== '';
-    } else {
+    } else if (step === 3) {
       return competitors.some(c => c.url.trim() !== '' && c.name.trim() !== '');
+    } else {
+      return goals.some(g => g.selected);
     }
   };
 
-  const totalSteps = 3;
+  const totalSteps = 4;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -230,7 +283,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
           <div className="p-6 pb-0">
             {/* Progress indicator */}
             <div className="flex items-center mb-8">
-              {[1, 2, 3].map((stepNumber) => (
+              {[1, 2, 3, 4].map((stepNumber) => (
                 <React.Fragment key={stepNumber}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                     step >= stepNumber ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
@@ -429,6 +482,54 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                     <span>Add Another Competitor</span>
                   </button>
                 )}
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="space-y-6">
+                <div className="text-center mb-6">
+                  <FileText className="w-12 h-12 text-purple-600 mx-auto mb-3" />
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Set Your AI Visibility Goals</h3>
+                  <p className="text-gray-600">
+                    Select the primary goals you want to achieve with SEOGENIX.
+                    <br />
+                    <span className="text-sm text-purple-600">
+                      This helps us tailor recommendations and track your progress.
+                    </span>
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {goals.map((goal) => (
+                    <div 
+                      key={goal.id}
+                      onClick={() => toggleGoal(goal.id)}
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                        goal.selected 
+                          ? 'border-purple-500 bg-purple-50' 
+                          : 'border-gray-200 hover:border-purple-300'
+                      }`}
+                    >
+                      <div className="flex items-start">
+                        <div className={`w-5 h-5 rounded-full flex-shrink-0 mt-0.5 border ${
+                          goal.selected 
+                            ? 'bg-purple-600 border-purple-600' 
+                            : 'border-gray-300'
+                        }`}>
+                          {goal.selected && (
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="ml-3">
+                          <h4 className="font-medium text-gray-900">{goal.name}</h4>
+                          <p className="text-sm text-gray-600 mt-1">{goal.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                 {error && (
                   <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -463,7 +564,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                 </>
               ) : (
                 <>
-                  <span>{step === 3 ? 'Complete Setup' : 'Next'}</span>
+                  <span>{step === 4 ? 'Complete Setup' : 'Next'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
