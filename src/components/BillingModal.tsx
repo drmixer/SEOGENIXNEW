@@ -43,7 +43,7 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
       id: 'free' as const,
       monthlyPrice: 0,
       annualPrice: 0,
-      description: 'Try basic tools and explore AI visibility',
+      description: 'Try basic tools and explore SEO visibility',
       features: [
         'AI Visibility Score (Overall)',
         'Basic dashboard access',
@@ -60,8 +60,8 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
     {
       name: 'Core',
       id: 'core' as const,
-      monthlyPrice: 29,
-      annualPrice: 261,
+      monthlyPrice: 20,
+      annualPrice: 180,
       description: 'Full audits and essential tools',
       features: [
         'Everything in Free',
@@ -82,8 +82,8 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
     {
       name: 'Pro',
       id: 'pro' as const,
-      monthlyPrice: 79,
-      annualPrice: 711,
+      monthlyPrice: 60,
+      annualPrice: 540,
       description: 'Advanced optimization with full chatbot access',
       popular: true,
       features: [
@@ -104,8 +104,8 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
     {
       name: 'Agency',
       id: 'agency' as const,
-      monthlyPrice: 199,
-      annualPrice: 1791,
+      monthlyPrice: 150,
+      annualPrice: 1350,
       description: 'Manage multiple clients with team access',
       features: [
         'Everything in Pro',

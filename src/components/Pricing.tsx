@@ -18,7 +18,7 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
       id: 'free' as const,
       monthlyPrice: 0,
       annualPrice: 0,
-      description: 'Try basic tools and explore SEO visibility',
+      description: 'Try basic tools and explore AI visibility',
       features: [
         'AI Visibility Score (Overall)',
         'Basic dashboard access',
@@ -35,8 +35,8 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
     {
       name: 'Core',
       id: 'core' as const,
-      monthlyPrice: 29,
-      annualPrice: 261,
+      monthlyPrice: 20,
+      annualPrice: 180,
       description: 'Full audits and essential tools',
       features: [
         'Everything in Free',
@@ -57,8 +57,8 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
     {
       name: 'Pro',
       id: 'pro' as const,
-      monthlyPrice: 79,
-      annualPrice: 711,
+      monthlyPrice: 60,
+      annualPrice: 540,
       description: 'Advanced optimization with full chatbot access',
       popular: true,
       features: [
@@ -79,8 +79,8 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
     {
       name: 'Agency',
       id: 'agency' as const,
-      monthlyPrice: 199,
-      annualPrice: 1791,
+      monthlyPrice: 150,
+      annualPrice: 1350,
       description: 'Manage multiple clients with team access',
       features: [
         'Everything in Pro',
@@ -213,11 +213,10 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
                   onClick={() => handlePlanSelect(plan.id)}
                   disabled={loading === plan.id}
                   className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 ${
-                    loading === plan.id
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : plan.popular
-                        ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white hover:shadow-lg'
-                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                    loading ? 'bg-gray-300 text-gray-500 cursor-not-allowed' :
+                    plan.popular
+                      ? 'bg-gradient-to-r from-teal-500 to-purple-600 text-white hover:shadow-lg'
+                      : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
                   }`}
                 >
                   {loading === plan.id ? 'Processing...' : plan.name === 'Free' ? 'Start Free' : 'Choose Plan'}
