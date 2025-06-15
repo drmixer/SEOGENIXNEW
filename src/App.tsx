@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
 import OnboardingModal from './components/OnboardingModal';
 import { WhiteLabelProvider } from './components/WhiteLabelProvider';
+import ToastContainer from './components/ToastContainer';
 import Integrations from './components/pages/Integrations';
 import HelpCenter from './components/pages/HelpCenter';
 import Documentation from './components/pages/Documentation';
@@ -15,6 +16,7 @@ import PrivacyPolicy from './components/pages/PrivacyPolicy';
 import TermsOfService from './components/pages/TermsOfService';
 import CookiePolicy from './components/pages/CookiePolicy';
 import { useToast } from './hooks/useToast';
+import { lemonsqueezyService } from './services/lemonsqueezy';
 
 // Router wrapper to access location and navigate
 function AppWithRouter() {
