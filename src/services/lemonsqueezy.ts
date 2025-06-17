@@ -27,7 +27,16 @@ if (!isStoreIdConfigured) {
 }
 
 // Initialize LemonSqueezy with your API key - only if API key is properly configured
-const lemonSqueezy = isApiKeyConfigured ? new LemonSqueezy(apiKey) : null;
+let lemonSqueezy: LemonSqueezy | null = null;
+
+if (isApiKeyConfigured) {
+  try {
+    lemonSqueezy = new LemonSqueezy(apiKey);
+  } catch (error) {
+    console.error('Failed to initialize LemonSqueezy:', error);
+    lemonSqueezy = null;
+  }
+}
 
 // Plan IDs from LemonSqueezy
 export const PLAN_IDS = {
@@ -59,6 +68,11 @@ const validateLemonSqueezyConfig = () => {
   if (!STORE_ID || STORE_ID === 'your_lemonsqueezy_store_id_here') {
     throw new Error('LemonSqueezy Store ID is not properly configured. Please set VITE_LEMONSQUEEZY_STORE_ID in your .env file.');
   }
+
+  // Additional check to ensure the lemonSqueezy object has the required methods
+  if (!lemonSqueezy.checkouts || typeof lemonSqueezy.checkouts.create !== 'function') {
+    throw new Error('LemonSqueezy API client is not properly initialized. The checkouts service is not available.');
+  }
 };
 
 export const lemonsqueezyService = {
@@ -66,7 +80,8 @@ export const lemonsqueezyService = {
    * Check if LemonSqueezy is properly configured
    */
   isConfigured() {
-    return isApiKeyConfigured && lemonSqueezy !== null && isStoreIdConfigured;
+    return isApiKeyConfigured && lemonSqueezy !== null && isStoreIdConfigured && 
+           lemonSqueezy.checkouts && typeof lemonSqueezy.checkouts.create === 'function';
   },
 
   /**
