@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route /*, useNavigate */ } from 'react-router-dom'; // Consider uncommenting useNavigate if you switch to it
 import { supabase } from './lib/supabase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
 import OnboardingModal from './components/OnboardingModal';
+import BillingModal from './components/BillingModal'; // NEW: Import BillingModal
 import { WhiteLabelProvider } from './components/WhiteLabelProvider';
-import ToastContainer from './components/ToastContainer';
 import Integrations from './components/pages/Integrations';
 import HelpCenter from './components/pages/HelpCenter';
 import Documentation from './components/pages/Documentation';
@@ -15,63 +15,11 @@ import Status from './components/pages/Status';
 import PrivacyPolicy from './components/pages/PrivacyPolicy';
 import TermsOfService from './components/pages/TermsOfService';
 import CookiePolicy from './components/pages/CookiePolicy';
-import { useToast } from './hooks/useToast';
-import { lemonsqueezyService } from './services/lemonsqueezy';
-
-// Router wrapper to access location and navigate
-function AppWithRouter() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { addToast } = useToast();
-  
-  // Check for checkout success or cancel in URL params
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const checkoutSuccess = searchParams.get('checkout_success');
-    const checkoutCancelled = searchParams.get('checkout_cancelled');
-    const plan = searchParams.get('plan');
-    
-    if (checkoutSuccess === 'true' && plan) {
-      // Show success toast
-      addToast({
-        id: `checkout-success-${Date.now()}`,
-        type: 'success',
-        title: 'Subscription Activated',
-        message: `Your ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan has been activated successfully.`,
-        duration: 5000,
-        onClose: () => {}
-      });
-      
-      // Remove query params
-      navigate('/dashboard', { replace: true });
-    } else if (checkoutCancelled === 'true') {
-      // Show cancelled toast
-      addToast({
-        id: `checkout-cancelled-${Date.now()}`,
-        type: 'info',
-        title: 'Checkout Cancelled',
-        message: 'Your subscription checkout was cancelled. You can try again anytime.',
-        duration: 5000,
-        onClose: () => {}
-      });
-      
-      // Remove query params
-      navigate('/', { replace: true });
-    }
-  }, [location, navigate, addToast]);
-  
-  return <AppContent />;
-}
 
 function App() {
-  return (
-    <Router>
-      <AppWithRouter />
-    </Router>
-  );
-}
+  // If you decide to use `useNavigate` for routing (recommended for cleaner transitions):
+  // const navigate = useNavigate();
 
-function AppContent() {
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'pricing'>('landing');
   const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [user, setUser] = useState<any>(null);
@@ -79,52 +27,82 @@ function AppContent() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
+  const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free'); // Plan selected on landing
   const [authError, setAuthError] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
-  const { toasts, addToast, removeToast } = useToast();
-  
+
+  // --- NEW STATES FOR BILLING MODAL ---
+  const [showBillingModal, setShowBillingModal] = useState(false);
+  const [billingModalPurpose, setBillingModalPurpose] = useState<'signup_upsell' | 'upgrade' | 'manage'>('upgrade');
+  // ------------------------------------
+
   // Use refs to prevent race conditions and duplicate initializations
   const authInitializedRef = useRef(false);
   const initializationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const authListenerInitializedRef = useRef(false);
 
+  // Function to fetch user profile (extracted for reusability and clarity)
+  const fetchUserProfile = async (userId: string): Promise<{ plan: 'free' | 'core' | 'pro' | 'agency', onboardingCompleted: boolean }> => {
+    try {
+      const { data: profiles, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (profileError) {
+        console.error('Error fetching user profile:', profileError);
+        return { plan: 'free', onboardingCompleted: false }; // Default if error
+      }
+
+      if (profiles && profiles.length > 0) {
+        console.log('User profile found:', profiles[0].id);
+        const plan = profiles[0].plan as typeof userPlan || 'free';
+        const onboardingCompleted = !!profiles[0].onboarding_completed_at;
+        setUserPlan(plan); // Update the state in App.tsx
+        return { plan, onboardingCompleted };
+      } else {
+        console.log('No profile found for user:', userId);
+        return { plan: 'free', onboardingCompleted: false };
+      }
+    } catch (profileError) {
+      console.error('Error in profile fetch:', profileError);
+      return { plan: 'free', onboardingCompleted: false };
+    }
+  };
+
   useEffect(() => {
-    // Get initial session
     const initializeAuth = async () => {
-      // Prevent multiple initialization attempts
       if (authInitializedRef.current) {
         console.log('Auth already initialized, skipping');
         return;
       }
-      
+
       try {
         console.log('Initializing authentication...');
         setLoading(true);
         authInitializedRef.current = true;
-        
-        // Clear any existing timer
+
         if (initializationTimerRef.current) {
           clearTimeout(initializationTimerRef.current);
         }
-        
-        // Set a timeout to prevent hanging indefinitely
+
         initializationTimerRef.current = setTimeout(() => {
           console.log('Auth initialization timed out after 5 seconds');
           setLoading(false);
           setAuthInitialized(true);
           setAuthError('Authentication initialization timed out. Please refresh the page.');
         }, 5000);
-        
+
         const { data: { session }, error } = await supabase.auth.getSession();
-        
-        // Clear the timeout since we got a response
+
         if (initializationTimerRef.current) {
           clearTimeout(initializationTimerRef.current);
           initializationTimerRef.current = null;
         }
-        
+
         if (error) {
           console.error('Error getting initial session:', error);
           setAuthError('Failed to initialize authentication: ' + error.message);
@@ -132,102 +110,66 @@ function AppContent() {
           setAuthInitialized(true);
           return;
         }
-        
+
         console.log('Initial session:', session ? 'Valid session exists' : 'No session');
-        
+
         if (session?.user) {
           console.log('Setting user from initial session');
           setUser(session.user);
-          
-          // Fetch user profile to get plan - use a separate function to avoid nesting
-          await fetchUserProfile(session.user.id);
-        } else {
-          console.log('No user in session, staying on landing page');
-          // Important: Set loading to false even when no user is found
-          setLoading(false);
-          setAuthInitialized(true);
-        }
-      } catch (error) {
-        console.error('Error in initializeAuth:', error);
-        setAuthError('Authentication initialization failed: ' + (error as Error).message);
-        setLoading(false);
-        setAuthInitialized(true);
-      }
-    };
+          const { onboardingCompleted } = await fetchUserProfile(session.user.id);
 
-    // Separate function to fetch user profile to reduce nesting
-    const fetchUserProfile = async (userId: string) => {
-      try {
-        const { data: profiles, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        
-        if (profileError) {
-          console.error('Error fetching user profile:', profileError);
-          // Continue with default values
-        }
-          
-        if (profiles && profiles.length > 0) {
-          console.log('User profile found:', profiles[0].id);
-          setUserPlan(profiles[0].plan as any || 'free');
-          
-          // If onboarding is completed, go to dashboard
-          if (profiles[0].onboarding_completed_at) {
+          if (onboardingCompleted) {
             console.log('Onboarding completed, going to dashboard');
             setCurrentView('dashboard');
+            // navigate('/dashboard'); // If using navigate hook
           } else {
-            // If onboarding is not completed, show onboarding modal
             console.log('Onboarding not completed, showing onboarding modal');
             setShowOnboarding(true);
           }
         } else {
-          // No profile found, show onboarding
-          console.log('No profile found, showing onboarding');
-          setShowOnboarding(true);
+          console.log('No user in session, staying on landing page');
         }
-        
-        // Important: Set loading to false after profile is fetched
-        setLoading(false);
-        setAuthInitialized(true);
-      } catch (profileError) {
-        console.error('Error in profile fetch:', profileError);
-        // Continue with default plan and show onboarding
-        setShowOnboarding(true);
+      } catch (error) {
+        console.error('Error in initializeAuth:', error);
+        setAuthError('Authentication initialization failed: ' + (error as Error).message);
+      } finally {
         setLoading(false);
         setAuthInitialized(true);
       }
     };
 
-    // Only initialize auth once
     if (!authInitializedRef.current) {
       initializeAuth();
     }
 
-    // Listen for auth changes - only set up once
     if (!authListenerInitializedRef.current) {
       authListenerInitializedRef.current = true;
-      
+
       const {
         data: { subscription },
       } = supabase.auth.onAuthStateChange(async (event, session) => {
-        // Clear any timeout immediately when any auth event occurs
         if (initializationTimerRef.current) {
           clearTimeout(initializationTimerRef.current);
           initializationTimerRef.current = null;
         }
-        
+
         console.log('Auth state changed:', event, 'Session:', session?.user ? 'User present' : 'No user');
-        
+
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (session?.user) {
             console.log('Setting user from auth change:', session.user.id);
             setUser(session.user);
-            
-            // Fetch user profile to get plan - use a separate function to avoid nesting
-            await fetchUserProfile(session.user.id);
+            const { onboardingCompleted } = await fetchUserProfile(session.user.id);
+
+            // This listener should ideally react to *all* state changes,
+            // but the primary flow for new signups/payments is handled by handleAuthSuccess
+            // For a refresh or subsequent login, this ensures correct view.
+            if (onboardingCompleted) {
+              setCurrentView('dashboard');
+              // navigate('/dashboard'); // If using navigate hook
+            } else {
+              setShowOnboarding(true);
+            }
           }
         } else if (event === 'SIGNED_OUT') {
           console.log('User signed out, clearing user state');
@@ -235,10 +177,10 @@ function AppContent() {
           setUserPlan('free');
           setCurrentView('landing');
           setShowOnboarding(false);
-          setLoading(false); // Ensure loading is set to false on sign out
+          setShowBillingModal(false); // Clear billing modal state on sign out
+          setLoading(false);
+          // navigate('/'); // If using navigate hook
         } else if (event === 'INITIAL_SESSION') {
-          // This event is fired when the initial session is loaded
-          // We've already handled this in initializeAuth, but we'll ensure loading is false
           setLoading(false);
           setAuthInitialized(true);
         }
@@ -247,24 +189,21 @@ function AppContent() {
       return () => {
         console.log('Cleaning up auth subscription');
         subscription.unsubscribe();
-        
-        // Clear any timeout on unmount
         if (initializationTimerRef.current) {
           clearTimeout(initializationTimerRef.current);
           initializationTimerRef.current = null;
         }
       };
     }
-    
-    // Empty dependency array to ensure this only runs once on mount
-  }, []);
+  }, []); // Empty dependency array to ensure this only runs once on mount
 
   const handleNavigateToDashboard = () => {
     if (user) {
       setDashboardLoading(true);
       console.log('Navigating to dashboard for user:', user.id);
       setCurrentView('dashboard');
-      setTimeout(() => setDashboardLoading(false), 300); // Reduced timeout for faster rendering
+      // navigate('/dashboard'); // If using navigate hook
+      setTimeout(() => setDashboardLoading(false), 300);
     } else {
       setAuthModalMode('login');
       setShowAuthModal(true);
@@ -281,123 +220,104 @@ function AppContent() {
     setShowAuthModal(true);
   };
 
-  const handleShowPricing = () => {
-    setCurrentView('pricing');
-  };
+  // --- MODIFIED: handlePlanSelect ---
+  const handlePlanSelect = (plan: 'free' | 'core' | 'pro' | 'agency') => {
+    setSelectedPlan(plan); // Store the selected plan for potential future use (e.g., in BillingModal)
 
-  const handlePlanSelect = async (plan: 'free' | 'core' | 'pro' | 'agency') => {
-    setSelectedPlan(plan);
     if (user) {
-      if (plan === 'free') {
-        // User is logged in and selected free plan
-        setUserPlan(plan);
-        setShowOnboarding(true);
-      } else {
-        // For paid plans, redirect to LemonSqueezy checkout
-        try {
-          const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(plan, user);
-          if (checkoutUrl) {
-            window.location.href = checkoutUrl;
-          } else {
-            addToast({
-              id: `checkout-error-${Date.now()}`,
-              type: 'error',
-              title: 'Checkout Error',
-              message: 'Failed to create checkout. Please try again.',
-              duration: 5000,
-              onClose: () => {}
-            });
-          }
-        } catch (err) {
-          console.error('Error creating checkout:', err);
-          addToast({
-            id: `checkout-error-${Date.now()}`,
-            type: 'error',
-            title: 'Checkout Error',
-            message: 'An error occurred while setting up the checkout process.',
-            duration: 5000,
-            onClose: () => {}
+      // User is logged in
+      if (plan !== 'free' && userPlan === 'free') {
+        // Logged in free user wants to upgrade
+        console.log(`Logged in user wants to upgrade to ${plan}, showing billing modal.`);
+        setBillingModalPurpose('upgrade');
+        setShowBillingModal(true);
+      } else if (plan === 'free' && userPlan !== 'free') {
+        // Logged in paid user clicked 'free' plan. This case might imply a downgrade intent,
+        // or just clicking around. For now, assume if they are already paid and onboarding is done, go to dashboard.
+        // Downgrade logic should ideally be initiated from a 'manage subscription' flow.
+        if (user) { // Re-check if user exists, for type safety
+          fetchUserProfile(user.id).then(({ onboardingCompleted }) => {
+            if (onboardingCompleted) {
+              setCurrentView('dashboard');
+              // navigate('/dashboard'); // If using navigate hook
+            } else {
+              setShowOnboarding(true);
+            }
           });
+        }
+      } else {
+        // User logged in, selected free plan (and is free), or already on selected paid plan.
+        // Proceed to onboarding/dashboard based on onboarding status.
+        console.log(`User already has ${plan} or selected free plan, checking onboarding status.`);
+        if (user) { // Re-check if user exists
+            fetchUserProfile(user.id).then(({ onboardingCompleted }) => {
+                if (onboardingCompleted) {
+                    setCurrentView('dashboard');
+                    // navigate('/dashboard'); // If using navigate hook
+                } else {
+                    setShowOnboarding(true);
+                }
+            });
         }
       }
     } else {
       // User not logged in, show signup first
+      console.log(`User not logged in, selected ${plan}, showing signup modal.`);
       setAuthModalMode('signup');
       setShowAuthModal(true);
+      // BillingModal will be shown after successful signup in handleAuthSuccess if a paid plan was selected
     }
   };
-  
+  // ------------------------------------
+
+  // --- MODIFIED: handleAuthSuccess ---
   const handleAuthSuccess = async () => {
     console.log('Auth success handler called');
-    setShowAuthModal(false);
-    setAuthError(null);
-    
-    // Get current session to ensure we have the latest user data
+    setShowAuthModal(false); // Close the AuthModal
+    setAuthError(null); // Clear any auth error
+
     const { data: { session }, error } = await supabase.auth.getSession();
-    
-    if (error) {
-      console.error('Error getting session after auth success:', error);
-      setAuthError('Failed to get session: ' + error.message);
+
+    if (error || !session?.user) {
+      console.error('Error or no user in session after auth success:', error);
+      setAuthError('Authentication succeeded but no user was found: ' + (error?.message || ''));
       return;
     }
-    
-    if (!session?.user) {
-      console.error('No user in session after auth success');
-      setAuthError('Authentication succeeded but no user was found');
-      return;
-    }
-    
-    // Set user from session
+
     console.log('Setting user after auth success:', session.user.id);
     setUser(session.user);
-    
-    // Fetch user profile to get plan - use a separate function to avoid nesting
-    try {
-      const { data: profiles, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1);
-      
-      if (profileError) {
-        console.error('Error fetching profile after auth success:', profileError);
-        // Continue with the flow using defaults
-      }
-        
-      if (profiles && profiles.length > 0) {
-        console.log('User profile found after auth success:', profiles[0].id);
-        setUserPlan(profiles[0].plan as any || 'free');
-        
-        // If onboarding is already completed, go directly to dashboard
-        if (profiles[0].onboarding_completed_at) {
-          console.log('Onboarding already completed, going to dashboard');
-          setCurrentView('dashboard');
-          return;
-        }
-      }
-    } catch (profileError) {
-      console.error('Error in profile fetch after auth success:', profileError);
-      // Continue with the flow using defaults
+
+    // Fetch the user's profile to get their *current* plan and onboarding status from the DB
+    const { plan: currentProfilePlan, onboardingCompleted } = await fetchUserProfile(session.user.id);
+
+    // NEW LOGIC FOR PAID PLAN CHECKOUT AFTER SIGNUP
+    // This condition is true if:
+    // 1. The user just completed a 'signup' via AuthModal.
+    // 2. They had previously selected a paid plan on the landing page (`selectedPlan` is not 'free').
+    // 3. Their current plan in the database is still 'free' (meaning they haven't paid yet).
+    if (authModalMode === 'signup' && selectedPlan !== 'free' && currentProfilePlan === 'free') {
+      console.log(`New signup for paid plan (${selectedPlan}), showing billing modal for payment.`);
+      setBillingModalPurpose('signup_upsell'); // Indicate this is for new signup upsell
+      setShowBillingModal(true);
+      return; // IMPORTANT: Stop the function here. BillingModal takes precedence over onboarding for paid signups.
     }
-    
-    // Now proceed with the flow
-    if (authModalMode === 'signup') {
-      console.log('Showing onboarding for new signup');
-      setUserPlan(selectedPlan);
-      setShowOnboarding(true);
-    } else {
-      // For login, check if they need onboarding (determined above)
-      console.log('Going to dashboard for login');
+
+    // Existing logic for onboarding or dashboard (for free signups or existing logins)
+    if (onboardingCompleted) {
+      console.log('Onboarding already completed, going to dashboard');
       setCurrentView('dashboard');
+      // navigate('/dashboard'); // If using navigate hook
+    } else {
+      console.log('Showing onboarding for new signup (if free plan) or existing login (if onboarding incomplete)');
+      setShowOnboarding(true);
     }
   };
+  // ------------------------------------
 
   const handleOnboardingComplete = async () => {
     console.log('Onboarding completed in App.tsx');
     setShowOnboarding(false);
-    
-    // Update user profile with selected plan if needed
+
     if (user) {
       try {
         const { data: existingProfiles, error } = await supabase
@@ -406,39 +326,37 @@ function AppContent() {
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(1);
-          
+
         if (error) {
           console.error('Error checking for existing profiles:', error);
         }
-          
+
         if (existingProfiles && existingProfiles.length > 0) {
-          // Update existing profile
-          console.log('Updating existing profile:', existingProfiles[0].id);
+          console.log('Updating existing profile with onboarding_completed_at:', existingProfiles[0].id);
           const { error: updateError } = await supabase
             .from('user_profiles')
-            .update({ 
-              plan: userPlan,
+            .update({
               onboarding_completed_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
             .eq('id', existingProfiles[0].id);
-            
+
           if (updateError) {
             console.error('Error updating profile after onboarding:', updateError);
           }
         } else {
-          // Create new profile if none exists
-          console.log('Creating new profile for user:', user.id);
+          // This case should ideally not happen if user profile is created on signup, but as fallback
+          console.log('Creating new profile with onboarding_completed_at for user:', user.id);
           const { error: insertError } = await supabase
             .from('user_profiles')
             .insert({
               user_id: user.id,
-              plan: userPlan,
+              plan: userPlan, // Use the current userPlan state (could be free or paid if they just paid)
               onboarding_completed_at: new Date().toISOString(),
               websites: [],
               competitors: []
             });
-            
+
           if (insertError) {
             console.error('Error creating profile after onboarding:', insertError);
           }
@@ -447,48 +365,75 @@ function AppContent() {
         console.error('Error updating user profile after onboarding:', error);
       }
     }
-    
-    // Set the walkthrough trigger flag BEFORE navigating to dashboard
-    localStorage.setItem('seogenix_immediate_walkthrough', 'true');
-    
-    // Navigate to dashboard
+
+    localStorage.setItem('seogenix_immediate_walkthrough', 'true'); // Trigger dashboard walkthrough
     setCurrentView('dashboard');
+    // navigate('/dashboard'); // If using navigate hook
   };
+
+  // --- NEW: handleBillingModalComplete ---
+  // This function is called when the BillingModal is closed, or after a presumed successful payment.
+  // It ensures the app's state reflects the latest user plan and directs the user to the next appropriate step.
+  const handleBillingModalComplete = async (paymentSuccessful: boolean = false) => {
+    setShowBillingModal(false); // Close the billing modal
+    console.log('Billing modal closed, paymentSuccessful:', paymentSuccessful);
+
+    if (user) {
+      // Always re-fetch the user's profile to get the latest plan status from the database.
+      // This is crucial because Lemon Squeezy payment confirmation usually updates your DB via webhooks.
+      const { plan: updatedPlan, onboardingCompleted } = await fetchUserProfile(user.id);
+
+      // Determine the next step based on the updated plan and onboarding status
+      if (updatedPlan !== 'free' && !onboardingCompleted) {
+        // If the user is now on a paid plan but hasn't completed onboarding, show onboarding.
+        console.log('Paid plan activated, showing onboarding after payment.');
+        setShowOnboarding(true);
+      } else {
+        // If the user is on a free plan, or already paid and onboarded, or just completed onboarding.
+        // In most cases, they should now go to the dashboard.
+        console.log('Navigating to dashboard after billing modal interaction.');
+        setCurrentView('dashboard');
+        // navigate('/dashboard'); // If using navigate hook
+      }
+    } else {
+      // If user somehow gets here without a session (e.g., session expired), revert to landing page.
+      setCurrentView('landing');
+      // navigate('/'); // If using navigate hook
+    }
+  };
+  // ------------------------------------
 
   const handleSignOut = async () => {
     console.log('Signing out user');
     try {
       setLoading(true);
-      
-      // First, clean up local storage
+
+      // Clear relevant localStorage items for a clean sign-out
       localStorage.removeItem('seogenix_walkthrough_completed');
       localStorage.removeItem('seogenix_immediate_walkthrough');
       localStorage.removeItem('seogenix_tools_run');
       localStorage.removeItem('seogenix_onboarding');
       localStorage.removeItem('seogenix-auth-token');
-      
-      // Perform the sign out
+
       const { error } = await supabase.auth.signOut({ scope: 'global' });
       if (error) {
         console.error('Error during sign out:', error);
         throw error;
       }
-      
+
       console.log('Sign out successful');
-      
-      // Ensure state is reset
+      // Reset all relevant states
       setUser(null);
       setCurrentView('landing');
       setSelectedPlan('free');
       setUserPlan('free');
       setShowOnboarding(false);
       setShowAuthModal(false);
-      
-      // Reset auth initialization state
-      authInitializedRef.current = false;
-      
-      // Force reload the page to clear any lingering state
-      window.location.reload();
+      setShowBillingModal(false); // Clear billing modal state on sign out
+      setAuthError(null);
+
+      authInitializedRef.current = false; // Reset auth initialization to re-run on next load
+      window.location.reload(); // Force reload to ensure all state is cleared and re-initialized cleanly
     } catch (error) {
       console.error('Error signing out:', error);
       alert('There was a problem signing out. Please try again or refresh the page.');
@@ -497,7 +442,7 @@ function AppContent() {
     }
   };
 
-  // Don't render anything until auth is initialized to prevent flashing
+  // Render initial loading/authentication state to prevent flashing content
   if (!authInitialized) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -512,6 +457,7 @@ function AppContent() {
     );
   }
 
+  // Render general loading state after authentication initialization
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -526,6 +472,7 @@ function AppContent() {
     );
   }
 
+  // Render dashboard specific loading state
   if (dashboardLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -538,61 +485,79 @@ function AppContent() {
   }
 
   return (
-    <WhiteLabelProvider user={user}>
-      <div className="min-h-screen bg-white">
-        <Routes>
-          <Route path="/" element={
-            currentView === 'landing' || currentView === 'pricing' ? (
-              <LandingPage 
-                onNavigateToDashboard={handleNavigateToDashboard}
-                onPlanSelect={handlePlanSelect}
-                user={user}
-                onShowSignup={handleShowSignup}
-                onShowLogin={handleShowLogin}
-                onSignOut={handleSignOut}
-                initialView={currentView}
-                onNavigateToLanding={() => setCurrentView('landing')}
-              />
-            ) : (
-              <Dashboard 
-                userPlan={userPlan}
-                onNavigateToLanding={() => setCurrentView('landing')}
-                user={user}
-                onSignOut={handleSignOut}
-              />
-            )
-          } />
-          <Route path="/integrations" element={<Integrations />} />
-          <Route path="/help-center" element={<HelpCenter />} />
-          <Route path="/documentation" element={<Documentation />} />
-          <Route path="/contact-us" element={<ContactUs />} />
-          <Route path="/status" element={<Status />} />
-          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-          <Route path="/terms-of-service" element={<TermsOfService />} />
-          <Route path="/cookie-policy" element={<CookiePolicy />} />
-        </Routes>
+    <Router>
+      <WhiteLabelProvider user={user}>
+        <div className="min-h-screen bg-white">
+          <Routes>
+            <Route path="/" element={
+              // Conditionally render LandingPage or Dashboard on the root route
+              currentView === 'landing' || currentView === 'pricing' ? (
+                <LandingPage
+                  onNavigateToDashboard={handleNavigateToDashboard}
+                  onPlanSelect={handlePlanSelect}
+                  user={user}
+                  onShowSignup={handleShowSignup}
+                  onShowLogin={handleShowLogin}
+                  onSignOut={handleSignOut}
+                  initialView={currentView}
+                  onNavigateToLanding={() => setCurrentView('landing')}
+                />
+              ) : (
+                <Dashboard
+                  userPlan={userPlan}
+                  onNavigateToLanding={() => setCurrentView('landing')}
+                  user={user}
+                  onSignOut={handleSignOut}
+                  // Allow Dashboard to trigger BillingModal for subscription management
+                  onShowBillingModal={() => { setBillingModalPurpose('manage'); setShowBillingModal(true); }}
+                />
+              )
+            } />
+            {/* Define other static routes */}
+            <Route path="/integrations" element={<Integrations />} />
+            <Route path="/help-center" element={<HelpCenter />} />
+            <Route path="/documentation" element={<Documentation />} />
+            <Route path="/contact-us" element={<ContactUs />} />
+            <Route path="/status" element={<Status />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
+            <Route path="/cookie-policy" element={<CookiePolicy />} />
+          </Routes>
 
-        {showAuthModal && (
-          <AuthModal
-            onClose={() => setShowAuthModal(false)}
-            onSuccess={handleAuthSuccess}
-            initialMode={authModalMode}
-            selectedPlan={selectedPlan}
-          />
-        )}
+          {/* Conditional rendering for AuthModal */}
+          {showAuthModal && (
+            <AuthModal
+              onClose={() => setShowAuthModal(false)}
+              onSuccess={handleAuthSuccess}
+              initialMode={authModalMode}
+              selectedPlan={selectedPlan} // <-- IMPORTANT: Pass selectedPlan to AuthModal
+            />
+          )}
 
-        {showOnboarding && user && (
-          <OnboardingModal
-            userPlan={userPlan}
-            onComplete={handleOnboardingComplete}
-            onClose={() => setShowOnboarding(false)}
-          />
-        )}
-        
-        {/* Toast Notifications */}
-        <ToastContainer toasts={toasts} onRemoveToast={removeToast} />
-      </div>
-    </WhiteLabelProvider>
+          {/* Conditional rendering for OnboardingModal */}
+          {showOnboarding && user && ( // Only show if user is logged in
+            <OnboardingModal
+              userPlan={userPlan}
+              onComplete={handleOnboardingComplete}
+              onClose={() => setShowOnboarding(false)}
+            />
+          )}
+
+          {/* --- NEW: Conditional rendering for BillingModal --- */}
+          {showBillingModal && user && ( // Only show if user is logged in
+            <BillingModal
+              user={user}
+              userPlan={userPlan} // Current plan from App state (from DB)
+              initialSelectedPlan={selectedPlan} // The plan the user just selected or wants
+              purpose={billingModalPurpose} // 'signup_upsell', 'upgrade', or 'manage'
+              onClose={() => handleBillingModalComplete(false)} // Call handler on close (payment not confirmed)
+              onSuccess={() => handleBillingModalComplete(true)} // Call handler on presumed successful payment
+            />
+          )}
+          {/* ------------------------------------------------ */}
+        </div>
+      </WhiteLabelProvider>
+    </Router>
   );
 }
 
