@@ -123,12 +123,12 @@ function App() {
             setCurrentView('dashboard');
             // Ensure billing modal is not shown if user is on free plan and already onboarded
             if (currentPlanFromProfile === 'free') {
-                setShowBillingModal(false); // [!code ++]
+                setShowBillingModal(false);
             }
           } else {
             console.log('Onboarding not completed, showing onboarding modal');
             setShowOnboarding(true);
-            setShowBillingModal(false); // [!code ++] // Ensure billing modal is not shown if showing onboarding
+            setShowBillingModal(false); // Ensure billing modal is not shown if showing onboarding
           }
         } else {
           console.log('No user in session, staying on landing page');
@@ -168,12 +168,14 @@ function App() {
             if (onboardingCompleted) {
               setCurrentView('dashboard');
               if (currentPlanFromProfile === 'free') {
-                  setShowBillingModal(false); // [!code ++]
+                  setShowBillingModal(false);
               }
             } else {
               setShowOnboarding(true);
-              setShowBillingModal(false); // [!code ++] // Ensure billing modal is not shown if showing onboarding
+              setShowBillingModal(false);
             }
+            setLoading(false); // [!code ++]
+            setAuthInitialized(true); // [!code ++]
           }
         } else if (event === 'SIGNED_OUT') {
           console.log('User signed out, clearing user state');
@@ -183,6 +185,7 @@ function App() {
           setShowOnboarding(false);
           setShowBillingModal(false); // Clear billing modal state on sign out
           setLoading(false);
+          setAuthInitialized(true); // [!code ++] // Also ensure it's set to true on sign out
           // navigate('/'); // If using navigate hook
         } else if (event === 'INITIAL_SESSION') {
           setLoading(false);
@@ -321,7 +324,7 @@ function App() {
   const handleOnboardingComplete = async () => {
     console.log('Onboarding completed in App.tsx');
     setShowOnboarding(false);
-    setShowBillingModal(false); // [!code ++] // Crucial: Ensure billing modal is hidden after onboarding
+    setShowBillingModal(false); // Crucial: Ensure billing modal is hidden after onboarding
 
     if (user) {
       try {
@@ -376,7 +379,7 @@ function App() {
     // navigate('/dashboard'); // If using navigate hook
   };
 
-  // --- NEW: handleBillingModalComplete ---
+  // --- MODIFIED: handleBillingModalComplete ---
   // This function is called when the BillingModal is closed, or after a presumed successful payment.
   // It ensures the app's state reflects the latest user plan and directs the user to the next appropriate step.
   const handleBillingModalComplete = async (paymentSuccessful: boolean = false) => {
@@ -393,10 +396,10 @@ function App() {
         // If the user is now on a paid plan (payment successful) AND hasn't completed onboarding, show onboarding.
         console.log('Paid plan activated, showing onboarding after payment.');
         setShowOnboarding(true);
-      } else if (updatedPlan === 'free' && !onboardingCompleted) { // [!code ++]
-        // If the user is still on a free plan (payment cancelled/failed) AND hasn't completed onboarding, show onboarding. // [!code ++]
-        console.log('Still on free plan, showing onboarding.'); // [!code ++]
-        setShowOnboarding(true); // [!code ++]
+      } else if (updatedPlan === 'free' && !onboardingCompleted) {
+        // If the user is still on a free plan (payment cancelled/failed) AND hasn't completed onboarding, show onboarding.
+        console.log('Still on free plan, showing onboarding.');
+        setShowOnboarding(true);
       } else {
         // In all other cases:
         // - If the user is on a free plan AND already onboarded.
@@ -541,7 +544,7 @@ function App() {
               onClose={() => setShowAuthModal(false)}
               onSuccess={handleAuthSuccess}
               initialMode={authModalMode}
-              selectedPlan={selectedPlan} // <-- IMPORTANT: Pass selectedPlan to AuthModal
+              selectedPlan={selectedPlan}
             />
           )}
 
