@@ -167,16 +167,14 @@ export const lemonsqueezyService = {
             type: 'checkouts',
             attributes: {
               custom_price: null,
-              product_options: [
-                {
-                  name: name || undefined,
-                  email: email || undefined,
-                  redirect_url: successUrl || undefined,
-                  receipt_link_url: successUrl || undefined,
-                  receipt_button_text: 'Return to Dashboard',
-                  receipt_thank_you_note: 'Thank you for your purchase!',
-                }
-              ],
+              product_options: {
+                name: name || undefined,
+                email: email || undefined,
+                redirect_url: successUrl || undefined,
+                receipt_link_url: successUrl || undefined,
+                receipt_button_text: 'Return to Dashboard',
+                receipt_thank_you_note: 'Thank you for your purchase!',
+              },
               checkout_options: {
                 embed: false,
                 media: true,
