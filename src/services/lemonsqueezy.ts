@@ -3,12 +3,27 @@ import { supabase } from '../lib/supabase';
 
 // Get API key and validate it exists
 const apiKey = import.meta.env.VITE_LEMONSQUEEZY_API_KEY;
+const storeId = import.meta.env.VITE_LEMONSQUEEZY_STORE_ID;
+
+// Log configuration status for debugging
+console.log('LemonSqueezy Configuration Status:');
+console.log(`- API Key present: ${!!apiKey}`);
+console.log(`- API Key is not placeholder: ${apiKey !== 'your_lemonsqueezy_api_key_here'}`);
+console.log(`- Store ID present: ${!!storeId}`);
+console.log(`- Store ID is not placeholder: ${storeId !== 'your_lemonsqueezy_store_id_here'}`);
 
 // Check if API key is properly configured (not placeholder or empty)
 const isApiKeyConfigured = apiKey && apiKey !== 'your_lemonsqueezy_api_key_here' && apiKey.trim() !== '';
+const isStoreIdConfigured = storeId && storeId !== 'your_lemonsqueezy_store_id_here' && storeId.trim() !== '';
+
+console.log(`LemonSqueezy fully configured: ${isApiKeyConfigured && isStoreIdConfigured}`);
 
 if (!isApiKeyConfigured) {
   console.warn('VITE_LEMONSQUEEZY_API_KEY is not properly configured. Payment processing will be unavailable.');
+}
+
+if (!isStoreIdConfigured) {
+  console.warn('VITE_LEMONSQUEEZY_STORE_ID is not properly configured. Payment processing will be unavailable.');
 }
 
 // Initialize LemonSqueezy with your API key - only if API key is properly configured
@@ -51,7 +66,7 @@ export const lemonsqueezyService = {
    * Check if LemonSqueezy is properly configured
    */
   isConfigured() {
-    return isApiKeyConfigured && lemonSqueezy !== null;
+    return isApiKeyConfigured && lemonSqueezy !== null && isStoreIdConfigured;
   },
 
   /**
@@ -98,6 +113,9 @@ export const lemonsqueezyService = {
       if (!variantId || variantId.includes('your_') || variantId.includes('_here')) {
         throw new Error(`Product variant ID is not properly configured for plan: ${planId}. Please configure the variant IDs in your .env file.`);
       }
+      
+      console.log(`Creating checkout for plan ${planId} with variant ID ${variantId}`);
+      console.log(`Store ID: ${STORE_ID}`);
       
       // Create a checkout
       const { data: checkout } = await lemonSqueezy!.checkouts.create({
@@ -205,6 +223,11 @@ export const lemonsqueezyService = {
         throw new Error(`No variant ID found for plan: ${plan} (${billingCycle}). Please configure VITE_LEMONSQUEEZY_${plan.toUpperCase()}_${billingCycle.toUpperCase()}_VARIANT_ID in your .env file.`);
       }
       
+      console.log(`Creating checkout for ${plan} plan (${billingCycle} billing):`);
+      console.log(`- User: ${user?.email}`);
+      console.log(`- Variant ID: ${variantId}`);
+      console.log(`- Store ID: ${STORE_ID}`);
+      
       // Create checkout
       const checkout = await this.createCheckout({
         name: user?.user_metadata?.full_name,
@@ -214,6 +237,12 @@ export const lemonsqueezyService = {
         successUrl: `${window.location.origin}/dashboard?checkout_success=true&plan=${plan}`,
         cancelUrl: `${window.location.origin}/?checkout_cancelled=true`
       });
+      
+      if (checkout?.data?.attributes?.url) {
+        console.log(`Checkout URL generated successfully: ${checkout.data.attributes.url.substring(0, 50)}...`);
+      } else {
+        console.error('Failed to generate checkout URL - checkout response:', checkout);
+      }
       
       return checkout?.data?.attributes?.url;
     } catch (error) {
@@ -235,7 +264,7 @@ export const lemonsqueezyService = {
       if (!eventName || !eventData) {
         throw new Error('Invalid webhook payload');
       }
-      
+
       console.log(`Processing LemonSqueezy webhook: ${eventName}`);
       
       switch (eventName) {
@@ -262,21 +291,25 @@ export const lemonsqueezyService = {
           const subscriptionId = eventData.id;
           if (!subscriptionId) break;
           
-          const { data: subProfiles } = await supabase
+          const { data: cancelledProfiles } = await supabase
             .from('user_profiles')
             .select('user_id')
             .eq('lemonsqueezy_subscription_id', subscriptionId);
           
-          if (subProfiles && subProfiles.length > 0) {
-            await supabase
+          if (cancelledProfiles && cancelledProfiles.length > 0) {
+            const { error: updateError } = await supabase
               .from('user_profiles')
               .update({
                 subscription_status: 'cancelled',
                 subscription_updated_at: new Date().toISOString()
               })
               .eq('lemonsqueezy_subscription_id', subscriptionId);
-              
-            // Don't downgrade plan immediately - it will happen when subscription actually ends
+            
+            if (updateError) {
+              throw updateError;
+            }
+            
+            console.log(`Marked subscription ${subscriptionId} as cancelled`);
           }
           break;
           
