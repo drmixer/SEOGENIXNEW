@@ -383,9 +383,34 @@ function AppContent() {
     
     // Now proceed with the flow
     if (authModalMode === 'signup') {
-      console.log('Showing onboarding for new signup');
-      setUserPlan(selectedPlan);
-      setShowOnboarding(true);
+      console.log('Signup successful, checking for selected plan');
+      
+      // If a paid plan was selected, redirect to checkout
+      if (selectedPlan !== 'free') {
+        try {
+          console.log('Redirecting to checkout for plan:', selectedPlan);
+          const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(selectedPlan, session.user);
+          if (checkoutUrl) {
+            window.location.href = checkoutUrl;
+            return; // Stop execution here as we're redirecting
+          } else {
+            console.error('Failed to create checkout URL');
+            // Fall back to free plan if checkout creation fails
+            setUserPlan('free');
+            setShowOnboarding(true);
+          }
+        } catch (err) {
+          console.error('Error creating checkout:', err);
+          // Fall back to free plan if checkout creation fails
+          setUserPlan('free');
+          setShowOnboarding(true);
+        }
+      } else {
+        // For free plan, proceed to onboarding
+        console.log('Showing onboarding for new signup with free plan');
+        setUserPlan('free');
+        setShowOnboarding(true);
+      }
     } else {
       // For login, check if they need onboarding (determined above)
       console.log('Going to dashboard for login');
