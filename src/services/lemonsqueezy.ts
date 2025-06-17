@@ -157,7 +157,7 @@ export const lemonsqueezyService = {
       
       const variantId = variantMap[billingCycle][plan];
       if (!variantId) {
-        throw new Error(`No variant ID found for plan: ${plan} (${billingCycle})`);
+        throw new Error(`No variant ID found for plan: ${plan} (${billingCycle}). Please configure VITE_LEMONSQUEEZY_${plan.toUpperCase()}_${billingCycle.toUpperCase()}_VARIANT_ID in your .env file.`);
       }
       
       // Create checkout
