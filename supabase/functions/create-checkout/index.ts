@@ -113,8 +113,8 @@ Deno.serve(async (req: Request) => {
             subscription_preview: true,
             button_color: '#8B5CF6'
           },
-          // CRITICAL FIX: checkout_data should be an object, not an array
-          checkout_data: checkoutData,
+          // FIXED: checkout_data must be an array, not an object
+          checkout_data: [checkoutData],
           expires_at: null
         },
         relationships: {
