@@ -171,15 +171,18 @@ export const lemonsqueezyService = {
               subscription_preview: true,
               button_color: '#8B5CF6'
             },
-            checkout_data: {
-              name: name || undefined,
-              email: email || undefined,
-              custom: {
-                plan: planId
-              },
-              redirect_url: successUrl || undefined,
-              cancel_url: cancelUrl || undefined
-            },
+            // The key fix: checkout_data must be an array, not an object
+            checkout_data: [
+              {
+                name: name || undefined,
+                email: email || undefined,
+                custom: {
+                  plan: planId
+                },
+                redirect_url: successUrl || undefined,
+                cancel_url: cancelUrl || undefined
+              }
+            ],
             expires_at: null
           },
           relationships: {
