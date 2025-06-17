@@ -56,13 +56,13 @@ const BillingModal: React.FC<BillingModalProps> = ({
     userId: string
   ): Promise<string> => {
     try {
-      // Replace 'YOUR_SUPABASE_CHECKOUT_EDGE_FUNCTION_URL' with the actual URL of your deployed Edge Function.
-      // E.g., https://[your-project-ref].supabase.co/functions/v1/generate-checkout-url
-      const response = await fetch('YOUR_SUPABASE_CHECKOUT_EDGE_FUNCTION_URL', {
+      // UPDATED WITH YOUR CHECKOUT EDGE FUNCTION URL
+      const CHECKOUT_EDGE_FUNCTION_URL = 'https://anuexdfqfiibzzmspewa.supabase.co/functions/v1/generate-checkout-url';
+
+      const response = await fetch(CHECKOUT_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // It's good practice to send the user's JWT for authentication/authorization in your Edge Function
           'Authorization': `Bearer ${user.id}` // Use user.id or a proper JWT from Supabase auth.getSession()
         },
         body: JSON.stringify({
@@ -170,9 +170,10 @@ const BillingModal: React.FC<BillingModalProps> = ({
               setLoading(true);
               setError(null);
               try {
-                // --- IMPORTANT: Replace 'YOUR_SUPABASE_BILLING_PORTAL_EDGE_FUNCTION_URL' with your deployed Edge Function URL ---
-                // E.g., https://[your-project-ref].supabase.co/functions/v1/generate-portal-url
-                const response = await fetch(`YOUR_SUPABASE_BILLING_PORTAL_EDGE_FUNCTION_URL?userId=${user.id}`);
+                // UPDATED WITH YOUR BILLING PORTAL EDGE FUNCTION URL
+                const BILLING_PORTAL_EDGE_FUNCTION_URL = 'https://anuexdfqfiibzzmspewa.supabase.co/functions/v1/generate-portal-url';
+
+                const response = await fetch(`${BILLING_PORTAL_EDGE_FUNCTION_URL}?userId=${user.id}`);
                 const data = await response.json();
                 if (response.ok && data.portalUrl) {
                   window.open(data.portalUrl, '_blank');
