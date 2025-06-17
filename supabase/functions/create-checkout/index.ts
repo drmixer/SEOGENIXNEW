@@ -85,6 +85,17 @@ Deno.serve(async (req: Request) => {
     console.log(`- Variant ID: ${variantId}`);
     console.log(`- Store ID: ${storeId}`);
 
+    // Create checkout data object
+    const checkoutData = {
+      name: name || user.user_metadata?.full_name,
+      email: email || user.email,
+      custom: {
+        plan: plan
+      },
+      redirect_url: successUrl || `${req.headers.get('Origin')}/dashboard?checkout_success=true&plan=${plan}`,
+      cancel_url: cancelUrl || `${req.headers.get('Origin')}/?checkout_cancelled=true`
+    };
+
     // Create checkout using LemonSqueezy API
     const payload = {
       data: {
@@ -102,18 +113,8 @@ Deno.serve(async (req: Request) => {
             subscription_preview: true,
             button_color: '#8B5CF6'
           },
-          // IMPORTANT: checkout_data must be an array containing a single object
-          checkout_data: [
-            {
-              name: name || user.user_metadata?.full_name,
-              email: email || user.email,
-              custom: {
-                plan: plan
-              },
-              redirect_url: successUrl || `${req.headers.get('Origin')}/dashboard?checkout_success=true&plan=${plan}`,
-              cancel_url: cancelUrl || `${req.headers.get('Origin')}/?checkout_cancelled=true`
-            }
-          ],
+          // CRITICAL FIX: checkout_data should be an object, not an array
+          checkout_data: checkoutData,
           expires_at: null
         },
         relationships: {
@@ -133,6 +134,7 @@ Deno.serve(async (req: Request) => {
       }
     };
 
+    // Log the exact payload being sent
     console.log('Sending payload to LemonSqueezy:', JSON.stringify(payload, null, 2));
 
     const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
@@ -145,13 +147,17 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify(payload)
     });
 
+    // Log the raw response for debugging
+    const responseText = await response.text();
+    console.log(`LemonSqueezy API response status: ${response.status}`);
+    console.log(`LemonSqueezy API response body: ${responseText}`);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('LemonSqueezy API error:', errorText);
-      throw new Error(`LemonSqueezy API error: ${errorText}`);
+      throw new Error(`LemonSqueezy API error: ${responseText}`);
     }
 
-    const checkout = await response.json();
+    // Parse the response text back to JSON
+    const checkout = JSON.parse(responseText);
     console.log('Checkout created successfully');
 
     return new Response(
