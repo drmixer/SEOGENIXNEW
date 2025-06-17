@@ -179,6 +179,11 @@ export const lemonsqueezyService = {
    */
   async getCheckoutUrl(plan: 'core' | 'pro' | 'agency', user: any, billingCycle: 'monthly' | 'annual' = 'monthly') {
     try {
+      // Check if LemonSqueezy is configured before proceeding
+      if (!this.isConfigured()) {
+        throw new Error('Payment processing is not available. LemonSqueezy integration is not properly configured.');
+      }
+
       validateLemonSqueezyConfig();
 
       // Map plans to variant IDs based on billing cycle

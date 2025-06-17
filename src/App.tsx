@@ -293,6 +293,19 @@ function AppContent() {
         setUserPlan(plan);
         setShowOnboarding(true);
       } else {
+        // For paid plans, check if LemonSqueezy is configured first
+        if (!lemonsqueezyService.isConfigured()) {
+          addToast({
+            id: `payment-unavailable-${Date.now()}`,
+            type: 'error',
+            title: 'Payment Processing Unavailable',
+            message: 'Payment processing is currently not available. Please contact support or try the free plan.',
+            duration: 8000,
+            onClose: () => {}
+          });
+          return;
+        }
+
         // For paid plans, redirect to LemonSqueezy checkout
         try {
           const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(plan, user);
@@ -310,12 +323,13 @@ function AppContent() {
           }
         } catch (err) {
           console.error('Error creating checkout:', err);
+          const errorMessage = err instanceof Error ? err.message : 'An error occurred while setting up the checkout process.';
           addToast({
             id: `checkout-error-${Date.now()}`,
             type: 'error',
             title: 'Checkout Error',
-            message: 'An error occurred while setting up the checkout process.',
-            duration: 5000,
+            message: errorMessage,
+            duration: 8000,
             onClose: () => {}
           });
         }
@@ -385,8 +399,23 @@ function AppContent() {
     if (authModalMode === 'signup') {
       console.log('Signup successful, checking for selected plan');
       
-      // If a paid plan was selected, redirect to checkout
+      // If a paid plan was selected, check if LemonSqueezy is configured
       if (selectedPlan !== 'free') {
+        if (!lemonsqueezyService.isConfigured()) {
+          console.log('LemonSqueezy not configured, falling back to free plan');
+          addToast({
+            id: `payment-unavailable-${Date.now()}`,
+            type: 'warning',
+            title: 'Payment Processing Unavailable',
+            message: 'Payment processing is currently not available. You\'ve been signed up for the free plan.',
+            duration: 8000,
+            onClose: () => {}
+          });
+          setUserPlan('free');
+          setShowOnboarding(true);
+          return;
+        }
+
         try {
           console.log('Redirecting to checkout for plan:', selectedPlan);
           const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(selectedPlan, session.user);
@@ -401,6 +430,15 @@ function AppContent() {
           }
         } catch (err) {
           console.error('Error creating checkout:', err);
+          const errorMessage = err instanceof Error ? err.message : 'An error occurred while setting up the checkout process.';
+          addToast({
+            id: `checkout-error-${Date.now()}`,
+            type: 'error',
+            title: 'Checkout Error',
+            message: errorMessage,
+            duration: 8000,
+            onClose: () => {}
+          });
           // Fall back to free plan if checkout creation fails
           setUserPlan('free');
           setShowOnboarding(true);
