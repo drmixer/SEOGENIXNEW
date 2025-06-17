@@ -155,6 +155,52 @@ export const lemonsqueezyService = {
       console.log(`Store ID: ${STORE_ID}`);
       
       // Create a checkout using the REST API directly with the correct JSON:API format
+      const payload = {
+        data: {
+          type: 'checkouts',
+          attributes: {
+            custom_price: null,
+            product_options: [], // Empty array as required by the API
+            checkout_options: {
+              embed: false,
+              media: true,
+              logo: true,
+              desc: true,
+              discount: true,
+              dark: false,
+              subscription_preview: true,
+              button_color: '#8B5CF6'
+            },
+            checkout_data: {
+              name: name || undefined,
+              email: email || undefined,
+              custom: {
+                plan: planId
+              },
+              redirect_url: successUrl || undefined,
+              cancel_url: cancelUrl || undefined
+            },
+            expires_at: null
+          },
+          relationships: {
+            store: {
+              data: {
+                type: 'stores',
+                id: STORE_ID
+              }
+            },
+            variant: {
+              data: {
+                type: 'variants',
+                id: variantId
+              }
+            }
+          }
+        }
+      };
+      
+      console.log('Sending Lemon Squeezy checkout payload:', JSON.stringify(payload, null, 2));
+      
       const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
         method: 'POST',
         headers: {
@@ -162,54 +208,7 @@ export const lemonsqueezyService = {
           'Content-Type': 'application/vnd.api+json',
           'Authorization': `Bearer ${apiKey}`
         },
-        body: JSON.stringify({
-          data: {
-            type: 'checkouts',
-            attributes: {
-              custom_price: null,
-              product_options: [
-                {
-                  name: name || undefined,
-                  email: email || undefined,
-                  redirect_url: successUrl || undefined,
-                  receipt_link_url: successUrl || undefined,
-                  receipt_button_text: 'Return to Dashboard',
-                  receipt_thank_you_note: 'Thank you for your purchase!',
-                }
-              ],
-              checkout_options: {
-                embed: false,
-                media: true,
-                logo: true,
-                desc: true,
-                discount: true,
-                dark: false,
-                subscription_preview: true,
-                button_color: '#8B5CF6'
-              },
-              checkout_data: {
-                custom: {
-                  plan: planId
-                }
-              },
-              expires_at: null
-            },
-            relationships: {
-              store: {
-                data: {
-                  type: 'stores',
-                  id: STORE_ID
-                }
-              },
-              variant: {
-                data: {
-                  type: 'variants',
-                  id: variantId
-                }
-              }
-            }
-          }
-        })
+        body: JSON.stringify(payload)
       });
       
       if (!response.ok) {
