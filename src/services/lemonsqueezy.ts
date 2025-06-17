@@ -60,22 +60,6 @@ export interface CheckoutOptions {
   cancelUrl?: string;
 }
 
-// Helper function to check if LemonSqueezy is properly configured
-const validateLemonSqueezyConfig = () => {
-  if (!lemonSqueezy) {
-    throw new Error('LemonSqueezy is not properly configured. Please ensure VITE_LEMONSQUEEZY_API_KEY is set to your actual API key in your .env file, then restart the development server.');
-  }
-  
-  if (!STORE_ID || STORE_ID === 'your_lemonsqueezy_store_id_here') {
-    throw new Error('LemonSqueezy Store ID is not properly configured. Please set VITE_LEMONSQUEEZY_STORE_ID in your .env file.');
-  }
-
-  // Additional check to ensure the lemonSqueezy object has the required methods
-  if (!lemonSqueezy.checkouts || typeof lemonSqueezy.checkouts.create !== 'function') {
-    throw new Error('LemonSqueezy API client is not properly initialized. The checkouts service is not available.');
-  }
-};
-
 export const lemonsqueezyService = {
   /**
    * Check if LemonSqueezy is properly configured
@@ -86,14 +70,18 @@ export const lemonsqueezyService = {
     console.log('isApiKeyConfigured:', isApiKeyConfigured);
     console.log('isStoreIdConfigured:', isStoreIdConfigured);
     console.log('lemonSqueezy is null?', lemonSqueezy === null);
-    console.log('lemonSqueezy.checkouts exists?', lemonSqueezy?.checkouts ? 'Yes' : 'No');
-    console.log('lemonSqueezy.checkouts.create is a function?', lemonSqueezy?.checkouts?.create ? 'Yes' : 'No');
-    console.log('Final result:', isApiKeyConfigured && lemonSqueezy !== null && isStoreIdConfigured && 
-      lemonSqueezy?.checkouts && typeof lemonSqueezy?.checkouts?.create === 'function');
+    
+    // The issue is here - in the current version of the SDK, the structure might be different
+    // Let's check if the client exists at all first
+    const isClientValid = lemonSqueezy !== null;
+    console.log('LemonSqueezy client is valid?', isClientValid);
+    
+    // Final result
+    const result = isApiKeyConfigured && isStoreIdConfigured && isClientValid;
+    console.log('Final result:', result);
     console.log('----------------------------------------');
     
-    return isApiKeyConfigured && lemonSqueezy !== null && isStoreIdConfigured && 
-           lemonSqueezy.checkouts && typeof lemonSqueezy.checkouts.create === 'function';
+    return result;
   },
 
   /**
@@ -101,7 +89,10 @@ export const lemonsqueezyService = {
    */
   async getUserSubscription(userId: string) {
     try {
-      validateLemonSqueezyConfig();
+      if (!this.isConfigured()) {
+        console.error('LemonSqueezy is not configured');
+        return null;
+      }
 
       // Get user's customer ID from Supabase
       const { data: profile } = await supabase
@@ -115,16 +106,33 @@ export const lemonsqueezyService = {
       }
       
       // Get subscriptions for this customer
-      const { data: subscriptions } = await lemonSqueezy!.subscriptions.list({
-        filter: {
-          customerId: profile.lemonsqueezy_customer_id
-        }
-      });
+      if (!lemonSqueezy) {
+        console.error('LemonSqueezy client is not initialized');
+        return null;
+      }
       
-      return subscriptions?.data?.[0] || null;
+      try {
+        const response = await fetch(`https://api.lemonsqueezy.com/v1/subscriptions?filter[customer_id]=${profile.lemonsqueezy_customer_id}`, {
+          headers: {
+            'Accept': 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json',
+            'Authorization': `Bearer ${apiKey}`
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch subscriptions: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data.data[0] || null;
+      } catch (apiError) {
+        console.error('Error calling LemonSqueezy API:', apiError);
+        return null;
+      }
     } catch (error) {
       console.error('Error getting user subscription:', error);
-      throw error;
+      return null;
     }
   },
   
@@ -133,7 +141,9 @@ export const lemonsqueezyService = {
    */
   async createCheckout(options: CheckoutOptions) {
     try {
-      validateLemonSqueezyConfig();
+      if (!this.isConfigured()) {
+        throw new Error('LemonSqueezy is not configured');
+      }
 
       const { name, email, planId, variantId, successUrl, cancelUrl } = options;
       
@@ -144,21 +154,57 @@ export const lemonsqueezyService = {
       console.log(`Creating checkout for plan ${planId} with variant ID ${variantId}`);
       console.log(`Store ID: ${STORE_ID}`);
       
-      // Create a checkout
-      const { data: checkout } = await lemonSqueezy!.checkouts.create({
-        storeId: STORE_ID,
-        variantId,
-        checkoutData: {
-          name,
-          email,
-          custom: {
-            plan: planId
-          },
-          successUrl,
-          cancelUrl
-        }
+      // Create a checkout using the REST API directly
+      const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/vnd.api+json',
+          'Content-Type': 'application/vnd.api+json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'checkouts',
+            attributes: {
+              store_id: parseInt(STORE_ID),
+              variant_id: parseInt(variantId),
+              custom_price: null,
+              product_options: {
+                name: name || undefined,
+                email: email || undefined,
+                redirect_url: successUrl || undefined,
+                receipt_link_url: successUrl || undefined,
+                receipt_button_text: 'Return to Dashboard',
+                receipt_thank_you_note: 'Thank you for your purchase!',
+                enabled_variants: [parseInt(variantId)]
+              },
+              checkout_options: {
+                embed: false,
+                media: true,
+                logo: true,
+                desc: true,
+                discount: true,
+                dark: false,
+                subscription_preview: true,
+                button_color: '#8B5CF6'
+              },
+              checkout_data: {
+                custom: {
+                  plan: planId
+                }
+              },
+              expires_at: null
+            }
+          }
+        })
       });
       
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`Failed to create checkout: ${errorData}`);
+      }
+      
+      const checkout = await response.json();
       return checkout;
     } catch (error) {
       console.error('Error creating checkout:', error);
@@ -206,11 +252,32 @@ export const lemonsqueezyService = {
    */
   async cancelSubscription(subscriptionId: string) {
     try {
-      validateLemonSqueezyConfig();
+      if (!this.isConfigured()) {
+        throw new Error('LemonSqueezy is not configured');
+      }
 
-      await lemonSqueezy!.subscriptions.update(subscriptionId, {
-        cancelled: true
+      // Use the REST API to cancel the subscription
+      const response = await fetch(`https://api.lemonsqueezy.com/v1/subscriptions/${subscriptionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Accept': 'application/vnd.api+json',
+          'Content-Type': 'application/vnd.api+json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'subscriptions',
+            id: subscriptionId,
+            attributes: {
+              cancelled: true
+            }
+          }
+        })
       });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to cancel subscription: ${response.statusText}`);
+      }
       
       return true;
     } catch (error) {
@@ -228,8 +295,6 @@ export const lemonsqueezyService = {
       if (!this.isConfigured()) {
         throw new Error('Payment processing is not available. LemonSqueezy integration is not properly configured.');
       }
-
-      validateLemonSqueezyConfig();
 
       // Map plans to variant IDs based on billing cycle
       const variantMap: Record<string, Record<string, string>> = {
@@ -283,7 +348,9 @@ export const lemonsqueezyService = {
    */
   async processWebhook(payload: any) {
     try {
-      validateLemonSqueezyConfig();
+      if (!this.isConfigured()) {
+        throw new Error('LemonSqueezy is not configured');
+      }
 
       const eventName = payload.meta?.event_name;
       const eventData = payload.data;
@@ -318,10 +385,14 @@ export const lemonsqueezyService = {
           const subscriptionId = eventData.id;
           if (!subscriptionId) break;
           
-          const { data: cancelledProfiles } = await supabase
+          const { data: cancelledProfiles, error: cancelledError } = await supabase
             .from('user_profiles')
             .select('user_id')
             .eq('lemonsqueezy_subscription_id', subscriptionId);
+          
+          if (cancelledError) {
+            throw cancelledError;
+          }
           
           if (cancelledProfiles && cancelledProfiles.length > 0) {
             const { error: updateError } = await supabase
