@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route /*, useNavigate */ } from 'react-router-dom'; // Consider uncommenting useNavigate if you switch to it
+import { BrowserRouter as Router, Routes, Route /*, useNavigate */ } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
 import OnboardingModal from './components/OnboardingModal';
-import BillingModal from './components/BillingModal'; // NEW: Import BillingModal
+import BillingModal from './components/BillingModal';
 import { WhiteLabelProvider } from './components/WhiteLabelProvider';
 import Integrations from './components/pages/Integrations';
 import HelpCenter from './components/pages/HelpCenter';
@@ -116,15 +116,19 @@ function App() {
         if (session?.user) {
           console.log('Setting user from initial session');
           setUser(session.user);
-          const { onboardingCompleted } = await fetchUserProfile(session.user.id);
+          const { plan: currentPlanFromProfile, onboardingCompleted } = await fetchUserProfile(session.user.id);
 
           if (onboardingCompleted) {
             console.log('Onboarding completed, going to dashboard');
             setCurrentView('dashboard');
-            // navigate('/dashboard'); // If using navigate hook
+            // Ensure billing modal is not shown if user is on free plan and already onboarded
+            if (currentPlanFromProfile === 'free') {
+                setShowBillingModal(false); // [!code ++]
+            }
           } else {
             console.log('Onboarding not completed, showing onboarding modal');
             setShowOnboarding(true);
+            setShowBillingModal(false); // [!code ++] // Ensure billing modal is not shown if showing onboarding
           }
         } else {
           console.log('No user in session, staying on landing page');
@@ -159,16 +163,16 @@ function App() {
           if (session?.user) {
             console.log('Setting user from auth change:', session.user.id);
             setUser(session.user);
-            const { onboardingCompleted } = await fetchUserProfile(session.user.id);
+            const { plan: currentPlanFromProfile, onboardingCompleted } = await fetchUserProfile(session.user.id);
 
-            // This listener should ideally react to *all* state changes,
-            // but the primary flow for new signups/payments is handled by handleAuthSuccess
-            // For a refresh or subsequent login, this ensures correct view.
             if (onboardingCompleted) {
               setCurrentView('dashboard');
-              // navigate('/dashboard'); // If using navigate hook
+              if (currentPlanFromProfile === 'free') {
+                  setShowBillingModal(false); // [!code ++]
+              }
             } else {
               setShowOnboarding(true);
+              setShowBillingModal(false); // [!code ++] // Ensure billing modal is not shown if showing onboarding
             }
           }
         } else if (event === 'SIGNED_OUT') {
@@ -251,12 +255,12 @@ function App() {
         console.log(`User already has ${plan} or selected free plan, checking onboarding status.`);
         if (user) { // Re-check if user exists
             fetchUserProfile(user.id).then(({ onboardingCompleted }) => {
-                if (onboardingCompleted) {
-                    setCurrentView('dashboard');
-                    // navigate('/dashboard'); // If using navigate hook
-                } else {
-                    setShowOnboarding(true);
-                }
+              if (onboardingCompleted) {
+                  setCurrentView('dashboard');
+                  // navigate('/dashboard'); // If using navigate hook
+              } else {
+                  setShowOnboarding(true);
+              }
             });
         }
       }
@@ -317,6 +321,7 @@ function App() {
   const handleOnboardingComplete = async () => {
     console.log('Onboarding completed in App.tsx');
     setShowOnboarding(false);
+    setShowBillingModal(false); // [!code ++] // Crucial: Ensure billing modal is hidden after onboarding
 
     if (user) {
       try {
@@ -385,15 +390,21 @@ function App() {
 
       // Determine the next step based on the updated plan and onboarding status
       if (updatedPlan !== 'free' && !onboardingCompleted) {
-        // If the user is now on a paid plan but hasn't completed onboarding, show onboarding.
+        // If the user is now on a paid plan (payment successful) AND hasn't completed onboarding, show onboarding.
         console.log('Paid plan activated, showing onboarding after payment.');
         setShowOnboarding(true);
+      } else if (updatedPlan === 'free' && !onboardingCompleted) { // [!code ++]
+        // If the user is still on a free plan (payment cancelled/failed) AND hasn't completed onboarding, show onboarding. // [!code ++]
+        console.log('Still on free plan, showing onboarding.'); // [!code ++]
+        setShowOnboarding(true); // [!code ++]
       } else {
-        // If the user is on a free plan, or already paid and onboarded, or just completed onboarding.
-        // In most cases, they should now go to the dashboard.
+        // In all other cases:
+        // - If the user is on a free plan AND already onboarded.
+        // - If the user is on a paid plan AND already onboarded.
+        // In these cases, they should now go to the dashboard.
         console.log('Navigating to dashboard after billing modal interaction.');
         setCurrentView('dashboard');
-        // navigate('/dashboard'); // If using navigate hook
+        // You might want a small timeout here to ensure dashboard loads before potential walkthrough/etc.
       }
     } else {
       // If user somehow gets here without a session (e.g., session expired), revert to landing page.
