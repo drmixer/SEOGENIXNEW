@@ -401,6 +401,13 @@ function AppContent() {
       
       // If a paid plan was selected, check if LemonSqueezy is configured
       if (selectedPlan !== 'free') {
+        // Debug LemonSqueezy configuration
+        console.log('--- LemonSqueezy Configuration Debug (App.tsx) ---');
+        console.log('isConfigured() result:', lemonsqueezyService.isConfigured());
+        console.log('API Key (first 10 chars):', import.meta.env.VITE_LEMONSQUEEZY_API_KEY ? import.meta.env.VITE_LEMONSQUEEZY_API_KEY.substring(0, 10) + '...' : 'Not set');
+        console.log('Store ID:', import.meta.env.VITE_LEMONSQUEEZY_STORE_ID || 'Not set');
+        console.log('------------------------------------');
+        
         if (!lemonsqueezyService.isConfigured()) {
           console.log('LemonSqueezy not configured, falling back to free plan');
           addToast({

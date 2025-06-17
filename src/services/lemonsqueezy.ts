@@ -81,6 +81,17 @@ export const lemonsqueezyService = {
    * Check if LemonSqueezy is properly configured
    */
   isConfigured() {
+    // Debug the configuration check
+    console.log('--- lemonsqueezyService.isConfigured() Debug ---');
+    console.log('isApiKeyConfigured:', isApiKeyConfigured);
+    console.log('isStoreIdConfigured:', isStoreIdConfigured);
+    console.log('lemonSqueezy is null?', lemonSqueezy === null);
+    console.log('lemonSqueezy.checkouts exists?', lemonSqueezy?.checkouts ? 'Yes' : 'No');
+    console.log('lemonSqueezy.checkouts.create is a function?', lemonSqueezy?.checkouts?.create ? 'Yes' : 'No');
+    console.log('Final result:', isApiKeyConfigured && lemonSqueezy !== null && isStoreIdConfigured && 
+      lemonSqueezy?.checkouts && typeof lemonSqueezy?.checkouts?.create === 'function');
+    console.log('----------------------------------------');
+    
     return isApiKeyConfigured && lemonSqueezy !== null && isStoreIdConfigured && 
            lemonSqueezy.checkouts && typeof lemonSqueezy.checkouts.create === 'function';
   },
@@ -334,10 +345,14 @@ export const lemonsqueezyService = {
           const expiredSubId = eventData.id;
           if (!expiredSubId) break;
           
-          const { data: expiredProfiles } = await supabase
+          const { data: expiredProfiles, error: expiredError } = await supabase
             .from('user_profiles')
             .select('user_id')
             .eq('lemonsqueezy_subscription_id', expiredSubId);
+          
+          if (expiredError) {
+            throw expiredError;
+          }
           
           if (expiredProfiles && expiredProfiles.length > 0) {
             for (const profile of expiredProfiles) {
