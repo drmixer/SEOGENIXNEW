@@ -1,244 +1,177 @@
-import React, { useState, useEffect } from 'react';
-import { X, Mail, Lock, User, Loader } from 'lucide-react';
-import { supabase, resetAuth } from '../lib/supabase';
+import React, { useState } from 'react';
+import Modal from 'react-modal'; // Assuming you're using react-modal or similar
+import { supabase } from '../lib/supabase'; // Adjust this path to your Supabase client instance
+
+// Ensure your root element for the modal is set for react-modal
+Modal.setAppElement('#root'); // Replace '#root' with your app's root element ID, if using react-modal
 
 interface AuthModalProps {
   onClose: () => void;
-  onSuccess: () => void;
-  initialMode?: 'login' | 'signup';
-  selectedPlan?: 'free' | 'core' | 'pro' | 'agency';
+  // MODIFIED: onSuccess now includes the selectedPlan from the LandingPage
+  onSuccess: (user: any, selectedPlan: 'free' | 'core' | 'pro' | 'agency') => void;
+  initialMode: 'login' | 'signup';
+  selectedPlan: 'free' | 'core' | 'pro' | 'agency'; // The plan the user chose on the landing page
 }
 
-const AuthModal: React.FC<AuthModalProps> = ({ 
-  onClose, 
-  onSuccess, 
-  initialMode = 'login',
-  selectedPlan = 'free'
-}) => {
-  const [isLogin, setIsLogin] = useState(initialMode === 'login');
+const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess, initialMode, selectedPlan }) => {
+  const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Use the selected plan from props directly
-  // No need for a separate state since we don't want users to change it here
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
+    setErrorMessage(null);
 
     try {
-      if (isLogin) {
-        console.log('Attempting login for:', email);
-        const { data, error } = await supabase.auth.signInWithPassword({
+      let data;
+      let error;
+
+      if (mode === 'signup') {
+        ({ data, error } = await supabase.auth.signUp({
           email,
           password,
-        });
-        
-        if (error) throw error;
-        
-        console.log('Login successful:', data.user?.id);
-        
-        // For login, session should be immediately available
-        if (data.session && data.user) {
-          console.log('Login session established, proceeding...');
-          onSuccess();
-        } else {
-          throw new Error('Login successful but no session established');
-        }
-        
-      } else {
-        console.log('Attempting signup for:', email, 'with name:', name);
-        const { data, error } = await supabase.auth.signUp({
+          // You can add `options` here for user_metadata or email redirect
+          // options: {
+          //   data: {
+          //     selected_plan: selectedPlan // Optionally store selected plan in user metadata
+          //   }
+          // }
+        }));
+      } else { // mode === 'login'
+        ({ data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
-          options: {
-            data: {
-              full_name: name,
-              plan: selectedPlan // Store the selected plan in user metadata
-            },
-          },
-        });
-        
-        if (error) throw error;
-        
-        console.log('Signup response:', data.user?.id);
-        
-        // Check if email confirmation is required
-        if (data.user && !data.session) {
-          // Email confirmation required
-          setError('Please check your email and click the confirmation link to complete your account setup, then try logging in.');
-          setIsLogin(true); // Switch to login mode
-          return;
-        } else if (data.user && data.session) {
-          // Auto-confirm is enabled, session is immediately available
-          console.log('Signup with immediate session, proceeding...');
-          onSuccess();
-        } else {
-          throw new Error('Signup failed - no user created');
-        }
+        }));
       }
-      
-    } catch (error: any) {
-      console.error('Auth error:', error);
-      
-      // Handle specific error cases
-      if (error.message?.includes('email rate limit exceeded') || 
-          error.code === 'over_email_send_rate_limit') {
-        setError('Too many signup attempts. Please wait a few minutes before trying again.');
-      } else if (error.message?.includes('Invalid login credentials')) {
-        setError('Invalid email or password. Please check your credentials and try again.');
-      } else if (error.message?.includes('Email not confirmed')) {
-        setError('Please check your email and click the confirmation link before signing in.');
-      } else if (error.message?.includes('User already registered')) {
-        setError('An account with this email already exists. Please try logging in instead.');
-        setIsLogin(true);
+
+      if (error) {
+        console.error('Auth error:', error);
+        setErrorMessage(error.message);
+      } else if (data.user) {
+        console.log('Auth success:', data.user.id);
+        // On success, call the App.tsx's handler, passing the user and the selected plan
+        onSuccess(data.user, selectedPlan);
       } else {
-        setError(error.message || 'An unexpected error occurred. Please try again.');
+        // This case can happen with email confirmation flows (e.g., signUp but no user returned yet)
+        setErrorMessage('Please check your email for a confirmation link.');
       }
+    } catch (err: any) {
+      console.error('Unexpected auth error:', err);
+      setErrorMessage(err.message || 'An unexpected error occurred.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md my-8">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900">
-            {isLogin ? 'Sign In' : 'Create Account'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+    <Modal
+      isOpen={true}
+      onRequestClose={onClose}
+      className="fixed inset-0 flex items-center justify-center p-4"
+      overlayClassName="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center"
+      contentLabel="Authentication Modal"
+    >
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl"
+          aria-label="Close"
+        >
+          &times;
+        </button>
+        <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">
+          {mode === 'login' ? 'Login' : 'Sign Up'}
+        </h2>
 
-        <div className="p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required={!isLogin}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Enter your full name"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Enter your email"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Enter your password"
-                />
-              </div>
-            </div>
-
-            {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Selected Plan
-                </label>
-                <div className="bg-gray-100 p-3 rounded-lg">
-                  <div className="font-medium text-purple-600">
-                    {selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} Plan
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    You selected this plan on the pricing page
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-red-800 text-sm">{error}</p>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-teal-500 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2"
-            >
-              {loading ? (
-                <>
-                  <Loader className="w-5 h-5 animate-spin" />
-                  <span>{isLogin ? 'Signing In...' : 'Creating Account...'}</span>
-                </>
-              ) : (
-                <span>{isLogin ? 'Sign In' : 'Create Account'}</span>
-              )}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              {isLogin ? "Don't have an account?" : "Already have an account?"}
-              <button
-                onClick={() => {
-                  setIsLogin(!isLogin);
-                  setError(null);
-                }}
-                className="ml-2 text-purple-600 hover:text-purple-700 font-medium"
-              >
-                {isLogin ? 'Sign Up' : 'Sign In'}
-              </button>
-            </p>
+        {errorMessage && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <span className="block sm:inline">{errorMessage}</span>
           </div>
+        )}
 
-          {!isLogin && (
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-blue-800 text-sm">
-                By creating an account, you'll start with our {selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} plan. You can upgrade or downgrade anytime.
-              </p>
-            </div>
+        <form onSubmit={handleAuth}>
+          <div className="mb-4">
+            <label htmlFor="email" className="block text-gray-700 text-sm font-bold mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              id="email"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="your@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={loading}
+            />
+          </div>
+          <div className="mb-6">
+            <label htmlFor="password" className="block text-gray-700 text-sm font-bold mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="********"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loading}
+            />
+          </div>
+          <button
+            type="submit"
+            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg w-full transition duration-200 flex items-center justify-center"
+            disabled={loading}
+          >
+            {loading ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            ) : (
+              mode === 'login' ? 'Login' : 'Sign Up'
+            )}
+          </button>
+        </form>
+
+        <p className="text-center text-gray-600 text-sm mt-6">
+          {mode === 'login' ? (
+            <>
+              Don't have an account?{' '}
+              <button
+                onClick={() => setMode('signup')}
+                className="text-purple-600 hover:text-purple-800 font-bold"
+                disabled={loading}
+              >
+                Sign Up
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{' '}
+              <button
+                onClick={() => setMode('login')}
+                className="text-purple-600 hover:text-purple-800 font-bold"
+                disabled={loading}
+              >
+                Login
+              </button>
+            </>
           )}
-        </div>
+        </p>
+        {/* Optional: Password reset link */}
+        {mode === 'login' && (
+          <p className="text-center text-gray-600 text-sm mt-2">
+            <a href="#" className="text-purple-600 hover:text-purple-800 font-bold"
+               onClick={() => { /* Implement password reset flow */ alert("Password reset not implemented yet."); }}>
+              Forgot password?
+            </a>
+          </p>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 };
 
