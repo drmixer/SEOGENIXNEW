@@ -91,6 +91,7 @@ function App() {
 
         initializationTimerRef.current = setTimeout(() => {
           console.log('Auth initialization timed out after 5 seconds');
+          console.log('Timeout: Setting setLoading(false) and setAuthInitialized(true)'); // [!code added]
           setLoading(false);
           setAuthInitialized(true);
           setAuthError('Authentication initialization timed out. Please refresh the page.');
@@ -106,6 +107,7 @@ function App() {
         if (error) {
           console.error('Error getting initial session:', error);
           setAuthError('Failed to initialize authentication: ' + error.message);
+          console.log('initializeAuth Error: Setting setLoading(false) and setAuthInitialized(true)'); // [!code added]
           setLoading(false);
           setAuthInitialized(true);
           return;
@@ -137,6 +139,7 @@ function App() {
         console.error('Error in initializeAuth:', error);
         setAuthError('Authentication initialization failed: ' + (error as Error).message);
       } finally {
+        console.log('initializeAuth finally: Setting setLoading(false) and setAuthInitialized(true)'); // [!code added]
         setLoading(false);
         setAuthInitialized(true);
       }
@@ -164,30 +167,35 @@ function App() {
             console.log('Setting user from auth change:', session.user.id);
             setUser(session.user);
             const { plan: currentPlanFromProfile, onboardingCompleted } = await fetchUserProfile(session.user.id);
+            console.log('Fetched profile in SIGNED_IN. Plan:', currentPlanFromProfile, 'Onboarding:', onboardingCompleted); // [!code added]
+
 
             if (onboardingCompleted) {
+              console.log('SIGNED_IN: Onboarding completed, going to dashboard.'); // [!code added]
               setCurrentView('dashboard');
               if (currentPlanFromProfile === 'free') {
                   setShowBillingModal(false);
               }
             } else {
+              console.log('SIGNED_IN: Onboarding not completed, showing onboarding modal.'); // [!code added]
               setShowOnboarding(true);
               setShowBillingModal(false);
             }
-            setLoading(false); // [!code ++]
-            setAuthInitialized(true); // [!code ++]
+            console.log('SIGNED_IN: Setting setLoading(false) and setAuthInitialized(true).'); // [!code added]
+            setLoading(false);
+            setAuthInitialized(true);
           }
         } else if (event === 'SIGNED_OUT') {
-          console.log('User signed out, clearing user state');
+          console.log('SIGNED_OUT: Clearing user state. Setting setLoading(false) and setAuthInitialized(true).'); // [!code added]
           setUser(null);
           setUserPlan('free');
           setCurrentView('landing');
           setShowOnboarding(false);
           setShowBillingModal(false); // Clear billing modal state on sign out
           setLoading(false);
-          setAuthInitialized(true); // [!code ++] // Also ensure it's set to true on sign out
-          // navigate('/'); // If using navigate hook
+          setAuthInitialized(true);
         } else if (event === 'INITIAL_SESSION') {
+          console.log('INITIAL_SESSION: Setting setLoading(false) and setAuthInitialized(true).'); // [!code added]
           setLoading(false);
           setAuthInitialized(true);
         }
@@ -379,7 +387,7 @@ function App() {
     // navigate('/dashboard'); // If using navigate hook
   };
 
-  // --- MODIFIED: handleBillingModalComplete ---
+  // --- NEW: handleBillingModalComplete ---
   // This function is called when the BillingModal is closed, or after a presumed successful payment.
   // It ensures the app's state reflects the latest user plan and directs the user to the next appropriate step.
   const handleBillingModalComplete = async (paymentSuccessful: boolean = false) => {
@@ -458,6 +466,7 @@ function App() {
 
   // Render initial loading/authentication state to prevent flashing content
   if (!authInitialized) {
+    console.log('App is rendering: Initializing application... (authInitialized is false)'); // [!code added]
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
@@ -473,6 +482,7 @@ function App() {
 
   // Render general loading state after authentication initialization
   if (loading) {
+    console.log('App is rendering: Loading... (loading is true)'); // [!code added]
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
@@ -488,6 +498,7 @@ function App() {
 
   // Render dashboard specific loading state
   if (dashboardLoading) {
+    console.log('App is rendering: Dashboard Loading...'); // [!code added]
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
@@ -497,6 +508,8 @@ function App() {
       </div>
     );
   }
+
+  console.log('App is rendering: Main Content (authInitialized and loading are false)'); // [!code added]
 
   return (
     <Router>
