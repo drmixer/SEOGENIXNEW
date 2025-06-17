@@ -154,74 +154,56 @@ export const lemonsqueezyService = {
       console.log(`Creating checkout for plan ${planId} with variant ID ${variantId}`);
       console.log(`Store ID: ${STORE_ID}`);
       
-      // Create a checkout using the REST API directly with the correct JSON:API format
-      const payload = {
-        data: {
-          type: 'checkouts',
-          attributes: {
-            custom_price: null,
-            product_options: [], // Empty array as required by the API
-            checkout_options: {
-              embed: false,
-              media: true,
-              logo: true,
-              desc: true,
-              discount: true,
-              dark: false,
-              subscription_preview: true,
-              button_color: '#8B5CF6'
-            },
-            // The key fix: checkout_data must be an array, not an object
-            checkout_data: [
-              {
-                name: name || undefined,
-                email: email || undefined,
-                custom: {
-                  plan: planId
-                },
-                redirect_url: successUrl || undefined,
-                cancel_url: cancelUrl || undefined
-              }
-            ],
-            expires_at: null
-          },
-          relationships: {
-            store: {
-              data: {
-                type: 'stores',
-                id: STORE_ID
-              }
-            },
-            variant: {
-              data: {
-                type: 'variants',
-                id: variantId
-              }
-            }
-          }
-        }
-      };
+      // Instead of using the SDK directly, we'll use our Supabase Edge Function
+      // This will ensure consistent payload formatting and avoid any SDK-related issues
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) {
+        throw new Error('VITE_SUPABASE_URL is not configured');
+      }
       
-      console.log('Sending Lemon Squeezy checkout payload:', JSON.stringify(payload, null, 2));
+      // Get auth token for the Edge Function call
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('User not authenticated');
+      }
       
-      const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
+      // Call our Edge Function to create the checkout
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-checkout`, {
         method: 'POST',
         headers: {
-          'Accept': 'application/vnd.api+json',
-          'Content-Type': 'application/vnd.api+json',
-          'Authorization': `Bearer ${apiKey}`
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          plan: planId,
+          userId: session.user.id,
+          billingCycle: planId === 'monthly' ? 'monthly' : 'annual',
+          name,
+          email,
+          successUrl,
+          cancelUrl
+        })
       });
       
       if (!response.ok) {
         const errorData = await response.text();
-        console.error('LemonSqueezy API Error Response:', errorData);
+        console.error('Checkout creation error:', errorData);
         throw new Error(`Failed to create checkout: ${errorData}`);
       }
       
-      const checkout = await response.json();
-      return checkout;
+      const result = await response.json();
+      
+      if (!result.success || !result.checkoutUrl) {
+        throw new Error('Failed to create checkout: No checkout URL returned');
+      }
+      
+      return {
+        data: {
+          attributes: {
+            url: result.checkoutUrl
+          }
+        }
+      };
     } catch (error) {
       console.error('Error creating checkout:', error);
       throw error;
