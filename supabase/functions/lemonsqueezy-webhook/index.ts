@@ -1,6 +1,5 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { createHmac } from 'node:crypto';
 
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
@@ -31,10 +30,26 @@ Deno.serve(async (req: Request) => {
     // Get request body as text for signature verification
     const body = await req.text();
     
-    // Verify signature
-    const hmac = createHmac('sha256', webhookSecret);
-    hmac.update(body);
-    const calculatedSignature = hmac.digest('hex');
+    // Verify signature using Deno's Web Crypto API
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(webhookSecret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const signatureBytes = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      encoder.encode(body)
+    );
+    
+    // Convert to hex string
+    const calculatedSignature = Array.from(new Uint8Array(signatureBytes))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
     
     if (calculatedSignature !== signature) {
       console.error('Invalid webhook signature');
