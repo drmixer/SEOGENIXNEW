@@ -1,0 +1,6 @@
+[build]
+  publish = "dist" # This is usually where Vite puts its build output
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "20" # Or "18" if 20 causes issues. Node 20 is a good recent LTS.
