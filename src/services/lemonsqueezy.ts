@@ -8,7 +8,7 @@ const apiKey = import.meta.env.VITE_LEMONSQUEEZY_API_KEY;
 const isApiKeyConfigured = apiKey && apiKey !== 'your_lemonsqueezy_api_key_here' && apiKey.trim() !== '';
 
 if (!isApiKeyConfigured) {
-  console.error('VITE_LEMONSQUEEZY_API_KEY is not properly configured. Please add your actual LemonSqueezy API key to your .env file.');
+  console.warn('VITE_LEMONSQUEEZY_API_KEY is not properly configured. Payment processing will be unavailable.');
 }
 
 // Initialize LemonSqueezy with your API key - only if API key is properly configured
