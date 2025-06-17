@@ -154,7 +154,7 @@ export const lemonsqueezyService = {
       console.log(`Creating checkout for plan ${planId} with variant ID ${variantId}`);
       console.log(`Store ID: ${STORE_ID}`);
       
-      // Create a checkout using the REST API directly
+      // Create a checkout using the REST API directly with the correct JSON:API format
       const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
         method: 'POST',
         headers: {
@@ -166,8 +166,6 @@ export const lemonsqueezyService = {
           data: {
             type: 'checkouts',
             attributes: {
-              store_id: parseInt(STORE_ID),
-              variant_id: parseInt(variantId),
               custom_price: null,
               product_options: {
                 name: name || undefined,
@@ -176,7 +174,6 @@ export const lemonsqueezyService = {
                 receipt_link_url: successUrl || undefined,
                 receipt_button_text: 'Return to Dashboard',
                 receipt_thank_you_note: 'Thank you for your purchase!',
-                enabled_variants: [parseInt(variantId)]
               },
               checkout_options: {
                 embed: false,
@@ -194,6 +191,20 @@ export const lemonsqueezyService = {
                 }
               },
               expires_at: null
+            },
+            relationships: {
+              store: {
+                data: {
+                  type: 'stores',
+                  id: STORE_ID
+                }
+              },
+              variant: {
+                data: {
+                  type: 'variants',
+                  id: variantId
+                }
+              }
             }
           }
         })
@@ -201,6 +212,7 @@ export const lemonsqueezyService = {
       
       if (!response.ok) {
         const errorData = await response.text();
+        console.error('LemonSqueezy API Error Response:', errorData);
         throw new Error(`Failed to create checkout: ${errorData}`);
       }
       
@@ -427,18 +439,66 @@ export const lemonsqueezyService = {
           
           if (expiredProfiles && expiredProfiles.length > 0) {
             for (const profile of expiredProfiles) {
-              await this.updateUserPlan(profile.user_id, {
-                id: expiredSubId,
-                attributes: {
-                  custom_data: { plan: 'free' },
-                  status: 'expired'
+              // Update profile
+              const { error: updateError } = await supabase
+                .from('user_profiles')
+                .update({
+                  plan: 'free',
+                  subscription_status: 'expired',
+                  subscription_updated_at: new Date().toISOString()
+                })
+                .eq('user_id', profile.user_id);
+              
+              if (updateError) {
+                throw updateError;
+              }
+              
+              // Update user metadata
+              await supabase.auth.admin.updateUserById(profile.user_id, {
+                user_metadata: {
+                  plan: 'free'
                 }
               });
+              
+              console.log(`Downgraded user ${profile.user_id} to free plan due to expired subscription`);
             }
           }
           break;
+          
+        case 'order_created':
+          // Handle new order (first-time subscription)
+          const orderCustomerId = eventData.attributes?.customer_id;
+          const orderUserEmail = eventData.attributes?.user_email;
+          
+          if (!orderCustomerId || !orderUserEmail) break;
+          
+          // Find user by email
+          const { data: { users }, error: userError } = await supabase.auth.admin.listUsers();
+          
+          if (userError) {
+            throw userError;
+          }
+          
+          const matchingUser = users.find(u => u.email === orderUserEmail);
+          
+          if (matchingUser) {
+            // Update user profile with customer ID
+            const { error: updateError } = await supabase
+              .from('user_profiles')
+              .update({
+                lemonsqueezy_customer_id: orderCustomerId
+              })
+              .eq('user_id', matchingUser.id);
+            
+            if (updateError) {
+              throw updateError;
+            }
+            
+            console.log(`Associated customer ID ${orderCustomerId} with user ${matchingUser.id}`);
+          }
+          break;
       }
-      
+
       return true;
     } catch (error) {
       console.error('Error processing webhook:', error);
