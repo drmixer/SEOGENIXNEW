@@ -11,6 +11,7 @@ Deno.serve(async (req: Request) => {
     // Verify webhook signature
     const signature = req.headers.get('x-signature');
     if (!signature) {
+      console.error('Missing signature header');
       return new Response(
         JSON.stringify({ error: 'Missing signature header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -29,6 +30,13 @@ Deno.serve(async (req: Request) => {
 
     // Get request body as text for signature verification
     const body = await req.text();
+    
+    // Log values for debugging
+    console.log('--- WEBHOOK SIGNATURE VERIFICATION DEBUG ---');
+    console.log('Received signature:', signature);
+    console.log('Webhook secret (first 4 chars):', webhookSecret.substring(0, 4) + '...');
+    console.log('Body length:', body.length);
+    console.log('Body preview (first 100 chars):', body.substring(0, 100) + '...');
     
     // Verify signature using Deno's Web Crypto API
     const encoder = new TextEncoder();
@@ -50,6 +58,10 @@ Deno.serve(async (req: Request) => {
     const calculatedSignature = Array.from(new Uint8Array(signatureBytes))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
+    
+    console.log('Calculated signature:', calculatedSignature);
+    console.log('Signatures match?', calculatedSignature === signature);
+    console.log('----------------------------------------');
     
     if (calculatedSignature !== signature) {
       console.error('Invalid webhook signature');
