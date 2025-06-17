@@ -1,58 +1,27 @@
 // components/BillingModal.tsx
 
 import React, { useState, useEffect, useCallback } from 'react';
-import Modal from 'react-modal'; // Assuming you use react-modal or similar
-import { supabase } from '../lib/supabase'; // Adjust path as needed
-import { User } from '@supabase/supabase-js'; // For Supabase user type
+import Modal from 'react-modal';
+import { supabase } from '../lib/supabase'; // Adjust this path to your Supabase client instance
+import { User } from '@supabase/supabase-js';
 
-// You will need to implement this service or functions to interact with Lemon Squeezy
-// This might be a separate utility file or API endpoint on your backend.
-// For now, these are placeholders:
+// Ensure your root element for the modal is set for react-modal
+Modal.setAppElement('#root'); // Replace '#root' with your app's root element ID, if using react-modal
+
 interface LemonSqueezyProductDetails {
   core: { monthly: string; annual: string; productId: string };
   pro: { monthly: string; annual: string; productId: string };
   agency: { monthly: string; annual: string; productId: string };
 }
 
-// Placeholder for your Lemon Squeezy Product/Variant IDs
-// YOU NEED TO REPLACE THESE WITH YOUR ACTUAL LEMON SQUEEZY IDs
+// --- UPDATED WITH YOUR LEMON SQUEEZY IDs ---
 const LEMON_SQUEEZY_PRODUCT_INFO: LemonSqueezyProductDetails = {
-  core: { monthly: 'YOUR_CORE_MONTHLY_VARIANT_ID', annual: 'YOUR_CORE_ANNUAL_VARIANT_ID', productId: 'YOUR_CORE_PRODUCT_ID' },
-  pro: { monthly: 'YOUR_PRO_MONTHLY_VARIANT_ID', annual: 'YOUR_PRO_ANNUAL_VARIANT_ID', productId: 'YOUR_PRO_PRODUCT_ID' },
-  agency: { monthly: 'YOUR_AGENCY_MONTHLY_VARIANT_ID', annual: 'YOUR_AGENCY_ANNUAL_VARIANT_ID', productId: 'YOUR_AGENCY_PRODUCT_ID' },
+  core: { monthly: '852312', annual: '852309', productId: '549772' },
+  pro: { monthly: '852315', annual: '852316', productId: '549775' },
+  agency: { monthly: '852328', annual: '852331', productId: '549780' },
 };
+// ------------------------------------------
 
-// This function needs to generate a Lemon Squeezy checkout URL.
-// It could call a backend API route that generates a signed URL or use client-side SDK.
-// For now, it's a placeholder.
-async function getLemonSqueezyCheckoutUrl(
-  plan: 'core' | 'pro' | 'agency',
-  billingCycle: 'monthly' | 'annual',
-  userId: string
-): Promise<string> {
-  // --- IMPORTANT: IMPLEMENT YOUR ACTUAL LEMON SQUEEZY CHECKOUT URL GENERATION HERE ---
-  // This might involve:
-  // 1. Calling your backend API: `/api/lemon-squeezy-checkout?plan=${plan}&cycle=${billingCycle}&userId=${userId}`
-  // 2. Using a Lemon Squeezy client-side library (less common for secure checkouts)
-  // 3. Directly forming the URL if you're using simple product URLs and not needing custom data.
-
-  // Example (replace with your actual logic):
-  console.log(`Generating checkout URL for ${plan} ${billingCycle} for user ${userId}`);
-  const variantId = LEMON_SQUEEZY_PRODUCT_INFO[plan][billingCycle];
-
-  // This is a basic example. Lemon Squeezy often recommends generating URLs
-  // via your backend to include security hashes and custom data.
-  // Replace `YOUR_STORE_URL` with your actual Lemon Squeezy store URL.
-  // The `checkout` parameter indicates a direct checkout.
-  // The `embed=1` parameter is for embedding if you use their JS SDK, otherwise remove.
-  // The `passthrough` parameter is crucial for webhooks to identify the user/session.
-  const baseUrl = `https://your-store-name.lemonsqueezy.com/checkout/buy/`;
-  return `${baseUrl}${variantId}?embed=1&passthrough=${JSON.stringify({ user_id: userId, plan: plan, billing_cycle: billingCycle })}`;
-}
-// -------------------------------------------------------------------------------------
-
-// Ensure your root element for the modal is set for react-modal
-Modal.setAppElement('#root'); // Replace '#root' with your app's root element ID
 
 interface BillingModalProps {
   user: User; // Supabase User object
@@ -80,16 +49,45 @@ const BillingModal: React.FC<BillingModalProps> = ({
     initialSelectedPlan !== 'free' ? initialSelectedPlan : 'core' // Default to core if free was selected or no specific initial plan
   );
 
-  useEffect(() => {
-    // If the purpose is 'manage', we don't necessarily want to select a plan immediately,
-    // but rather provide a link to the Lemon Squeezy billing portal.
-    if (purpose === 'manage') {
-      // You might open the portal directly here or provide a button
-      // const portalUrl = await getLemonSqueezyBillingPortalUrl(user.id); // You'd need to implement this
-      // window.open(portalUrl, '_blank');
-      // onClose(); // Close the modal if redirecting
+  // --- IMPORTANT: Function to get Lemon Squeezy Checkout URL from your NEW Backend Edge Function ---
+  const getLemonSqueezyCheckoutUrl = useCallback(async (
+    plan: 'core' | 'pro' | 'agency',
+    billingCycle: 'monthly' | 'annual',
+    userId: string
+  ): Promise<string> => {
+    try {
+      // Replace 'YOUR_SUPABASE_CHECKOUT_EDGE_FUNCTION_URL' with the actual URL of your deployed Edge Function.
+      // E.g., https://[your-project-ref].supabase.co/functions/v1/generate-checkout-url
+      const response = await fetch('YOUR_SUPABASE_CHECKOUT_EDGE_FUNCTION_URL', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // It's good practice to send the user's JWT for authentication/authorization in your Edge Function
+          'Authorization': `Bearer ${user.id}` // Use user.id or a proper JWT from Supabase auth.getSession()
+        },
+        body: JSON.stringify({
+          plan,
+          billingCycle,
+          userId,
+          variantId: LEMON_SQUEEZY_PRODUCT_INFO[plan][billingCycle], // Pass the specific variant ID
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to get checkout URL from backend.');
+      }
+
+      const data = await response.json();
+      if (!data.checkoutUrl) {
+        throw new Error('Backend did not return a checkout URL.');
+      }
+      return data.checkoutUrl;
+    } catch (err: any) {
+      console.error('Error fetching checkout URL from backend:', err);
+      throw err; // Re-throw to be caught by handleCheckout
     }
-  }, [purpose, user.id, onClose]);
+  }, [user.id]); // Dependency: user.id for the Authorization header
 
 
   const handleCheckout = useCallback(async () => {
@@ -102,9 +100,9 @@ const BillingModal: React.FC<BillingModalProps> = ({
     setError(null);
 
     try {
-      // Get the checkout URL from your service/function
+      // Use your backend Edge Function to get the checkout URL
       const checkoutUrl = await getLemonSqueezyCheckoutUrl(
-        currentPlanSelection as 'core' | 'pro' | 'agency', // Cast because 'free' is handled
+        currentPlanSelection as 'core' | 'pro' | 'agency',
         selectedBillingCycle,
         user.id
       );
@@ -112,18 +110,13 @@ const BillingModal: React.FC<BillingModalProps> = ({
       // Redirect the user to the Lemon Squeezy checkout page
       window.location.href = checkoutUrl;
 
-      // Note: onSuccess() is NOT called here immediately.
-      // It should be called when your backend confirms payment via webhook
-      // and updates the user's plan in Supabase. App.tsx will then re-fetch
-      // the profile and determine the next step.
-      // This modal might stay open briefly until the redirect, or you can close it.
-      // onClose(); // You might want to close the modal immediately on redirect
-    } catch (err) {
-      console.error('Error generating checkout URL:', err);
-      setError('Failed to initiate checkout. Please try again.');
+    } catch (err: any) {
+      console.error('Error initiating checkout:', err);
+      setError(err.message || 'Failed to initiate checkout. Please try again.');
       setLoading(false);
     }
-  }, [user, currentPlanSelection, selectedBillingCycle, onClose]);
+  }, [user, currentPlanSelection, selectedBillingCycle, getLemonSqueezyCheckoutUrl]);
+
 
   // Determine modal title and description based on purpose
   const getModalTitle = () => {
@@ -142,7 +135,7 @@ const BillingModal: React.FC<BillingModalProps> = ({
   const getModalDescription = () => {
     switch (purpose) {
       case 'signup_upsell':
-        return 'Unlock full features by selecting a plan below. You can start with a free trial on paid plans.';
+        return 'Unlock full features by selecting a plan below.';
       case 'upgrade':
         return `You are currently on the ${userPlan.toUpperCase()} plan. Upgrade to unlock more power!`;
       case 'manage':
@@ -152,7 +145,7 @@ const BillingModal: React.FC<BillingModalProps> = ({
     }
   };
 
-  // If the purpose is 'manage', the UI should be different (e.g., a button to open portal)
+  // UI for 'manage' purpose (Opens Lemon Squeezy billing portal)
   if (purpose === 'manage') {
     return (
       <Modal
@@ -162,7 +155,14 @@ const BillingModal: React.FC<BillingModalProps> = ({
         overlayClassName="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center"
         contentLabel="Manage Subscription"
       >
-        <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+        <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full relative">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl"
+            aria-label="Close"
+          >
+            &times;
+          </button>
           <h2 className="text-2xl font-bold mb-4 text-gray-800">{getModalTitle()}</h2>
           <p className="text-gray-600 mb-6">{getModalDescription()}</p>
           <button
@@ -170,14 +170,15 @@ const BillingModal: React.FC<BillingModalProps> = ({
               setLoading(true);
               setError(null);
               try {
-                // You will need a backend endpoint or service to securely get the billing portal URL
-                const response = await fetch(`/api/get-lemon-squeezy-portal-url?userId=${user.id}`);
+                // --- IMPORTANT: Replace 'YOUR_SUPABASE_BILLING_PORTAL_EDGE_FUNCTION_URL' with your deployed Edge Function URL ---
+                // E.g., https://[your-project-ref].supabase.co/functions/v1/generate-portal-url
+                const response = await fetch(`YOUR_SUPABASE_BILLING_PORTAL_EDGE_FUNCTION_URL?userId=${user.id}`);
                 const data = await response.json();
                 if (response.ok && data.portalUrl) {
                   window.open(data.portalUrl, '_blank');
                   onClose(); // Close modal after opening portal
                 } else {
-                  throw new Error(data.error || 'Failed to get billing portal URL.');
+                  throw new Error(data.error || 'Failed to get billing portal URL from backend.');
                 }
               } catch (err: any) {
                 console.error('Error opening billing portal:', err);
@@ -207,7 +208,7 @@ const BillingModal: React.FC<BillingModalProps> = ({
     );
   }
 
-  // UI for signup_upsell and upgrade purposes
+  // UI for 'signup_upsell' and 'upgrade' purposes
   return (
     <Modal
       isOpen={true}
@@ -216,7 +217,14 @@ const BillingModal: React.FC<BillingModalProps> = ({
       overlayClassName="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center"
       contentLabel="Billing Information"
     >
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full">
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl"
+          aria-label="Close"
+        >
+          &times;
+        </button>
         <h2 className="text-2xl font-bold mb-2 text-gray-800">{getModalTitle()}</h2>
         <p className="text-gray-600 mb-6">{getModalDescription()}</p>
 
@@ -280,7 +288,6 @@ const BillingModal: React.FC<BillingModalProps> = ({
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
           ) : (
             currentPlanSelection === 'free' ? 'Select a Paid Plan' :
-            purpose === 'signup_upsell' ? `Start Free Trial & Pay for ${currentPlanSelection}` :
             `Proceed to Checkout for ${currentPlanSelection}`
           )}
         </button>
