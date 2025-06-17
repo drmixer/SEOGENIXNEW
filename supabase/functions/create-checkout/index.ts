@@ -85,24 +85,15 @@ Deno.serve(async (req: Request) => {
     console.log(`- Variant ID: ${variantId}`);
     console.log(`- Store ID: ${storeId}`);
 
-    // Create checkout data object
-    const checkoutData = {
-      name: name || user.user_metadata?.full_name,
-      email: email || user.email,
-      custom: {
-        plan: plan
-      },
-      redirect_url: successUrl || `${req.headers.get('Origin')}/dashboard?checkout_success=true&plan=${plan}`,
-      cancel_url: cancelUrl || `${req.headers.get('Origin')}/?checkout_cancelled=true`
-    };
-
     // Create checkout using LemonSqueezy API
     const payload = {
       data: {
         type: 'checkouts',
         attributes: {
           custom_price: null,
-          product_options: [], // Empty array as required by the API
+          product_options: {
+            redirect_url: successUrl || `${req.headers.get('Origin')}/dashboard?checkout_success=true&plan=${plan}`
+          },
           checkout_options: {
             embed: false,
             media: true,
@@ -113,8 +104,14 @@ Deno.serve(async (req: Request) => {
             subscription_preview: true,
             button_color: '#8B5CF6'
           },
-          // FIXED: checkout_data must be an array, not an object
-          checkout_data: [checkoutData],
+          checkout_data: {
+            name: name || user.user_metadata?.full_name,
+            email: email || user.email,
+            custom: {
+              plan: plan,
+              user_id: userId
+            }
+          },
           expires_at: null
         },
         relationships: {
@@ -160,10 +157,17 @@ Deno.serve(async (req: Request) => {
     const checkout = JSON.parse(responseText);
     console.log('Checkout created successfully');
 
+    // Add cancel URL as query parameter if provided
+    let checkoutUrl = checkout.data.attributes.url;
+    if (cancelUrl) {
+      const separator = checkoutUrl.includes('?') ? '&' : '?';
+      checkoutUrl += `${separator}cancel_url=${encodeURIComponent(cancelUrl)}`;
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        checkoutUrl: checkout.data.attributes.url,
+        checkoutUrl: checkoutUrl,
         checkoutId: checkout.data.id
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
