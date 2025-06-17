@@ -1,8 +1,15 @@
 import { LemonSqueezy } from '@lemonsqueezy/lemonsqueezy.js';
 import { supabase } from '../lib/supabase';
 
-// Initialize LemonSqueezy with your API key
-const lemonSqueezy = new LemonSqueezy(import.meta.env.VITE_LEMONSQUEEZY_API_KEY || '');
+// Get API key and validate it exists
+const apiKey = import.meta.env.VITE_LEMONSQUEEZY_API_KEY;
+
+if (!apiKey) {
+  console.error('VITE_LEMONSQUEEZY_API_KEY is not configured. Please add it to your .env file.');
+}
+
+// Initialize LemonSqueezy with your API key - only if API key exists
+const lemonSqueezy = apiKey ? new LemonSqueezy(apiKey) : null;
 
 // Plan IDs from LemonSqueezy
 export const PLAN_IDS = {
@@ -31,6 +38,10 @@ export const lemonsqueezyService = {
    */
   async getUserSubscription(userId: string) {
     try {
+      if (!lemonSqueezy) {
+        throw new Error('LemonSqueezy client not initialized. Please check your API key configuration.');
+      }
+
       // Get user's customer ID from Supabase
       const { data: profile } = await supabase
         .from('user_profiles')
@@ -61,6 +72,10 @@ export const lemonsqueezyService = {
    */
   async createCheckout(options: CheckoutOptions) {
     try {
+      if (!lemonSqueezy) {
+        throw new Error('LemonSqueezy client not initialized. Please check your API key configuration.');
+      }
+
       const { name, email, planId, variantId, successUrl, cancelUrl } = options;
       
       // Create a checkout
@@ -125,6 +140,10 @@ export const lemonsqueezyService = {
    */
   async cancelSubscription(subscriptionId: string) {
     try {
+      if (!lemonSqueezy) {
+        throw new Error('LemonSqueezy client not initialized. Please check your API key configuration.');
+      }
+
       await lemonSqueezy.subscriptions.update(subscriptionId, {
         cancelled: true
       });
@@ -141,6 +160,10 @@ export const lemonsqueezyService = {
    */
   async getCheckoutUrl(plan: 'core' | 'pro' | 'agency', user: any, billingCycle: 'monthly' | 'annual' = 'monthly') {
     try {
+      if (!lemonSqueezy) {
+        throw new Error('LemonSqueezy client not initialized. Please check your API key configuration.');
+      }
+
       // Map plans to variant IDs based on billing cycle
       const variantMap: Record<string, Record<string, string>> = {
         monthly: {
@@ -182,6 +205,10 @@ export const lemonsqueezyService = {
    */
   async processWebhook(payload: any) {
     try {
+      if (!lemonSqueezy) {
+        throw new Error('LemonSqueezy client not initialized. Please check your API key configuration.');
+      }
+
       const eventName = payload.meta?.event_name;
       const eventData = payload.data;
       
