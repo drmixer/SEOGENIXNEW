@@ -6,7 +6,7 @@ interface SummaryRequest {
   summaryType: 'overview' | 'technical' | 'business' | 'audience';
 }
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('Calling Gemini API for site summary generation...');
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -129,14 +129,14 @@ Deno.serve(async (req: Request) => {
     
     const entities = entitiesMatch ? 
       entitiesMatch[1].split('\n')
-        .filter(line => line.trim().startsWith('-'))
-        .map(line => line.trim().substring(1).trim())
+        .filter((line: string) => line.trim().startsWith('-'))
+        .map((line: string) => line.trim().substring(1).trim())
         .slice(0, 10) : [];
 
     const topics = topicsMatch ?
       topicsMatch[1].split('\n')
-        .filter(line => line.trim().startsWith('-'))
-        .map(line => line.trim().substring(1).trim())
+        .filter((line: string) => line.trim().startsWith('-'))
+        .map((line: string) => line.trim().substring(1).trim())
         .slice(0, 8) : [];
 
     const optimizationNotes = notesMatch ? notesMatch[1].trim() : '';
@@ -161,12 +161,14 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to generate LLM summary',
-        details: error.message 
+        details: (error as Error).message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+};
+
+Deno.serve(handler);
 
 // Fallback function to generate sample summary when API fails
 function generateFallbackSummary(url: string, summaryType: string): Response {
@@ -176,8 +178,8 @@ function generateFallbackSummary(url: string, summaryType: string): Response {
   const brandName = domain.split('.')[0];
   
   let summary = '';
-  let entities = [];
-  let topics = [];
+  let entities: string[] = [];
+  let topics: string[] = [];
   let optimizationNotes = '';
   
   switch (summaryType) {

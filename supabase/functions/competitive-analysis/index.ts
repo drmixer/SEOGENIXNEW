@@ -22,7 +22,7 @@ interface CompetitorAnalysis {
   opportunities: string[];
 }
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -38,7 +38,7 @@ Deno.serve(async (req: Request) => {
     console.log(`Processing competitive analysis for ${primaryUrl} vs ${competitorUrls.length} competitors`);
     console.log(`Industry: ${industry || 'not specified'}, Analysis type: ${analysisType}`);
 
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDJC5a7zgGvBk58ojXPKkQJXu-fR3qHHHM'; // Fallback to demo key
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDJC5a7zgGvBk58ojXPKkQJXu-f3qHHHM'; // Fallback to demo key
     
     if (!geminiApiKey) {
       console.error('Gemini API key not configured');
@@ -77,7 +77,7 @@ Deno.serve(async (req: Request) => {
         // If we have a Gemini API key and content, use the API
         if (geminiApiKey && (content || url === primaryUrl)) {
           const geminiResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -159,15 +159,15 @@ Deno.serve(async (req: Request) => {
             const conversationalReadiness = conversationalReadinessMatch ? parseInt(conversationalReadinessMatch[1]) : 68;
             const contentStructure = contentStructureMatch ? parseInt(contentStructureMatch[1]) : 62;
 
-            const overallScore = Math.round((aiUnderstanding + citationLikelihood + conversationalReadiness + contentStructure) / 4);
+            const overallScore = analysisText.match(/OVERALL_SCORE:\s*(\d+)/i) ? parseInt(analysisText.match(/OVERALL_SCORE:\s*(\d+)/i)[1]) : Math.round((aiUnderstanding + citationLikelihood + conversationalReadiness + contentStructure) / 4);
 
             // Parse strengths, weaknesses, opportunities
             const parseList = (section: string): string[] => {
               const match = analysisText.match(new RegExp(`${section}:\\s*([\\s\\S]*?)(?=WEAKNESSES:|OPPORTUNITIES:|$)`, 'i'));
               if (match) {
                 return match[1].split('\n')
-                  .filter(line => line.trim().match(/^\d+\./))
-                  .map(line => line.trim().replace(/^\d+\.\s*/, ''))
+                  .filter((line: string) => line.trim().match(/^\d+\./))
+                  .map((line: string) => line.trim().replace(/^\d+\.\s*/, ''))
                   .slice(0, 5);
               }
               return [];
@@ -262,7 +262,7 @@ Deno.serve(async (req: Request) => {
           competitivePosition: ranking <= Math.ceil(analyses.length / 3) ? 'Leading' : 
                               ranking <= Math.ceil(analyses.length * 2 / 3) ? 'Competitive' : 'Behind'
         },
-        primarySiteAnalysis: primarySite,
+        primaryUrlAnalysis: primarySite,
         competitorAnalyses: competitors,
         competitiveGaps,
         recommendations: [
@@ -287,12 +287,13 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to perform competitive analysis',
-        details: error.message 
+        details: (error as Error).message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+};
+Deno.serve(handler);
 
 // Helper function to generate fallback analysis
 function generateFallbackAnalysis(url: string): CompetitorAnalysis {

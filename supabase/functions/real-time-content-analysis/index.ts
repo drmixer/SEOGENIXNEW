@@ -22,7 +22,7 @@ interface ContentMetrics {
   suggestions: RealTimeSuggestion[];
 }
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -53,7 +53,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('Calling Gemini API for real-time content analysis...');
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,9 +138,9 @@ Deno.serve(async (req: Request) => {
     const keywordDensity: Record<string, number> = {};
     
     if (keywordDensitySection) {
-      const densityLines = keywordDensitySection[1].split('\n').filter(line => line.includes(':'));
-      densityLines.forEach(line => {
-        const [keyword, percentage] = line.split(':').map(s => s.trim());
+      const densityLines = keywordDensitySection[1].split('\n').filter((line: string) => line.includes(':'));
+      densityLines.forEach((line: string) => {
+        const [keyword, percentage] = line.split(':').map((s: string) => s.trim());
         if (keyword && percentage) {
           const numericValue = parseFloat(percentage.replace('%', ''));
           if (!isNaN(numericValue)) {
@@ -201,12 +201,14 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to analyze content',
-        details: error.message 
+        details: (error as Error).message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+};
+
+Deno.serve(handler);
 
 // Helper function to add basic suggestions
 function addBasicSuggestions(
