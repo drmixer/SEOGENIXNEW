@@ -133,18 +133,6 @@ function AppContent() {
     }
   };
 
-  const handleNavigateToDashboard = () => {
-    if (user) {
-      setDashboardLoading(true);
-      console.log('Navigating to dashboard for user:', user.id);
-      setCurrentView('dashboard');
-      setTimeout(() => setDashboardLoading(false), 300); // Reduced timeout for faster rendering
-    } else {
-      setAuthModalMode('login');
-      setShowAuthModal(true);
-    }
-  };
-
   const handleShowSignup = () => {
     setAuthModalMode('signup');
     setShowAuthModal(true);
