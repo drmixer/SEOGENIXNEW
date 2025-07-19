@@ -18,246 +18,120 @@ import CookiePolicy from './components/pages/CookiePolicy';
 import { useToast } from './hooks/useToast';
 import { lemonsqueezyService } from './services/lemonsqueezy';
 
-// Router wrapper to access location and navigate
-function AppWithRouter() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { addToast } = useToast();
-  
-  // Check for checkout success or cancel in URL params
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const checkoutSuccess = searchParams.get('checkout_success');
-    const checkoutCancelled = searchParams.get('checkout_cancelled');
-    const plan = searchParams.get('plan');
-    
-    if (checkoutSuccess === 'true' && plan) {
-      // Show success toast
-      addToast({
-        id: `checkout-success-${Date.now()}`,
-        type: 'success',
-        title: 'Subscription Activated',
-        message: `Your ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan has been activated successfully.`,
-        duration: 5000,
-        onClose: () => {}
-      });
-      
-      // Remove query params
-      navigate('/dashboard', { replace: true });
-    } else if (checkoutCancelled === 'true') {
-      // Show cancelled toast
-      addToast({
-        id: `checkout-cancelled-${Date.now()}`,
-        type: 'info',
-        title: 'Checkout Cancelled',
-        message: 'Your subscription checkout was cancelled. You can try again anytime.',
-        duration: 5000,
-        onClose: () => {}
-      });
-      
-      // Remove query params
-      navigate('/', { replace: true });
-    }
-  }, [location, navigate, addToast]);
-  
-  return <AppContent />;
-}
-
+// Simplified App component structure
 function App() {
   return (
     <Router>
-      <AppWithRouter />
+      <AppContent />
     </Router>
   );
 }
 
+// Main content component with simplified state and effects
 function AppContent() {
-  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'pricing'>('landing');
-  const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [user, setUser] = useState<any>(null);
+  const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [authInitialized, setAuthInitialized] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
   
-  // Use refs to prevent race conditions and duplicate initializations
-  const authInitializedRef = useRef(false);
-  const initializationTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const authListenerInitializedRef = useRef(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
+  // Effect for handling auth state changes
   useEffect(() => {
-    // Get initial session
-    const initializeAuth = async () => {
-      // Prevent multiple initialization attempts
-      if (authInitializedRef.current) {
-        console.log('Auth already initialized, skipping');
-        return;
-      }
-      
-      try {
-        console.log('Initializing authentication...');
-        setLoading(true);
-        authInitializedRef.current = true;
-        
-        // Clear any existing timer
-        if (initializationTimerRef.current) {
-          clearTimeout(initializationTimerRef.current);
-        }
-        
-        // Set a timeout to prevent hanging indefinitely
-        initializationTimerRef.current = setTimeout(() => {
-          console.log('Auth initialization timed out after 5 seconds');
-          setLoading(false);
-          setAuthInitialized(true);
-          setAuthError('Authentication initialization timed out. Please refresh the page.');
-        }, 5000);
-        
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        // Clear the timeout since we got a response
-        if (initializationTimerRef.current) {
-          clearTimeout(initializationTimerRef.current);
-          initializationTimerRef.current = null;
-        }
-        
-        if (error) {
-          console.error('Error getting initial session:', error);
-          setAuthError('Failed to initialize authentication: ' + error.message);
-          setLoading(false);
-          setAuthInitialized(true);
-          return;
-        }
-        
-        console.log('Initial session:', session ? 'Valid session exists' : 'No session');
-        
-        if (session?.user) {
-          console.log('Setting user from initial session');
-          setUser(session.user);
-          
-          // Fetch user profile to get plan - use a separate function to avoid nesting
-          await fetchUserProfile(session.user.id);
-        } else {
-          console.log('No user in session, staying on landing page');
-          // Important: Set loading to false even when no user is found
-          setLoading(false);
-          setAuthInitialized(true);
-        }
-      } catch (error) {
-        console.error('Error in initializeAuth:', error);
-        setAuthError('Authentication initialization failed: ' + (error as Error).message);
-        setLoading(false);
-        setAuthInitialized(true);
-      }
-    };
+    setLoading(true);
 
-    // Separate function to fetch user profile to reduce nesting
-    const fetchUserProfile = async (userId: string) => {
-      try {
-        const { data: profiles, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        
-        if (profileError) {
-          console.error('Error fetching user profile:', profileError);
-          // Continue with default values
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
+      
+      const currentUser = session?.user || null;
+      setUser(currentUser);
+
+      if (currentUser) {
+        // Fetch user profile
+        try {
+          const { data: profile, error } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .single();
           
-        if (profiles && profiles.length > 0) {
-          console.log('User profile found:', profiles[0].id);
-          setUserPlan(profiles[0].plan as any || 'free');
-          
-          // If onboarding is completed, go to dashboard
-          if (profiles[0].onboarding_completed_at) {
-            console.log('Onboarding completed, going to dashboard');
-            setCurrentView('dashboard');
-          } else {
-            // If onboarding is not completed, show onboarding modal
-            console.log('Onboarding not completed, showing onboarding modal');
-            setShowOnboarding(true);
+          if (error) {
+            console.error('Error fetching profile:', error);
           }
-        } else {
-          // No profile found, show onboarding
-          console.log('No profile found, showing onboarding');
+          
+          if (profile) {
+            setUserPlan(profile.plan || 'free');
+            if (!profile.onboarding_completed_at) {
+              setShowOnboarding(true);
+            }
+          } else {
+            setShowOnboarding(true); // New user, show onboarding
+          }
+        } catch (e) {
+          console.error('Exception fetching profile:', e);
           setShowOnboarding(true);
         }
-        
-        // Important: Set loading to false after profile is fetched
-        setLoading(false);
-        setAuthInitialized(true);
-      } catch (profileError) {
-        console.error('Error in profile fetch:', profileError);
-        // Continue with default plan and show onboarding
-        setShowOnboarding(true);
-        setLoading(false);
-        setAuthInitialized(true);
+      } else {
+        // Reset user state if not logged in
+        setUserPlan('free');
+        setShowOnboarding(false);
       }
+
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
     };
-
-    // Only initialize auth once
-    if (!authInitializedRef.current) {
-      initializeAuth();
-    }
-
-    // Listen for auth changes - only set up once
-    if (!authListenerInitializedRef.current) {
-      authListenerInitializedRef.current = true;
-      
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange(async (event, session) => {
-        // Clear any timeout immediately when any auth event occurs
-        if (initializationTimerRef.current) {
-          clearTimeout(initializationTimerRef.current);
-          initializationTimerRef.current = null;
-        }
-        
-        console.log('Auth state changed:', event, 'Session:', session?.user ? 'User present' : 'No user');
-        
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          if (session?.user) {
-            console.log('Setting user from auth change:', session.user.id);
-            setUser(session.user);
-            
-            // Fetch user profile to get plan - use a separate function to avoid nesting
-            await fetchUserProfile(session.user.id);
-          }
-        } else if (event === 'SIGNED_OUT') {
-          console.log('User signed out, clearing user state');
-          setUser(null);
-          setUserPlan('free');
-          setCurrentView('landing');
-          setShowOnboarding(false);
-          setLoading(false); // Ensure loading is set to false on sign out
-        } else if (event === 'INITIAL_SESSION') {
-          // This event is fired when the initial session is loaded
-          // We've already handled this in initializeAuth, but we'll ensure loading is false
-          setLoading(false);
-          setAuthInitialized(true);
-        }
-      });
-
-      return () => {
-        console.log('Cleaning up auth subscription');
-        subscription.unsubscribe();
-        
-        // Clear any timeout on unmount
-        if (initializationTimerRef.current) {
-          clearTimeout(initializationTimerRef.current);
-          initializationTimerRef.current = null;
-        }
-      };
-    }
-    
-    // Empty dependency array to ensure this only runs once on mount
   }, []);
+
+  // Effect for handling checkout success/cancel messages
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const checkoutSuccess = searchParams.get('checkout_success');
+    const checkoutCancelled = searchParams.get('checkout_cancelled');
+    const plan = searchParams.get('plan');
+
+    if (checkoutSuccess === 'true' && plan) {
+      addToast({
+        id: `checkout-success-${Date.now()}`,
+        type: 'success',
+        title: 'Subscription Activated',
+        message: `Your ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan has been activated.`,
+        duration: 5000,
+        onClose: () => {}
+      });
+      navigate(location.pathname, { replace: true });
+    } else if (checkoutCancelled === 'true') {
+      addToast({
+        id: `checkout-cancelled-${Date.now()}`,
+        type: 'info',
+        title: 'Checkout Cancelled',
+        message: 'Your checkout was cancelled. You can try again anytime.',
+        duration: 5000,
+        onClose: () => {}
+      });
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate, addToast]);
+
+  const handleNavigateToDashboard = () => {
+    if (user) {
+      setDashboardLoading(true);
+      // Use React Router's navigate function for SPA navigation
+      navigate('/dashboard');
+      setTimeout(() => setDashboardLoading(false), 300);
+    } else {
+      setAuthModalMode('login');
+      setShowAuthModal(true);
+    }
+  };
 
   const handleNavigateToDashboard = () => {
     if (user) {
@@ -526,45 +400,29 @@ function AppContent() {
   };
 
   const handleSignOut = async () => {
-    console.log('Signing out user');
-    try {
-      setLoading(true);
-      
-      // First, clean up local storage
-      localStorage.removeItem('seogenix_walkthrough_completed');
-      localStorage.removeItem('seogenix_immediate_walkthrough');
-      localStorage.removeItem('seogenix_tools_run');
-      localStorage.removeItem('seogenix_onboarding');
-      localStorage.removeItem('seogenix-auth-token');
-      
-      // Perform the sign out
-      const { error } = await supabase.auth.signOut({ scope: 'global' });
-      if (error) {
-        console.error('Error during sign out:', error);
-        throw error;
+    setLoading(true);
+    // Clean up local storage thoroughly
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('seogenix_') || key.startsWith('sb-')) {
+        localStorage.removeItem(key);
       }
-      
-      console.log('Sign out successful');
-      
-      // Ensure state is reset
-      setUser(null);
-      setCurrentView('landing');
-      setSelectedPlan('free');
-      setUserPlan('free');
-      setShowOnboarding(false);
-      setShowAuthModal(false);
-      
-      // Reset auth initialization state
-      authInitializedRef.current = false;
-      
-      // Force reload the page to clear any lingering state
-      window.location.reload();
-    } catch (error) {
+    });
+
+    const { error } = await supabase.auth.signOut();
+    if (error) {
       console.error('Error signing out:', error);
-      alert('There was a problem signing out. Please try again or refresh the page.');
-    } finally {
-      setLoading(false);
+      addToast({
+        id: `signout-error-${Date.now()}`,
+        type: 'error',
+        title: 'Sign Out Failed',
+        message: 'Could not sign out. Please try again.',
+        duration: 5000,
+        onClose: () => {}
+      });
     }
+
+    // Reload the page to ensure a clean state
+    window.location.reload();
   };
 
   // Don't render anything until auth is initialized to prevent flashing
