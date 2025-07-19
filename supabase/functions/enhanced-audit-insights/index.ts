@@ -23,7 +23,7 @@ interface ScoreExplanation {
   examples: string[];
 }
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -42,7 +42,7 @@ Deno.serve(async (req: Request) => {
 
     // Analyze content at sentence level
     const sentenceAnalysisResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,7 +80,7 @@ Deno.serve(async (req: Request) => {
 
     // Get detailed score explanations
     const scoreExplanationResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -145,8 +145,8 @@ Deno.serve(async (req: Request) => {
       if (sentenceMatch && issuesMatch && suggestionsMatch) {
         sentenceAnalyses.push({
           sentence: sentenceMatch[1].trim(),
-          issues: issuesMatch[1].split('|').map(i => i.trim()),
-          suggestions: suggestionsMatch[1].split('|').map(s => s.trim()),
+          issues: issuesMatch[1].split('|').map((i: string) => i.trim()),
+          suggestions: suggestionsMatch[1].split('|').map((s: string) => s.trim()),
           aiConfusionScore: confusionMatch ? parseInt(confusionMatch[1]) : 50,
           position: positionMatch ? 
             { start: parseInt(positionMatch[1]), end: parseInt(positionMatch[2]) } :
@@ -172,9 +172,9 @@ Deno.serve(async (req: Request) => {
           component: componentMatch[1].trim(),
           score: parseInt(scoreMatch[1]),
           reasoning: reasoningMatch[1].trim(),
-          specificIssues: issuesMatch ? issuesMatch[1].split('|').map(i => i.trim()) : [],
-          improvementActions: actionsMatch ? actionsMatch[1].split('|').map(a => a.trim()) : [],
-          examples: examplesMatch ? examplesMatch[1].split('|').map(e => e.trim()) : []
+          specificIssues: issuesMatch ? issuesMatch[1].split('|').map((i: string) => i.trim()) : [],
+          improvementActions: actionsMatch ? actionsMatch[1].split('|').map((a: string) => a.trim()) : [],
+          examples: examplesMatch ? examplesMatch[1].split('|').map((e: string) => e.trim()) : []
         });
       }
     }
@@ -208,9 +208,11 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to generate enhanced audit insights',
-        details: error.message 
+        details: (error as Error).message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+};
+
+Deno.serve(handler);

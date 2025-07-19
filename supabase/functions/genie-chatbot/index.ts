@@ -15,7 +15,7 @@ interface ChatRequest {
   };
 }
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -174,7 +174,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('Calling Gemini API for chatbot response...');
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -215,7 +215,7 @@ Deno.serve(async (req: Request) => {
     const response = geminiData.candidates[0].content.parts[0].text;
 
     // Generate proactive suggestions based on user data and plan
-    let proactiveSuggestions = [];
+    let proactiveSuggestions: string[] = [];
     
     if (['pro', 'agency'].includes(userPlan || '') && context === 'dashboard' && enhancedUserData) {
       const suggestions = [];
@@ -308,12 +308,14 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to process chat message',
-        details: error.message 
+        details: (error as Error).message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+};
+
+Deno.serve(handler);
 
 // Fallback function to generate sample response when API fails
 function generateFallbackResponse(

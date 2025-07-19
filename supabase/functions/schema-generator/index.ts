@@ -6,7 +6,7 @@ interface SchemaRequest {
   content?: string;
 }
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -60,7 +60,7 @@ Deno.serve(async (req: Request) => {
     
     // Use Gemini API to generate appropriate schema markup
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
       
       // Fallback to sample data if API fails
       console.log('Using fallback schema data');
-      return generateFallbackSchema(contentType, url);
+      return generateFallbackSchema(schemaType, url);
     }
 
     console.log('Received response from Gemini API');
@@ -167,12 +167,14 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to generate schema markup',
-        details: error.message 
+        details: (error as Error).message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+};
+
+Deno.serve(handler);
 
 // Fallback function to generate sample schema when API fails
 function generateFallbackSchema(contentType: string, url: string): Response {

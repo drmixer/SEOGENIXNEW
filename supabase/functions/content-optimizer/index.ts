@@ -6,7 +6,7 @@ interface OptimizeRequest {
   contentType: 'article' | 'product' | 'faq' | 'meta';
 }
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -30,7 +30,7 @@ Deno.serve(async (req: Request) => {
     console.log('Calling Gemini API for content optimization...');
     // Use Gemini API to optimize content for AI visibility
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,8 +108,8 @@ Deno.serve(async (req: Request) => {
     const improvements = improvementsText
       .split(/\d+\./)
       .slice(1)
-      .map(imp => imp.trim())
-      .filter(imp => imp.length > 0)
+      .map((imp: string) => imp.trim())
+      .filter((imp: string) => imp.length > 0)
       .slice(0, 5);
 
     // Calculate original score (simulate)
@@ -141,12 +141,14 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to optimize content',
-        details: error.message 
+        details: (error as Error).message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+};
+
+Deno.serve(handler);
 
 // Fallback function to generate sample optimization when API fails
 function generateFallbackOptimization(content: string, targetKeywords: string[], contentType: string): Response {

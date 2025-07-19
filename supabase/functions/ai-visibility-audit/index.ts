@@ -5,7 +5,7 @@ interface AuditRequest {
   content?: string;
 }
 
-interface AuditResponse {
+export interface AuditResponse {
   overallScore: number;
   subscores: {
     aiUnderstanding: number;
@@ -17,8 +17,8 @@ interface AuditResponse {
   issues: string[];
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
+export const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
@@ -62,7 +62,7 @@ Deno.serve(async (req: Request) => {
             console.error(`Failed to fetch URL: ${url}, status: ${response.status}, statusText: ${response.statusText}`);
           }
         } catch (fetchError) {
-          console.error(`Error in first fetch attempt: ${fetchError.message}`);
+          console.error(`Error in first fetch attempt: ${(fetchError as Error).message}`);
         }
         
         // If fetch failed, use fallback content
@@ -114,48 +114,35 @@ Deno.serve(async (req: Request) => {
 
     // Use Gemini API to analyze content for AI visibility
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `You are an AI visibility expert. Analyze this content and provide EXACT numeric scores (0-100) for each category.
+              text: `
+              You are an AI visibility expert auditing a webpage. Your task is to analyze the provided content and return a JSON object with a detailed analysis.
 
-              Content to analyze:
-              URL: ${url}
-              Content: ${pageContent?.substring(0, 4000) || 'No content provided'}
+              **Content to Analyze:**
+              - URL: ${url}
+              - Content: """
+              ${pageContent?.substring(0, 8000) || 'No content provided'}
+              """
 
-              Provide scores for these 4 categories:
+              **Instructions:**
 
-              1. AI Understanding Score (0-100): How well can AI systems comprehend the content structure, clarity, context, and meaning?
-              2. Citation Likelihood Score (0-100): How likely are AI systems to cite this content as a credible source?
-              3. Conversational Readiness Score (0-100): How well does this content answer questions in a conversational format?
-              4. Content Structure Score (0-100): Quality of schema markup, headings, organization, and technical SEO?
+              1.  **Score Calculation:**
+                  - Rate each of the following four categories on a scale of 0 to 100.
+                  - The scores should be integers.
+                  - **AI Understanding:** How well can AI systems comprehend the content's structure, clarity, context, and meaning?
+                  - **Citation Likelihood:** How likely are AI systems to cite this content as a credible source? (Consider factors like expertise, authoritativeness, and trustworthiness).
+                  - **Conversational Readiness:** How well does the content answer questions in a conversational, FAQ-like format?
+                  - **Content Structure:** How well is the content organized? (Consider schema markup, heading hierarchy (H1, H2, H3), and technical SEO elements).
 
-              Then provide:
-              - 5 specific, actionable recommendations for improvement
-              - 4 specific issues found in the content
-
-              Format your response as:
-              AI Understanding: [score]
-              Citation Likelihood: [score]
-              Conversational Readiness: [score]
-              Content Structure: [score]
-
-              Recommendations:
-              1. [specific recommendation]
-              2. [specific recommendation]
-              3. [specific recommendation]
-              4. [specific recommendation]
-              5. [specific recommendation]
-
-              Issues:
-              1. [specific issue]
-              2. [specific issue]
-              3. [specific issue]
-              4. [specific issue]`
+              2.  **Recommendations and Issues:**
+                  - Provide **five (5)** specific, actionable recommendations for improvement.
+                  - Identify **four (4)`
             }]
           }],
           generationConfig: {
@@ -181,40 +168,25 @@ Deno.serve(async (req: Request) => {
     const geminiData = await geminiResponse.json();
     const analysisText = geminiData.candidates[0].content.parts[0].text;
     
-    console.log('Gemini analysis:', analysisText);
+    // Clean the response to ensure it's valid JSON
+    const jsonString = analysisText.replace(/```json|```/g, '').trim();
+    const analysisResult = JSON.parse(jsonString);
 
-    // Extract scores from AI analysis using more robust parsing
-    const aiUnderstandingMatch = analysisText.match(/AI Understanding:?\s*(\d+)/i);
-    const citationLikelihoodMatch = analysisText.match(/Citation Likelihood:?\s*(\d+)/i);
-    const conversationalReadinessMatch = analysisText.match(/Conversational Readiness:?\s*(\d+)/i);
-    const contentStructureMatch = analysisText.match(/Content Structure:?\s*(\d+)/i);
+    const { scores, recommendations, issues } = analysisResult;
+    const {
+      aiUnderstanding,
+      citationLikelihood,
+      conversationalReadiness,
+      contentStructure,
+    } = scores;
 
-    const aiUnderstanding = aiUnderstandingMatch ? parseInt(aiUnderstandingMatch[1]) : 75;
-    const citationLikelihood = citationLikelihoodMatch ? parseInt(citationLikelihoodMatch[1]) : 65;
-    const conversationalReadiness = conversationalReadinessMatch ? parseInt(conversationalReadinessMatch[1]) : 70;
-    const contentStructure = contentStructureMatch ? parseInt(contentStructureMatch[1]) : 60;
-
-    // Extract recommendations
-    const recommendationsSection = analysisText.match(/Recommendations:?\s*([\s\S]*?)(?=Issues:|$)/i);
-    const recommendationsText = recommendationsSection ? recommendationsSection[1] : '';
-    const recommendations = recommendationsText
-      .split(/\d+\./)
-      .slice(1)
-      .map(rec => rec.trim())
-      .filter(rec => rec.length > 0)
-      .slice(0, 5);
-
-    // Extract issues
-    const issuesSection = analysisText.match(/Issues:?\s*([\s\S]*?)$/i);
-    const issuesText = issuesSection ? issuesSection[1] : '';
-    const issues = issuesText
-      .split(/\d+\./)
-      .slice(1)
-      .map(issue => issue.trim())
-      .filter(issue => issue.length > 0)
-      .slice(0, 4);
-
-    const overallScore = Math.round((aiUnderstanding + citationLikelihood + conversationalReadiness + contentStructure) / 4);
+    const overallScore = Math.round(
+      (aiUnderstanding +
+        citationLikelihood +
+        conversationalReadiness +
+        contentStructure) /
+        4
+    );
 
     const auditResult: AuditResponse = {
       overallScore,
@@ -222,21 +194,10 @@ Deno.serve(async (req: Request) => {
         aiUnderstanding,
         citationLikelihood,
         conversationalReadiness,
-        contentStructure
+        contentStructure,
       },
-      recommendations: recommendations.length > 0 ? recommendations : [
-        'Add structured data markup (Schema.org) to improve AI comprehension',
-        'Improve heading hierarchy with clear H1, H2, H3 structure',
-        'Include FAQ sections to address common user questions',
-        'Optimize content for featured snippet formats',
-        'Add clear topic definitions and explanations for better context'
-      ],
-      issues: issues.length > 0 ? issues : [
-        'Limited structured data implementation',
-        'Inconsistent heading hierarchy',
-        'Missing conversational content elements',
-        'Insufficient context for AI understanding'
-      ]
+      recommendations,
+      issues,
     };
 
     console.log('Returning audit result:', JSON.stringify(auditResult));
@@ -250,12 +211,12 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to analyze content with AI',
-        details: error.message 
+        details: (error as Error).message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+};
 
 // Fallback function to generate sample audit when API fails
 function generateFallbackAudit(url: string): Response {

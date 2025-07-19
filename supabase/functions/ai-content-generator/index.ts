@@ -5,13 +5,13 @@ interface ContentGenerationRequest {
   topic: string;
   targetKeywords: string[];
   tone?: 'professional' | 'casual' | 'technical' | 'friendly';
-  industry?: string;
-  targetAudience?: string;
+  industry: string;
+  targetAudience: string;
   contentLength?: 'short' | 'medium' | 'long';
   websiteUrl?: string; // Added to provide context about the site
 }
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -22,8 +22,8 @@ Deno.serve(async (req: Request) => {
       topic, 
       targetKeywords, 
       tone = 'professional',
-      industry,
-      targetAudience,
+      industry = 'General',
+      targetAudience = 'General audience',
       contentLength = 'medium',
       websiteUrl
     }: ContentGenerationRequest = await req.json();
@@ -91,7 +91,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('Calling Gemini API for content generation...');
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -187,7 +187,7 @@ Deno.serve(async (req: Request) => {
       
       // Return fallback data if API fails
       console.log('Using fallback content generation data');
-      return generateFallbackContent(contentType, topic, targetKeywords, tone, websiteUrl);
+      return generateFallbackContent(contentType, topic, targetKeywords, tone, industry, targetAudience, websiteUrl);
     }
 
     console.log('Received response from Gemini API');
@@ -267,12 +267,14 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to generate AI-optimized content',
-        details: error.message 
+        details: (error as Error).message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+};
+
+Deno.serve(handler);
 
 // Fallback function to generate sample content when API fails
 function generateFallbackContent(
@@ -280,6 +282,8 @@ function generateFallbackContent(
   topic: string, 
   targetKeywords: string[], 
   tone: string,
+  industry: string,
+  targetAudience: string,
   websiteUrl?: string
 ): Response {
   console.log(`Generating fallback ${contentType} content for ${topic}`);
