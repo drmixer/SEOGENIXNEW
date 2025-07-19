@@ -413,30 +413,12 @@ function AppContent() {
     window.location.reload();
   };
 
-  // Don't render anything until auth is initialized to prevent flashing
-  if (!authInitialized) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Initializing application...</p>
-          {authError && (
-            <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{authError}</p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-          {authError && (
-            <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{authError}</p>
-          )}
+          <p className="text-gray-600">Initializing...</p>
         </div>
       </div>
     );
