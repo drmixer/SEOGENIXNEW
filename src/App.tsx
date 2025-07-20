@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import LandingPage from './components/LandingPage';
@@ -17,6 +17,7 @@ import TermsOfService from './components/pages/TermsOfService';
 import CookiePolicy from './components/pages/CookiePolicy';
 import { useToast } from './hooks/useToast';
 import { lemonsqueezyService } from './services/lemonsqueezy';
+import { User } from '@supabase/supabase-js';
 
 // Simplified App component structure
 function App() {
@@ -29,7 +30,7 @@ function App() {
 
 // Main content component with simplified state and effects
 function AppContent() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -144,10 +145,6 @@ function AppContent() {
     setShowAuthModal(true);
   };
 
-  const handleShowPricing = () => {
-    setCurrentView('pricing');
-  };
-
   const handlePlanSelect = async (plan: 'free' | 'core' | 'pro' | 'agency') => {
     setSelectedPlan(plan);
     if (user) {
@@ -229,6 +226,7 @@ function AppContent() {
 
   const handleOnboardingComplete = async () => {
     setShowOnboarding(false);
+    navigate('/dashboard');
     // The rest of the logic is now handled in OnboardingModal
   };
 
