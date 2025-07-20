@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 
 interface OnboardingModalProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
-  onComplete: () => void;
+  onComplete: (startWalkthrough: boolean) => void;
   onClose: () => void;
   navigate: (path: string) => void;
 }
@@ -210,9 +210,8 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         // Save to localStorage for backward compatibility
         localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
         
-        // Complete onboarding
-        onComplete();
-        navigate('/dashboard');
+        // Complete onboarding and trigger walkthrough
+        onComplete(true);
       } catch (error: any) {
         console.error('Error saving onboarding data:', error);
         setError('Failed to save your settings: ' + error.message);

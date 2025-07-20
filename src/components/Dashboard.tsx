@@ -28,6 +28,8 @@ interface DashboardProps {
   user: any;
   onSignOut: () => void;
   userProfile: any;
+  showWalkthrough: boolean;
+  onWalkthroughComplete: () => void;
 }
 
 interface ActionableInsight {
@@ -43,10 +45,9 @@ interface ActionableInsight {
   learnMoreLink?: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut, userProfile }) => {
+const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut, userProfile, showWalkthrough, onWalkthroughComplete }) => {
   const [showChatbot, setShowChatbot] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
-  const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [hasRunTools, setHasRunTools] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<string>('');
@@ -897,14 +898,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         <DashboardWalkthrough
           onComplete={() => {
             console.log('Walkthrough completed - setting completion flag');
-            setShowWalkthrough(false);
+            onWalkthroughComplete();
             localStorage.setItem('seogenix_walkthrough_completed', 'true');
             // Clear any remaining immediate walkthrough flags
             localStorage.removeItem('seogenix_immediate_walkthrough');
           }}
           onSkip={() => {
             console.log('Walkthrough skipped - setting completion flag');
-            setShowWalkthrough(false);
+            onWalkthroughComplete();
             localStorage.setItem('seogenix_walkthrough_completed', 'true');
             // Clear any remaining immediate walkthrough flags
             localStorage.removeItem('seogenix_immediate_walkthrough');
