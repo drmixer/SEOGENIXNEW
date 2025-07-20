@@ -38,6 +38,7 @@ function AppContent() {
   const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
+  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'pricing'>('landing');
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -204,187 +205,39 @@ function AppContent() {
   };
   
   const handleAuthSuccess = async () => {
-    console.log('Auth success handler called');
     setShowAuthModal(false);
-    setAuthError(null);
     
-    // Get current session to ensure we have the latest user data
-    const { data: { session }, error } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
+    const currentUser = session?.user;
     
-    if (error) {
-      console.error('Error getting session after auth success:', error);
-      setAuthError('Failed to get session: ' + error.message);
-      return;
-    }
-    
-    if (!session?.user) {
-      console.error('No user in session after auth success');
-      setAuthError('Authentication succeeded but no user was found');
-      return;
-    }
-    
-    // Set user from session
-    console.log('Setting user after auth success:', session.user.id);
-    setUser(session.user);
-    
-    // Fetch user profile to get plan - use a separate function to avoid nesting
-    try {
-      const { data: profiles, error: profileError } = await supabase
+    if (currentUser) {
+      setUser(currentUser);
+
+      const { data: profile } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1);
+        .eq('user_id', currentUser.id)
+        .single();
       
-      if (profileError) {
-        console.error('Error fetching profile after auth success:', profileError);
-        // Continue with the flow using defaults
-      }
-        
-      if (profiles && profiles.length > 0) {
-        console.log('User profile found after auth success:', profiles[0].id);
-        setUserPlan(profiles[0].plan as any || 'free');
-        
-        // If onboarding is already completed, go directly to dashboard
-        if (profiles[0].onboarding_completed_at) {
-          console.log('Onboarding already completed, going to dashboard');
-          setCurrentView('dashboard');
-          return;
-        }
-      }
-    } catch (profileError) {
-      console.error('Error in profile fetch after auth success:', profileError);
-      // Continue with the flow using defaults
-    }
-    
-    // Now proceed with the flow
-    if (authModalMode === 'signup') {
-      console.log('Signup successful, checking for selected plan');
-      
-      // If a paid plan was selected, check if LemonSqueezy is configured
-      if (selectedPlan !== 'free') {
-        // Debug LemonSqueezy configuration
-        console.log('--- LemonSqueezy Configuration Debug (App.tsx) ---');
-        console.log('isConfigured() result:', lemonsqueezyService.isConfigured());
-        console.log('API Key (first 10 chars):', import.meta.env.VITE_LEMONSQUEEZY_API_KEY ? import.meta.env.VITE_LEMONSQUEEZY_API_KEY.substring(0, 10) + '...' : 'Not set');
-        console.log('Store ID:', import.meta.env.VITE_LEMONSQUEEZY_STORE_ID || 'Not set');
-        console.log('------------------------------------');
-        
-        if (!lemonsqueezyService.isConfigured()) {
-          console.log('LemonSqueezy not configured, falling back to free plan');
-          addToast({
-            id: `payment-unavailable-${Date.now()}`,
-            type: 'warning',
-            title: 'Payment Processing Unavailable',
-            message: 'Payment processing is currently not available. You\'ve been signed up for the free plan.',
-            duration: 8000,
-            onClose: () => {}
-          });
-          setUserPlan('free');
-          setShowOnboarding(true);
-          return;
-        }
-
-        try {
-          console.log('Redirecting to checkout for plan:', selectedPlan);
-          const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(selectedPlan, session.user);
-          if (checkoutUrl) {
-            window.location.href = checkoutUrl;
-            return; // Stop execution here as we're redirecting
-          } else {
-            console.error('Failed to create checkout URL');
-            // Fall back to free plan if checkout creation fails
-            setUserPlan('free');
-            setShowOnboarding(true);
-          }
-        } catch (err) {
-          console.error('Error creating checkout:', err);
-          const errorMessage = err instanceof Error ? err.message : 'An error occurred while setting up the checkout process.';
-          addToast({
-            id: `checkout-error-${Date.now()}`,
-            type: 'error',
-            title: 'Checkout Error',
-            message: errorMessage,
-            duration: 8000,
-            onClose: () => {}
-          });
-          // Fall back to free plan if checkout creation fails
-          setUserPlan('free');
-          setShowOnboarding(true);
-        }
+      if (profile && profile.onboarding_completed_at) {
+        navigate('/dashboard');
       } else {
-        // For free plan, proceed to onboarding
-        console.log('Showing onboarding for new signup with free plan');
-        setUserPlan('free');
         setShowOnboarding(true);
       }
-    } else {
-      // For login, check if they need onboarding (determined above)
-      console.log('Going to dashboard for login');
-      setCurrentView('dashboard');
     }
   };
 
   const handleOnboardingComplete = async () => {
-    console.log('Onboarding completed in App.tsx');
     setShowOnboarding(false);
-    
-    // Update user profile with selected plan if needed
     if (user) {
-      try {
-        const { data: existingProfiles, error } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1);
-          
-        if (error) {
-          console.error('Error checking for existing profiles:', error);
-        }
-          
-        if (existingProfiles && existingProfiles.length > 0) {
-          // Update existing profile
-          console.log('Updating existing profile:', existingProfiles[0].id);
-          const { error: updateError } = await supabase
-            .from('user_profiles')
-            .update({ 
-              plan: userPlan,
-              onboarding_completed_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', existingProfiles[0].id);
-            
-          if (updateError) {
-            console.error('Error updating profile after onboarding:', updateError);
-          }
-        } else {
-          // Create new profile if none exists
-          console.log('Creating new profile for user:', user.id);
-          const { error: insertError } = await supabase
-            .from('user_profiles')
-            .insert({
-              user_id: user.id,
-              plan: userPlan,
-              onboarding_completed_at: new Date().toISOString(),
-              websites: [],
-              competitors: []
-            });
-            
-          if (insertError) {
-            console.error('Error creating profile after onboarding:', insertError);
-          }
-        }
-      } catch (error) {
-        console.error('Error updating user profile after onboarding:', error);
-      }
+      // Update user profile
+      await supabase
+        .from('user_profiles')
+        .update({ onboarding_completed_at: new Date().toISOString() })
+        .eq('user_id', user.id);
     }
-    
-    // Set the walkthrough trigger flag BEFORE navigating to dashboard
-    localStorage.setItem('seogenix_immediate_walkthrough', 'true');
-    
     // Navigate to dashboard
-    setCurrentView('dashboard');
+    navigate('/dashboard');
   };
 
   const handleSignOut = async () => {
