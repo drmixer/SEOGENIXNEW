@@ -184,44 +184,15 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
           data: { plan: userPlan }
         });
         
-        // Check for existing profile
-        const { data: existingProfiles, error } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1);
-          
-        if (existingProfiles && existingProfiles.length > 0) {
-          // Update existing profile
-          await supabase
-            .from('user_profiles')
-            .update({
-              websites: onboardingData.websites,
-              competitors: onboardingData.competitors,
-              industry: onboardingData.industry,
-              business_description: onboardingData.businessDescription,
-              plan: userPlan,
-              goals: selectedGoals,
-              onboarding_completed_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', existingProfiles[0].id);
-        } else {
-          // Create new profile
-          await supabase
-            .from('user_profiles')
-            .insert({
-              user_id: user.id,
-              websites: onboardingData.websites,
-              competitors: onboardingData.competitors,
-              industry: onboardingData.industry,
-              business_description: onboardingData.businessDescription,
-              plan: userPlan,
-              goals: selectedGoals,
-              onboarding_completed_at: new Date().toISOString()
-            });
-        }
+        await userDataService.updateUserProfile(user.id, {
+            websites: onboardingData.websites,
+            competitors: onboardingData.competitors,
+            industry: onboardingData.industry,
+            business_description: onboardingData.businessDescription,
+            plan: userPlan,
+            goals: selectedGoals,
+            onboarding_completed_at: new Date().toISOString(),
+        });
 
         // Track onboarding completion
         await userDataService.trackActivity({
