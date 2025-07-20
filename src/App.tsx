@@ -31,6 +31,7 @@ function App() {
 // Main content component with simplified state and effects
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<any | null>(null);
   const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -67,6 +68,7 @@ function AppContent() {
         console.log('Profile fetched:', profile);
 
         if (profile) {
+          setUserProfile(profile);
           console.log('Profile exists, checking onboarding status...');
           setUserPlan(profile.plan || 'free');
           if (!profile.onboarding_completed_at) {
@@ -312,6 +314,7 @@ function AppContent() {
                 onNavigateToLanding={() => setCurrentView('landing')}
                 user={user}
                 onSignOut={handleSignOut}
+                userProfile={userProfile}
               />
             )
           } />
