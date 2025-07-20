@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import LandingPage from './components/LandingPage';
@@ -17,7 +17,6 @@ import TermsOfService from './components/pages/TermsOfService';
 import CookiePolicy from './components/pages/CookiePolicy';
 import { useToast } from './hooks/useToast';
 import { lemonsqueezyService } from './services/lemonsqueezy';
-import { User } from '@supabase/supabase-js';
 
 // Simplified App component structure
 function App() {
@@ -30,7 +29,7 @@ function App() {
 
 // Main content component with simplified state and effects
 function AppContent() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -55,6 +54,7 @@ function AppContent() {
       setUser(currentUser);
 
       if (currentUser) {
+        console.log('User found, fetching profile...');
         // Fetch user profile
         try {
           const { data: profile, error } = await supabase
@@ -67,12 +67,19 @@ function AppContent() {
             console.error('Error fetching profile:', error);
           }
           
+          console.log('Profile fetched:', profile);
+
           if (profile) {
+            console.log('Profile exists, checking onboarding status...');
             setUserPlan(profile.plan || 'free');
             if (!profile.onboarding_completed_at) {
+              console.log('Onboarding not complete, showing onboarding modal.');
               setShowOnboarding(true);
+            } else {
+              console.log('Onboarding complete, not showing onboarding modal.');
             }
           } else {
+            console.log('No profile found, showing onboarding modal.');
             setShowOnboarding(true); // New user, show onboarding
           }
         } catch (e) {
@@ -80,11 +87,13 @@ function AppContent() {
           setShowOnboarding(true);
         }
       } else {
+        console.log('No user found, resetting state.');
         // Reset user state if not logged in
         setUserPlan('free');
         setShowOnboarding(false);
       }
 
+      console.log('Setting loading to false.');
       setLoading(false);
     });
 
@@ -143,6 +152,10 @@ function AppContent() {
   const handleShowLogin = () => {
     setAuthModalMode('login');
     setShowAuthModal(true);
+  };
+
+  const handleShowPricing = () => {
+    setCurrentView('pricing');
   };
 
   const handlePlanSelect = async (plan: 'free' | 'core' | 'pro' | 'agency') => {
@@ -226,7 +239,6 @@ function AppContent() {
 
   const handleOnboardingComplete = async () => {
     setShowOnboarding(false);
-    navigate('/dashboard');
     // The rest of the logic is now handled in OnboardingModal
   };
 
