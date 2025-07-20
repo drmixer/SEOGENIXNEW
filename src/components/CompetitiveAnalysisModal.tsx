@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader, BarChart3 } from 'lucide-react';
 import { apiService } from '../services/api';
+import CompetitiveAnalysisSiteSelector from './CompetitiveAnalysisSiteSelector';
 
 interface Website {
   url: string;
@@ -13,8 +14,6 @@ interface Competitor {
 }
 
 interface CompetitiveAnalysisModalProps {
-  selectedUserWebsite: string;
-  selectedCompetitor: string;
   onClose: () => void;
   onAnalysisComplete: (results: any) => void;
   userWebsites: Website[];
@@ -22,15 +21,24 @@ interface CompetitiveAnalysisModalProps {
 }
 
 const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
-  selectedUserWebsite,
-  selectedCompetitor,
   onClose,
   onAnalysisComplete,
   userWebsites,
   userCompetitors,
 }) => {
+  const [selectedUserWebsite, setSelectedUserWebsite] = useState<string>('');
+  const [selectedCompetitor, setSelectedCompetitor] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (userWebsites.length > 0) {
+      setSelectedUserWebsite(userWebsites[0].url);
+    }
+    if (userCompetitors.length > 0) {
+      setSelectedCompetitor(userCompetitors[0].url);
+    }
+  }, [userWebsites, userCompetitors]);
 
   const handleRunAnalysis = async () => {
     if (!selectedUserWebsite || !selectedCompetitor) {
@@ -73,21 +81,14 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
         </div>
 
         <div className="p-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Your Website
-              </label>
-              <p className="text-lg font-semibold text-gray-900">{userWebsites.find(site => site.url === selectedUserWebsite)?.name || selectedUserWebsite}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Competitor's Website
-              </label>
-              <p className="text-lg font-semibold text-gray-900">{userCompetitors.find(c => c.url === selectedCompetitor)?.name || selectedCompetitor}</p>
-            </div>
-          </div>
-
+          <CompetitiveAnalysisSiteSelector
+            userWebsites={userWebsites}
+            competitors={userCompetitors}
+            selectedUserWebsite={selectedUserWebsite}
+            selectedCompetitor={selectedCompetitor}
+            onUserWebsiteChange={setSelectedUserWebsite}
+            onCompetitorChange={setSelectedCompetitor}
+          />
           {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
         </div>
 
