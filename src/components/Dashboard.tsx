@@ -27,6 +27,7 @@ interface DashboardProps {
   onNavigateToLanding: () => void;
   user: any;
   onSignOut: () => void;
+  userProfile: any;
 }
 
 interface ActionableInsight {
@@ -42,13 +43,12 @@ interface ActionableInsight {
   learnMoreLink?: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut }) => {
+const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut, userProfile }) => {
   const [showChatbot, setShowChatbot] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [hasRunTools, setHasRunTools] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<any>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -376,98 +376,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       isMountedRef.current = false;
     };
   }, []);
-
-  // Load user profile and set up dashboard
-  useEffect(() => {
-    const loadUserProfile = async () => {
-      if (!user || !user.id) {
-        console.log('No user available, skipping profile load');
-        setLoading(false);
-        setLoadingProfile(false);
-        return;
-      }
-
-      // Prevent duplicate profile fetches
-      if (profileFetchedRef.current) {
-        console.log('Profile already fetched, skipping');
-        return;
-      }
-
-      try {
-        console.log('Loading user profile for:', user.id);
-        setLoadingProfile(true);
-        profileFetchedRef.current = true;
-        
-        const profile = await userDataService.getUserProfile(user.id);
-        console.log('Loaded profile:', profile);
-        
-        // Only update state if component is still mounted
-        if (!isMountedRef.current) return;
-        
-        if (profile) {
-          setUserProfile(profile);
-          
-          // Set user goals if available
-          if (profile.goals && Array.isArray(profile.goals)) {
-            setUserGoals(profile.goals);
-          }
-          
-          // Set default selected website if user has websites
-          if (profile.websites && profile.websites.length > 0) {
-            setSelectedWebsite(profile.websites[0].url);
-            console.log('Set selected website to:', profile.websites[0].url);
-          }
-          
-          // Check if onboarding was completed and walkthrough should trigger
-          if (profile.onboarding_completed_at) {
-            const walkthroughCompleted = localStorage.getItem('seogenix_walkthrough_completed');
-            const immediateWalkthrough = localStorage.getItem('seogenix_immediate_walkthrough');
-            
-            console.log('Profile has onboarding completed:', {
-              onboarding_completed_at: profile.onboarding_completed_at,
-              walkthroughCompleted: !!walkthroughCompleted,
-              immediateWalkthrough: !!immediateWalkthrough
-            });
-            
-            // Trigger walkthrough if not completed and onboarding was done
-            if (!walkthroughCompleted || immediateWalkthrough) {
-              console.log('Triggering walkthrough from profile check');
-              localStorage.removeItem('seogenix_immediate_walkthrough');
-              setTimeout(() => {
-                console.log('Starting immediate walkthrough...');
-                setShowWalkthrough(true);
-              }, 1000); // Reduced from 1500ms for faster rendering
-            }
-          }
-          
-          // Check if user has run tools before
-          const toolsRun = localStorage.getItem('seogenix_tools_run');
-          if (toolsRun) {
-            setHasRunTools(true);
-          }
-        } else {
-          console.log('No profile found for user - this is expected for new users');
-        }
-      } catch (error) {
-        console.error('Error loading user profile:', error);
-        setDashboardError('Failed to load user profile. Please refresh the page.');
-      } finally {
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setLoading(false);
-          setLoadingProfile(false);
-          setProfileFetchAttempted(true);
-        }
-      }
-    };
-
-    if (user?.id && !profileFetchAttempted && !profileFetchedRef.current) {
-      loadUserProfile();
-    } else if (!user) {
-      setLoading(false);
-      setLoadingProfile(false);
-    }
-  }, [user?.id, profileFetchAttempted]); // Only depend on user.id, not the entire user object
 
   // Generate insights when profile loads - only once
   useEffect(() => {
