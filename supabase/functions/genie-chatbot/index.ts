@@ -261,7 +261,7 @@ export const handler = async (req: Request): Promise<Response> => {
     }
 
     // Generate action suggestions for interactive elements
-    let actionSuggestions = [];
+    const actionSuggestions = [];
     
     if (context === 'dashboard' && enhancedUserData) {
       // Suggest specific tools based on conversation context
@@ -327,8 +327,8 @@ function generateFallbackResponse(
   console.log(`Generating fallback response for ${context} context`);
   
   let response = '';
-  let proactiveSuggestions: string[] = [];
-  let actionSuggestions: any[] = [];
+  const proactiveSuggestions: string[] = [];
+  const actionSuggestions: any[] = [];
   
   if (context === 'landing') {
     // Landing page responses
