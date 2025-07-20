@@ -7,6 +7,7 @@ interface OnboardingModalProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
   onComplete: () => void;
   onClose: () => void;
+  navigate: (path: string) => void;
 }
 
 interface Website {
@@ -26,7 +27,7 @@ interface Goal {
   selected: boolean;
 }
 
-const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete, onClose }) => {
+const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete, onClose, navigate }) => {
   const [step, setStep] = useState(1);
   const [websites, setWebsites] = useState<Website[]>([{ url: 'https://', name: '' }]);
   const [competitors, setCompetitors] = useState<Competitor[]>([{ url: 'https://', name: '' }]);
@@ -239,7 +240,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
         
         // Complete onboarding
-        onComplete();
+        navigate('/dashboard');
       } catch (error: any) {
         console.error('Error saving onboarding data:', error);
         setError('Failed to save your settings: ' + error.message);
