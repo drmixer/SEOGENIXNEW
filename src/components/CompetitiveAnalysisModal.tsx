@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Loader, BarChart3 } from 'lucide-react';
 import { apiService } from '../services/api';
 
@@ -29,6 +29,12 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
   const [selectedCompetitor, setSelectedCompetitor] = useState<string>(userCompetitors[0]?.url || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (userCompetitors.length > 0 && !selectedCompetitor) {
+      setSelectedCompetitor(userCompetitors[0].url);
+    }
+  }, [userCompetitors, selectedCompetitor]);
 
   const handleRunAnalysis = async () => {
     if (!selectedUserWebsite || !selectedCompetitor) {
