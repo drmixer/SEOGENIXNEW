@@ -229,15 +229,7 @@ function AppContent() {
 
   const handleOnboardingComplete = async () => {
     setShowOnboarding(false);
-    if (user) {
-      // Update user profile
-      await supabase
-        .from('user_profiles')
-        .update({ onboarding_completed_at: new Date().toISOString() })
-        .eq('user_id', user.id);
-    }
-    // Navigate to dashboard
-    navigate('/dashboard');
+    // The rest of the logic is now handled in OnboardingModal
   };
 
   const handleSignOut = async () => {
@@ -337,6 +329,7 @@ function AppContent() {
             userPlan={userPlan}
             onComplete={handleOnboardingComplete}
             onClose={() => setShowOnboarding(false)}
+            navigate={navigate}
           />
         )}
         
