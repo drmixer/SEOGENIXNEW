@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Plus, Trash2, Globe, Target, ArrowRight, Building, FileText, Loader } from 'lucide-react';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
@@ -7,7 +7,6 @@ interface OnboardingModalProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
   onComplete: () => void;
   onClose: () => void;
-  navigate: (path: string) => void;
 }
 
 interface Website {
@@ -27,14 +26,13 @@ interface Goal {
   selected: boolean;
 }
 
-const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete, onClose, navigate }) => {
+const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete, onClose }) => {
   const [step, setStep] = useState(1);
   const [websites, setWebsites] = useState<Website[]>([{ url: 'https://', name: '' }]);
   const [competitors, setCompetitors] = useState<Competitor[]>([{ url: 'https://', name: '' }]);
   const [industry, setIndustry] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [goals, setGoals] = useState<Goal[]>([
     { 
       id: 'increase_citations', 
@@ -146,21 +144,18 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
     } else {
       // Save data and complete onboarding
       setLoading(true);
-      setError(null);
       
       try {
         // Get current user
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError) {
           console.error('Error getting current user:', userError);
-          setError('Unable to complete onboarding: ' + userError.message);
           setLoading(false);
           return;
         }
         
         if (!user) {
           console.error('No user found during onboarding completion');
-          setError('User session not found. Please try logging in again.');
           setLoading(false);
           return;
         }
@@ -240,10 +235,9 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
         
         // Complete onboarding
-        navigate('/dashboard');
-      } catch (error: any) {
+        onComplete();
+      } catch (error) {
         console.error('Error saving onboarding data:', error);
-        setError('Failed to save your settings: ' + error.message);
       } finally {
         setLoading(false);
       }
@@ -531,12 +525,6 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                     </div>
                   ))}
                 </div>
-
-                {error && (
-                  <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
-                    <p className="text-red-800 text-sm">{error}</p>
-                  </div>
-                )}
               </div>
             )}
           </div>
