@@ -13,28 +13,24 @@ interface Competitor {
 }
 
 interface CompetitiveAnalysisModalProps {
-  userWebsites: Website[];
-  userCompetitors: Competitor[];
+  selectedUserWebsite: string;
+  selectedCompetitor: string;
   onClose: () => void;
   onAnalysisComplete: (results: any) => void;
+  userWebsites: Website[];
+  userCompetitors: Competitor[];
 }
 
 const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
-  userWebsites,
-  userCompetitors,
+  selectedUserWebsite,
+  selectedCompetitor,
   onClose,
   onAnalysisComplete,
+  userWebsites,
+  userCompetitors,
 }) => {
-  const [selectedUserWebsite, setSelectedUserWebsite] = useState<string>(userWebsites[0]?.url || '');
-  const [selectedCompetitor, setSelectedCompetitor] = useState<string>(userCompetitors[0]?.url || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (userCompetitors.length > 0 && !selectedCompetitor) {
-      setSelectedCompetitor(userCompetitors[0].url);
-    }
-  }, [userCompetitors, selectedCompetitor]);
 
   const handleRunAnalysis = async () => {
     if (!selectedUserWebsite || !selectedCompetitor) {
@@ -82,33 +78,13 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Your Website
               </label>
-              <select
-                value={selectedUserWebsite}
-                onChange={(e) => setSelectedUserWebsite(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              >
-                {userWebsites.map((site) => (
-                  <option key={site.url} value={site.url}>
-                    {site.name}
-                  </option>
-                ))}
-              </select>
+              <p className="text-lg font-semibold text-gray-900">{userWebsites.find(site => site.url === selectedUserWebsite)?.name || selectedUserWebsite}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Competitor's Website
               </label>
-              <select
-                value={selectedCompetitor}
-                onChange={(e) => setSelectedCompetitor(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              >
-                {userCompetitors.map((competitor) => (
-                  <option key={competitor.url} value={competitor.url}>
-                    {competitor.name}
-                  </option>
-                ))}
-              </select>
+              <p className="text-lg font-semibold text-gray-900">{userCompetitors.find(c => c.url === selectedCompetitor)?.name || selectedCompetitor}</p>
             </div>
           </div>
 

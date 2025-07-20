@@ -12,6 +12,7 @@ import OptimizationPlaybooks from './OptimizationPlaybooks';
 import ChatbotPopup from './ChatbotPopup';
 import DashboardWalkthrough from './DashboardWalkthrough';
 import SiteSelector from './SiteSelector';
+import CompetitiveAnalysisSiteSelector from './CompetitiveAnalysisSiteSelector';
 import SettingsModal from './SettingsModal';
 import BillingModal from './BillingModal';
 import FeedbackModal from './FeedbackModal';
@@ -51,6 +52,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [hasRunTools, setHasRunTools] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<string>('');
+  const [selectedCompetitor, setSelectedCompetitor] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -383,7 +385,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     if (userProfile && userProfile.websites && userProfile.websites.length > 0 && !selectedWebsite) {
       setSelectedWebsite(userProfile.websites[0].url);
     }
-  }, [userProfile, selectedWebsite]);
+    if (userProfile && userProfile.competitors && userProfile.competitors.length > 0 && !selectedCompetitor) {
+      setSelectedCompetitor(userProfile.competitors[0].url);
+    }
+  }, [userProfile, selectedWebsite, selectedCompetitor]);
 
   // Generate insights when profile loads - only once
   useEffect(() => {
@@ -649,13 +654,24 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
             {/* Site Selector - Show if user has completed onboarding */}
             {userProfile && userProfile.websites && userProfile.websites.length > 0 && (
-              <SiteSelector
-                websites={userProfile.websites}
-                competitors={userProfile.competitors || []}
-                selectedWebsite={selectedWebsite}
-                onWebsiteChange={setSelectedWebsite}
-                userPlan={userPlan}
-              />
+              activeSection === 'competitive-viz' ? (
+                <CompetitiveAnalysisSiteSelector
+                  userWebsites={userProfile.websites}
+                  competitors={userProfile.competitors || []}
+                  selectedUserWebsite={selectedWebsite}
+                  selectedCompetitor={selectedCompetitor}
+                  onUserWebsiteChange={setSelectedWebsite}
+                  onCompetitorChange={setSelectedCompetitor}
+                />
+              ) : (
+                <SiteSelector
+                  websites={userProfile.websites}
+                  competitors={userProfile.competitors || []}
+                  selectedWebsite={selectedWebsite}
+                  onWebsiteChange={setSelectedWebsite}
+                  userPlan={userPlan}
+                />
+              )
             )}
 
             {/* Goal Tracker */}
