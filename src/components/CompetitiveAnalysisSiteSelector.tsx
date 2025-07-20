@@ -28,6 +28,10 @@ const CompetitiveAnalysisSiteSelector: React.FC<CompetitiveAnalysisSiteSelectorP
   onUserWebsiteChange,
   onCompetitorChange,
 }) => {
+  console.log('userWebsites in selector', userWebsites);
+  console.log('competitors in selector', competitors);
+  console.log('selectedUserWebsite in selector', selectedUserWebsite);
+  console.log('selectedCompetitor in selector', selectedCompetitor);
   return (
     <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">Competitive Analysis Setup</h3>

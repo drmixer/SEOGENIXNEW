@@ -26,6 +26,8 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
   userWebsites,
   userCompetitors,
 }) => {
+  console.log('userWebsites', userWebsites);
+  console.log('userCompetitors', userCompetitors);
   const [selectedUserWebsite, setSelectedUserWebsite] = useState<string>('');
   const [selectedCompetitor, setSelectedCompetitor] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -39,6 +41,9 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
       setSelectedCompetitor(userCompetitors[0].url);
     }
   }, [userWebsites, userCompetitors]);
+
+  console.log('selectedUserWebsite', selectedUserWebsite);
+  console.log('selectedCompetitor', selectedCompetitor);
 
   const handleRunAnalysis = async () => {
     if (!selectedUserWebsite || !selectedCompetitor) {
