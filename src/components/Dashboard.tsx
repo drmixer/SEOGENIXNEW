@@ -378,6 +378,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     };
   }, []);
 
+  // Auto-select first website if none is selected
+  useEffect(() => {
+    if (userProfile && userProfile.websites && userProfile.websites.length > 0 && !selectedWebsite) {
+      setSelectedWebsite(userProfile.websites[0].url);
+    }
+  }, [userProfile, selectedWebsite]);
+
   // Generate insights when profile loads - only once
   useEffect(() => {
     if (userProfile && user && user.id && !insightsGeneratedRef.current) {
