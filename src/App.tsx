@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'reac t-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
-import { User } from '@supabase/supabase-js';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
@@ -18,7 +17,6 @@ import TermsOfService from './components/pages/TermsOfService';
 import CookiePolicy from './components/pages/CookiePolicy';
 import { useToast } from './hooks/useToast';
 import { lemonsqueezyService } from './services/lemonsqueezy';
-import { User } from '@supabase/supabase-js';
 
 // Simplified App component structure
 function App() {
