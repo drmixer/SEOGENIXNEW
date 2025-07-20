@@ -15,6 +15,7 @@ import {
   Loader
 } from 'lucide-react';
 import { apiService } from '../services/api';
+import CompetitiveAnalysisModal from './CompetitiveAnalysisModal';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 
@@ -50,6 +51,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   onToolComplete
 }) => {
   const [activeToolId, setActiveToolId] = useState<string | null>(selectedTool || null);
+  const [showCompetitiveAnalysisModal, setShowCompetitiveAnalysisModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toolData, setToolData] = useState<any>(null);
@@ -192,7 +194,9 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   });
 
   const handleToolClick = (toolId: string) => {
-    if (showPreview) {
+    if (toolId === 'competitive') {
+      setShowCompetitiveAnalysisModal(true);
+    } else if (showPreview) {
       // In preview mode, just notify parent
       onToolRun();
     } else {
@@ -1190,42 +1194,55 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
   // Otherwise, show the grid of tools
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Tools</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {availableTools.map((tool) => {
-          const IconComponent = tool.icon;
-          return (
-            <div
-              key={tool.id}
-              onClick={() => handleToolClick(tool.id)}
-              className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md hover:border-purple-200 transition-all duration-300 cursor-pointer relative"
-              data-walkthrough={tool.id === 'audit' ? 'audit-tool' : undefined}
-            >
-              {tool.isNew && (
-                <div className="absolute top-4 right-4 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                  NEW
+    <>
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold text-gray-900">Tools</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {availableTools.map((tool) => {
+            const IconComponent = tool.icon;
+            return (
+              <div
+                key={tool.id}
+                onClick={() => handleToolClick(tool.id)}
+                className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md hover:border-purple-200 transition-all duration-300 cursor-pointer relative"
+                data-walkthrough={tool.id === 'audit' ? 'audit-tool' : undefined}
+              >
+                {tool.isNew && (
+                  <div className="absolute top-4 right-4 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                    NEW
+                  </div>
+                )}
+                {tool.isPopular && (
+                  <div className="absolute top-4 right-4 bg-purple-500 text-white text-xs px-2 py-1 rounded-full">
+                    POPULAR
+                  </div>
+                )}
+                <div className={`p-3 rounded-lg bg-gradient-to-r ${tool.color} mb-4`}>
+                  <IconComponent className="w-6 h-6 text-white" />
                 </div>
-              )}
-              {tool.isPopular && (
-                <div className="absolute top-4 right-4 bg-purple-500 text-white text-xs px-2 py-1 rounded-full">
-                  POPULAR
-                </div>
-              )}
-              <div className={`p-3 rounded-lg bg-gradient-to-r ${tool.color} mb-4`}>
-                <IconComponent className="w-6 h-6 text-white" />
+                <h3 className="font-semibold text-gray-900 mb-2">{tool.name}</h3>
+                <p className="text-gray-600 text-sm mb-4">{tool.description}</p>
+                <button className="text-sm text-purple-600 hover:text-purple-800 flex items-center space-x-1">
+                  <span>Run Tool</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
-              <h3 className="font-semibold text-gray-900 mb-2">{tool.name}</h3>
-              <p className="text-gray-600 text-sm mb-4">{tool.description}</p>
-              <button className="text-sm text-purple-600 hover:text-purple-800 flex items-center space-x-1">
-                <span>Run Tool</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
+      {showCompetitiveAnalysisModal && (
+        <CompetitiveAnalysisModal
+          userWebsites={userProfile?.websites || []}
+          userCompetitors={userProfile?.competitors || []}
+          onClose={() => setShowCompetitiveAnalysisModal(false)}
+          onAnalysisComplete={(results) => {
+            setToolData(results);
+            setActiveToolId('competitive');
+          }}
+        />
+      )}
+    </>
   );
 };
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Target, ChevronDown } from 'lucide-react';
+import { Globe, Target, ChevronDown, Info } from 'lucide-react';
 
 interface Website {
   url: string;
@@ -50,6 +50,12 @@ const SiteSelector: React.FC<SiteSelectorProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Active Website
           </label>
+          <div className="flex items-center space-x-2 mb-2">
+            <Info className="w-4 h-4 text-blue-500" />
+            <p className="text-xs text-gray-600">
+              The selected website will be used for all tool analyses.
+            </p>
+          </div>
           <div className="relative">
             <select
               value={selectedWebsite}
@@ -68,9 +74,6 @@ const SiteSelector: React.FC<SiteSelectorProps> = ({
             </select>
             <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            This website will be used for all tool analyses
-          </p>
         </div>
 
         {/* Competitors Display */}
