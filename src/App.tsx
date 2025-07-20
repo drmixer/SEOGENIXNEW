@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { Session } from '@supabase/supabase-js';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
@@ -43,61 +44,61 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const handleAuthStateChange = async (session: Session | null) => {
+    const currentUser = session?.user || null;
+    setUser(currentUser);
+
+    if (currentUser) {
+      console.log('User found, fetching profile...');
+      try {
+        const { data: profile, error } = await Promise.race([
+          supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .single(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
+        ]);
+
+        if (error) {
+          console.error('Error fetching profile:', error);
+        }
+
+        console.log('Profile fetched:', profile);
+
+        if (profile) {
+          console.log('Profile exists, checking onboarding status...');
+          setUserPlan(profile.plan || 'free');
+          if (!profile.onboarding_completed_at) {
+            console.log('Onboarding not complete, showing onboarding modal.');
+            setShowOnboarding(true);
+          } else {
+            console.log('Onboarding complete, not showing onboarding modal.');
+          }
+        } else {
+          console.log('No profile found, showing onboarding modal.');
+          setShowOnboarding(true);
+        }
+      } catch (e) {
+        console.error('Exception fetching profile:', e);
+        setShowOnboarding(true);
+      }
+    } else {
+      console.log('No user found, resetting state.');
+      setUserPlan('free');
+      setShowOnboarding(false);
+    }
+
+    console.log('Setting loading to false.');
+    setLoading(false);
+  };
+
   // Effect for handling auth state changes
   useEffect(() => {
     setLoading(true);
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('Auth state changed:', event);
-      
-      const currentUser = session?.user || null;
-      setUser(currentUser);
-
-      if (currentUser) {
-        console.log('User found, fetching profile...');
-        // Fetch user profile
-        try {
-          const { data: profile, error } = await Promise.race([
-            supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('user_id', currentUser.id)
-              .single(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
-          ]);
-          
-          if (error) {
-            console.error('Error fetching profile:', error);
-          }
-          
-          console.log('Profile fetched:', profile);
-
-          if (profile) {
-            console.log('Profile exists, checking onboarding status...');
-            setUserPlan(profile.plan || 'free');
-            if (!profile.onboarding_completed_at) {
-              console.log('Onboarding not complete, showing onboarding modal.');
-              setShowOnboarding(true);
-            } else {
-              console.log('Onboarding complete, not showing onboarding modal.');
-            }
-          } else {
-            console.log('No profile found, showing onboarding modal.');
-            setShowOnboarding(true); // New user, show onboarding
-          }
-        } catch (e) {
-          console.error('Exception fetching profile:', e);
-          setShowOnboarding(true);
-        }
-      } else {
-        console.log('No user found, resetting state.');
-        // Reset user state if not logged in
-        setUserPlan('free');
-        setShowOnboarding(false);
-      }
-
-      console.log('Setting loading to false.');
-      setLoading(false);
+      handleAuthStateChange(session);
     });
 
     return () => {
