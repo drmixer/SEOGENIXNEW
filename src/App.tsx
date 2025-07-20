@@ -31,7 +31,7 @@ function App() {
 // Main content component with simplified state and effects
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<any | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -76,6 +76,7 @@ function AppContent() {
             setShowOnboarding(true);
           } else {
             console.log('Onboarding complete, not showing onboarding modal.');
+            setCurrentView('dashboard');
           }
         } else {
           console.log('No profile found, showing onboarding modal.');
