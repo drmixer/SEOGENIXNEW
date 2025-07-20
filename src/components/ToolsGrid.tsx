@@ -12,7 +12,8 @@ import {
   BarChart3,
   ArrowRight,
   AlertTriangle,
-  Loader
+  Loader,
+  CheckCircle
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import CompetitiveAnalysisModal from './CompetitiveAnalysisModal';
@@ -57,6 +58,9 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [toolData, setToolData] = useState<any>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
   
+  // AI Visibility Audit specific state
+  const [auditScope, setAuditScope] = useState<'page' | 'site'>('page');
+
   // Schema Generator specific state
   const [schemaType, setSchemaType] = useState<'article' | 'product' | 'organization' | 'person' | 'faq' | 'howto'>('article');
   
@@ -330,6 +334,29 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       setToolData(result);
       onToolRun();
 
+      // Save audit result to history
+      if (toolId === 'audit') {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await userDataService.saveAuditResult({
+              user_id: user.id,
+              website_url: selectedWebsite,
+              overall_score: result.overallScore,
+              ai_understanding: result.subscores.aiUnderstanding,
+              citation_likelihood: result.subscores.citationLikelihood,
+              conversational_readiness: result.subscores.conversationalReadiness,
+              content_structure: result.subscores.contentStructure,
+              recommendations: result.recommendations,
+              issues: result.issues.map((issue: any) => issue.title), // Storing titles for now
+              audit_data: result
+            });
+          }
+        } catch (error) {
+          console.error('Error saving audit result:', error);
+        }
+      }
+
       // Track tool usage
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -464,6 +491,23 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
               <div className="flex items-start">
                 <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 mr-2" />
                 <p className="text-red-700">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* AI Visibility Audit Tool Form */}
+          {activeToolId === 'audit' && (
+            <div className="mb-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Audit Scope</label>
+                <select
+                  value={auditScope}
+                  onChange={(e) => setAuditScope(e.target.value as any)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="page">Specific Page</option>
+                  <option value="site" disabled>Entire Site (Coming Soon)</option>
+                </select>
               </div>
             </div>
           )}
@@ -687,42 +731,50 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
               
               {/* Display tool-specific results */}
               {activeToolId === 'audit' && (
-                <div className="space-y-4">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-purple-600 mb-2">{toolData.overallScore}</div>
-                    <p className="text-gray-600">Overall AI Visibility Score</p>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                      <div className="text-lg font-semibold">{toolData.subscores.aiUnderstanding}</div>
-                      <p className="text-sm text-gray-600">AI Understanding</p>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-blue-600">{toolData.overallScore}</div>
+                      <div className="text-sm text-blue-800">Overall Score</div>
                     </div>
-                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                      <div className="text-lg font-semibold">{toolData.subscores.citationLikelihood}</div>
-                      <p className="text-sm text-gray-600">Citation Likelihood</p>
+                    <div className="bg-teal-50 p-4 rounded-lg text-center">
+                      <div className="text-xl font-bold text-teal-600">{toolData.subscores?.aiUnderstanding}</div>
+                      <div className="text-sm text-teal-800">AI Understanding</div>
                     </div>
-                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                      <div className="text-lg font-semibold">{toolData.subscores.conversationalReadiness}</div>
-                      <p className="text-sm text-gray-600">Conversational Readiness</p>
+                    <div className="bg-purple-50 p-4 rounded-lg text-center">
+                      <div className="text-xl font-bold text-purple-600">{toolData.subscores?.citationLikelihood}</div>
+                      <div className="text-sm text-purple-800">Citation Likelihood</div>
                     </div>
-                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                      <div className="text-lg font-semibold">{toolData.subscores.contentStructure}</div>
-                      <p className="text-sm text-gray-600">Content Structure</p>
+                    <div className="bg-indigo-50 p-4 rounded-lg text-center">
+                      <div className="text-xl font-bold text-indigo-600">{toolData.subscores?.conversationalReadiness}</div>
+                      <div className="text-sm text-indigo-800">Conversational</div>
                     </div>
                   </div>
-                  
-                  <div>
-                    <h4 className="font-medium mb-2">Recommendations:</h4>
-                    <ul className="space-y-2">
-                      {toolData.recommendations.map((rec: string, i: number) => (
-                        <li key={i} className="flex items-start">
-                          <span className="text-purple-600 mr-2">•</span>
-                          <span className="text-gray-700">{rec}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+
+                  {toolData.recommendations && toolData.recommendations.length > 0 && (
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-green-900 mb-2">Key Recommendations:</h4>
+                      <ul className="text-sm text-green-800 space-y-2">
+                        {toolData.recommendations.map((rec: string, index: number) => (
+                          <li key={index} className="flex items-start space-x-2">
+                            <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {toolData.issues && toolData.issues.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="font-medium text-gray-900">Issues Found:</h4>
+                      <div className="space-y-3">
+                        {toolData.issues.map((issue: any, index: number) => (
+                          <IssueCard key={index} issue={issue} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -1247,3 +1299,49 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 };
 
 export default ToolsGrid;
+
+const IssueCard = ({ issue }: { issue: any }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
+  const priorityColors = {
+    High: 'bg-red-100 text-red-800',
+    Medium: 'bg-yellow-100 text-yellow-800',
+    Low: 'bg-blue-100 text-blue-800',
+  };
+
+  const categoryColors = {
+    'Content': 'border-blue-500',
+    'Technical SEO': 'border-purple-500',
+    'User Experience': 'border-green-500',
+    'Schema': 'border-orange-500',
+  };
+
+  return (
+    <div className={`bg-white border-l-4 ${categoryColors[issue.category] || 'border-gray-500'} rounded-r-lg shadow-sm p-4`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <h5 className="font-semibold text-gray-800">{issue.title}</h5>
+          <div className="flex items-center space-x-2 mt-1">
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${priorityColors[issue.priority] || 'bg-gray-100 text-gray-800'}`}>
+              {issue.priority} Priority
+            </span>
+            <span className="text-xs text-gray-500">{issue.category}</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-sm text-purple-600 hover:text-purple-800"
+        >
+          {isExpanded ? 'Show Less' : 'Learn More'}
+        </button>
+      </div>
+      <p className="text-gray-600 mt-3">{issue.suggestion}</p>
+      {isExpanded && (
+        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+          <h6 className="font-semibold text-gray-700">Why it matters</h6>
+          <p className="text-sm text-gray-600 mt-1">{issue.learnMore}</p>
+        </div>
+      )}
+    </div>
+  );
+}
