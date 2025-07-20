@@ -59,7 +59,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [runningTool, setRunningTool] = useState<string | null>(null);
   
   // AI Visibility Audit specific state
-  const [auditScope, setAuditScope] = useState<'page' | 'site'>('page');
+  const [auditScope, setAuditScope] = useState<'site' | 'page'>('site');
+  const [pageUrl, setPageUrl] = useState('');
 
   // Schema Generator specific state
   const [schemaType, setSchemaType] = useState<'article' | 'product' | 'organization' | 'person' | 'faq' | 'howto'>('article');
@@ -246,7 +247,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       
       switch (toolId) {
         case 'audit':
-          result = await apiService.runAudit(selectedWebsite);
+          const auditUrl = auditScope === 'page' && pageUrl ? `${selectedWebsite}${pageUrl}` : selectedWebsite;
+          result = await apiService.runAudit(auditUrl);
           break;
         case 'schema':
           result = await apiService.generateSchema(selectedWebsite, schemaType);
@@ -500,15 +502,46 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             <div className="mb-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Audit Scope</label>
-                <select
-                  value={auditScope}
-                  onChange={(e) => setAuditScope(e.target.value as any)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                >
-                  <option value="page">Specific Page</option>
-                  <option value="site" disabled>Entire Site (Coming Soon)</option>
-                </select>
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="auditScope"
+                      value="site"
+                      checked={auditScope === 'site'}
+                      onChange={() => setAuditScope('site')}
+                      className="form-radio h-4 w-4 text-purple-600"
+                    />
+                    <span className="ml-2 text-gray-700">Entire Site</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="auditScope"
+                      value="page"
+                      checked={auditScope === 'page'}
+                      onChange={() => setAuditScope('page')}
+                      className="form-radio h-4 w-4 text-purple-600"
+                    />
+                    <span className="ml-2 text-gray-700">Specific Page</span>
+                  </label>
+                </div>
               </div>
+              {auditScope === 'page' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Page URL</label>
+                  <input
+                    type="text"
+                    value={pageUrl}
+                    onChange={(e) => setPageUrl(e.target.value)}
+                    placeholder="e.g., /blog/my-post"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                   <p className="mt-1 text-sm text-gray-500">
+                    Enter a specific page path relative to your selected site.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
