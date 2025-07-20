@@ -37,6 +37,7 @@ function AppContent() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
@@ -75,8 +76,9 @@ function AppContent() {
             console.log('Onboarding not complete, showing onboarding modal.');
             setShowOnboarding(true);
           } else {
-            console.log('Onboarding complete, not showing onboarding modal.');
+            console.log('Onboarding complete, navigating to dashboard.');
             setCurrentView('dashboard');
+            navigate('/dashboard');
           }
         } else {
           console.log('No profile found, showing onboarding modal.');
@@ -90,6 +92,8 @@ function AppContent() {
       console.log('No user found, resetting state.');
       setUserPlan('free');
       setShowOnboarding(false);
+      setCurrentView('landing');
+      navigate('/');
     }
 
     console.log('Setting loading to false.');
@@ -240,9 +244,16 @@ function AppContent() {
     }
   };
 
-  const handleOnboardingComplete = async () => {
+  const handleOnboardingComplete = async (startWalkthrough: boolean) => {
     setShowOnboarding(false);
-    // The rest of the logic is now handled in OnboardingModal
+    if (startWalkthrough) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        handleAuthStateChange(session);
+      }
+      setShowWalkthrough(true);
+      navigate('/dashboard');
+    }
   };
 
   const handleSignOut = async () => {
@@ -298,7 +309,7 @@ function AppContent() {
       <div className="min-h-screen bg-white">
         <Routes>
           <Route path="/" element={
-            currentView === 'landing' || currentView === 'pricing' ? (
+            (currentView === 'landing' || currentView === 'pricing') ? (
               <LandingPage 
                 onNavigateToDashboard={handleNavigateToDashboard}
                 onPlanSelect={handlePlanSelect}
@@ -309,14 +320,49 @@ function AppContent() {
                 initialView={currentView}
                 onNavigateToLanding={() => setCurrentView('landing')}
               />
-            ) : (
-              <Dashboard 
+            ) : (user && userProfile) ? (
+              <Dashboard
                 userPlan={userPlan}
-                onNavigateToLanding={() => setCurrentView('landing')}
+                onNavigateToLanding={() => {
+                  setCurrentView('landing');
+                  navigate('/');
+                }}
                 user={user}
                 onSignOut={handleSignOut}
                 userProfile={userProfile}
+                showWalkthrough={showWalkthrough}
+                onWalkthroughComplete={() => setShowWalkthrough(false)}
               />
+            ) : (
+              <div className="min-h-screen bg-white flex items-center justify-center">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading dashboard...</p>
+                </div>
+              </div>
+            )
+          } />
+          <Route path="/dashboard" element={
+            (user && userProfile) ? (
+              <Dashboard 
+                userPlan={userPlan}
+                onNavigateToLanding={() => {
+                  setCurrentView('landing');
+                  navigate('/');
+                }}
+                user={user}
+                onSignOut={handleSignOut}
+                userProfile={userProfile}
+                showWalkthrough={showWalkthrough}
+                onWalkthroughComplete={() => setShowWalkthrough(false)}
+              />
+            ) : (
+              <div className="min-h-screen bg-white flex items-center justify-center">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading user data...</p>
+                </div>
+              </div>
             )
           } />
           <Route path="/integrations" element={<Integrations />} />
@@ -341,7 +387,7 @@ function AppContent() {
         {showOnboarding && user && (
           <OnboardingModal
             userPlan={userPlan}
-            onComplete={handleOnboardingComplete}
+            onComplete={(startWalkthrough) => handleOnboardingComplete(startWalkthrough)}
             onClose={() => setShowOnboarding(false)}
             navigate={navigate}
           />
