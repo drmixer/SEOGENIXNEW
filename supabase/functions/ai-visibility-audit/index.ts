@@ -100,7 +100,7 @@ export const handler = async (req: Request): Promise<Response> => {
     }
 
     // Use Gemini API for analysis
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyDJC5a7zgGvBk58ojXPKkQJXu-fR3qHHHM'; // Fallback to demo key
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     
     if (!geminiApiKey) {
       console.error('Gemini API key not configured');
