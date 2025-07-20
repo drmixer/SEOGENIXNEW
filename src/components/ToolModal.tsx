@@ -115,7 +115,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
                 conversational_readiness: result.subscores.conversationalReadiness,
                 content_structure: result.subscores.contentStructure,
                 recommendations: result.recommendations,
-                issues: result.issues,
+                issues: result.issues.map((issue: any) => issue.title), // Storing titles for now
                 audit_data: result
               });
             }
@@ -244,16 +244,14 @@ const ToolModal: React.FC<ToolModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Audit Type</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Audit Scope</label>
               <select
-                value={formData.auditType || 'comprehensive'}
-                onChange={(e) => setFormData({ ...formData, auditType: e.target.value })}
+                value={formData.auditScope || 'page'}
+                onChange={(e) => setFormData({ ...formData, auditScope: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
-                <option value="comprehensive">Comprehensive Audit</option>
-                <option value="quick">Quick Scan</option>
-                <option value="technical">Technical Focus</option>
-                <option value="content">Content Focus</option>
+                <option value="page">Specific Page</option>
+                <option value="site" disabled>Entire Site (Coming Soon)</option>
               </select>
             </div>
           </div>
@@ -596,16 +594,13 @@ const ToolModal: React.FC<ToolModalProps> = ({
             )}
 
             {result.issues && result.issues.length > 0 && (
-              <div className="bg-yellow-50 p-4 rounded-lg">
-                <h4 className="font-medium text-yellow-900 mb-2">Issues Found:</h4>
-                <ul className="text-sm text-yellow-800 space-y-2">
-                  {result.issues.map((issue: string, index: number) => (
-                    <li key={index} className="flex items-start space-x-2">
-                      <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
-                      <span>{issue}</span>
-                    </li>
+              <div className="space-y-4">
+                <h4 className="font-medium text-gray-900">Issues Found:</h4>
+                <div className="space-y-3">
+                  {result.issues.map((issue: any, index: number) => (
+                    <IssueCard key={index} issue={issue} />
                   ))}
-                </ul>
+                </div>
               </div>
             )}
           </div>
@@ -1119,5 +1114,51 @@ const ToolModal: React.FC<ToolModalProps> = ({
     </div>
   );
 };
+
+const IssueCard = ({ issue }: { issue: any }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const priorityColors = {
+    High: 'bg-red-100 text-red-800',
+    Medium: 'bg-yellow-100 text-yellow-800',
+    Low: 'bg-blue-100 text-blue-800',
+  };
+
+  const categoryColors = {
+    'Content': 'border-blue-500',
+    'Technical SEO': 'border-purple-500',
+    'User Experience': 'border-green-500',
+    'Schema': 'border-orange-500',
+  };
+
+  return (
+    <div className={`bg-white border-l-4 ${categoryColors[issue.category] || 'border-gray-500'} rounded-r-lg shadow-sm p-4`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <h5 className="font-semibold text-gray-800">{issue.title}</h5>
+          <div className="flex items-center space-x-2 mt-1">
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${priorityColors[issue.priority] || 'bg-gray-100 text-gray-800'}`}>
+              {issue.priority} Priority
+            </span>
+            <span className="text-xs text-gray-500">{issue.category}</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-sm text-purple-600 hover:text-purple-800"
+        >
+          {isExpanded ? 'Show Less' : 'Learn More'}
+        </button>
+      </div>
+      <p className="text-gray-600 mt-3">{issue.suggestion}</p>
+      {isExpanded && (
+        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+          <h6 className="font-semibold text-gray-700">Why it matters</h6>
+          <p className="text-sm text-gray-600 mt-1">{issue.learnMore}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default ToolModal;

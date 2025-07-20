@@ -3,6 +3,17 @@ import { corsHeaders } from '../_shared/cors.ts';
 interface AuditRequest {
   url: string;
   content?: string;
+  auditType?: 'comprehensive' | 'quick' | 'technical' | 'content';
+}
+
+export interface AuditIssue {
+  id: string;
+  category: 'Content' | 'Technical SEO' | 'User Experience' | 'Schema';
+  priority: 'High' | 'Medium' | 'Low';
+  title: string;
+  description: string;
+  suggestion: string;
+  learnMore: string;
 }
 
 export interface AuditResponse {
@@ -14,7 +25,7 @@ export interface AuditResponse {
     contentStructure: number;
   };
   recommendations: string[];
-  issues: string[];
+  issues: AuditIssue[];
 }
 
 export const handler = async (req: Request): Promise<Response> => {
@@ -122,7 +133,7 @@ export const handler = async (req: Request): Promise<Response> => {
           contents: [{
             parts: [{
               text: `
-              You are an AI visibility expert auditing a webpage. Your task is to analyze the provided content and return a JSON object with a detailed analysis.
+              You are an expert SEO and AI visibility auditor. Your task is to analyze the provided webpage content and return a detailed JSON object.
 
               **Content to Analyze:**
               - URL: ${url}
@@ -133,16 +144,63 @@ export const handler = async (req: Request): Promise<Response> => {
               **Instructions:**
 
               1.  **Score Calculation:**
-                  - Rate each of the following four categories on a scale of 0 to 100.
-                  - The scores should be integers.
-                  - **AI Understanding:** How well can AI systems comprehend the content's structure, clarity, context, and meaning?
-                  - **Citation Likelihood:** How likely are AI systems to cite this content as a credible source? (Consider factors like expertise, authoritativeness, and trustworthiness).
-                  - **Conversational Readiness:** How well does the content answer questions in a conversational, FAQ-like format?
-                  - **Content Structure:** How well is the content organized? (Consider schema markup, heading hierarchy (H1, H2, H3), and technical SEO elements).
+                  - Rate each of the following four categories on a scale of 0 to 100. Scores must be integers.
+                  - **aiUnderstanding:** How well can AI systems comprehend the content's structure, clarity, context, and meaning?
+                  - **citationLikelihood:** How likely are AI systems to cite this content as a credible source? (Consider expertise, authoritativeness, trustworthiness).
+                  - **conversationalReadiness:** How well does the content answer questions in a conversational, FAQ-like format?
+                  - **contentStructure:** How well is the content organized? (Consider schema markup, heading hierarchy, and technical SEO elements).
 
-              2.  **Recommendations and Issues:**
-                  - Provide **five (5)** specific, actionable recommendations for improvement.
-                  - Identify **four (4)`
+              2.  **Recommendations:**
+                  - Provide **three (3)** high-level, actionable recommendations for improvement. These should be strings in an array.
+
+              3.  **Issues:**
+                  - Identify **five (5)** specific issues. For each issue, provide the following in a JSON object:
+                    - **id:** A unique kebab-case identifier (e.g., 'missing-h1-tag').
+                    - **category:** One of 'Content', 'Technical SEO', 'User Experience', or 'Schema'.
+                    - **priority:** 'High', 'Medium', or 'Low'.
+                    - **title:** A short, descriptive title (e.g., "Missing H1 Tag").
+                    - **description:** A concise explanation of the issue.
+                    - **suggestion:** A clear, actionable suggestion on how to fix the issue.
+                    - **learnMore:** A brief explanation of why this is important for AI visibility.
+
+              **JSON Output Format:**
+
+              Return a single, valid JSON object. Do not include any text or formatting outside of the JSON object.
+
+              Example:
+              {
+                "scores": {
+                  "aiUnderstanding": 85,
+                  "citationLikelihood": 70,
+                  "conversationalReadiness": 60,
+                  "contentStructure": 75
+                },
+                "recommendations": [
+                  "Implement a comprehensive schema strategy.",
+                  "Improve the internal linking structure.",
+                  "Add an FAQ section to address common user queries."
+                ],
+                "issues": [
+                  {
+                    "id": "missing-h1-tag",
+                    "category": "Technical SEO",
+                    "priority": "High",
+                    "title": "Missing H1 Tag",
+                    "description": "The page is missing a primary heading (H1 tag), which is crucial for search engines and AI to understand the main topic.",
+                    "suggestion": "Add a unique and descriptive H1 tag to the top of the page's content.",
+                    "learnMore": "The H1 tag is the strongest semantic signal of a page's topic. It helps AI quickly grasp the core subject matter, improving content analysis and relevance scoring."
+                  },
+                  {
+                    "id": "meta-description-too-short",
+                    "category": "Content",
+                    "priority": "Medium",
+                    "title": "Meta Description Too Short",
+                    "description": "The meta description is under 70 characters, which may be too brief to be compelling.",
+                    "suggestion": "Expand the meta description to be between 70 and 160 characters, including relevant keywords and a clear call-to-action.",
+                    "learnMore": "A well-crafted meta description acts as an 'ad' in search results and provides a summary for AI systems, influencing click-through rates and comprehension."
+                  }
+                ]
+              }`
             }]
           }],
           generationConfig: {
@@ -222,11 +280,10 @@ export const handler = async (req: Request): Promise<Response> => {
 function generateFallbackAudit(url: string): Response {
   console.log(`Generating fallback audit for ${url}`);
   
-  // Generate realistic but random scores
-  const aiUnderstanding = Math.floor(Math.random() * 20) + 70; // 70-90
-  const citationLikelihood = Math.floor(Math.random() * 25) + 60; // 60-85
-  const conversationalReadiness = Math.floor(Math.random() * 30) + 60; // 60-90
-  const contentStructure = Math.floor(Math.random() * 25) + 65; // 65-90
+  const aiUnderstanding = Math.floor(Math.random() * 20) + 70;
+  const citationLikelihood = Math.floor(Math.random() * 25) + 60;
+  const conversationalReadiness = Math.floor(Math.random() * 30) + 60;
+  const contentStructure = Math.floor(Math.random() * 25) + 65;
   
   const overallScore = Math.round((aiUnderstanding + citationLikelihood + conversationalReadiness + contentStructure) / 4);
   
@@ -239,17 +296,56 @@ function generateFallbackAudit(url: string): Response {
       contentStructure
     },
     recommendations: [
-      'Add structured data markup (Schema.org) to improve AI comprehension',
-      'Improve heading hierarchy with clear H1, H2, H3 structure',
-      'Include FAQ sections to address common user questions',
-      'Optimize content for featured snippet formats',
-      'Add clear topic definitions and explanations for better context'
+      'Implement a comprehensive schema strategy for all key pages.',
+      'Improve the internal linking structure to create topical clusters.',
+      'Add an FAQ section to address common user queries conversationally.'
     ],
     issues: [
-      'Limited structured data implementation',
-      'Inconsistent heading hierarchy',
-      'Missing conversational content elements',
-      'Insufficient context for AI understanding'
+      {
+        id: 'missing-h1-tag',
+        category: 'Technical SEO',
+        priority: 'High',
+        title: 'Missing H1 Tag',
+        description: 'The page is missing a primary heading (H1 tag), which is crucial for search engines and AI to understand the main topic.',
+        suggestion: 'Add a unique and descriptive H1 tag to the top of the page\'s content.',
+        learnMore: 'The H1 tag is the strongest semantic signal of a page\'s topic. It helps AI quickly grasp the core subject matter, improving content analysis and relevance scoring.'
+      },
+      {
+        id: 'meta-description-too-short',
+        category: 'Content',
+        priority: 'Medium',
+        title: 'Meta Description Too Short',
+        description: 'The meta description is under 70 characters, which may be too brief to be compelling.',
+        suggestion: 'Expand the meta description to be between 70 and 160 characters, including relevant keywords and a clear call-to-action.',
+        learnMore: 'A well-crafted meta description acts as an "ad" in search results and provides a summary for AI systems, influencing click-through rates and comprehension.'
+      },
+      {
+        id: 'no-schema-detected',
+        category: 'Schema',
+        priority: 'High',
+        title: 'No Schema Markup Detected',
+        description: 'The page does not appear to use any structured data (schema), which helps AI understand the content context.',
+        suggestion: 'Implement relevant schema types (e.g., Article, Product, Organization) to provide explicit clues about the content\'s meaning.',
+        learnMore: 'Schema markup is a form of microdata that, once added to a webpage, creates an enhanced description which can appear in search results.'
+      },
+      {
+        id: 'low-word-count',
+        category: 'Content',
+        priority: 'Low',
+        title: 'Low Word Count',
+        description: 'The page has a low word count, which may signal a lack of depth on the topic.',
+        suggestion: 'Consider expanding the content to provide more comprehensive information on the topic, if appropriate.',
+        learnMore: 'While not a direct ranking factor, content depth is often correlated with higher rankings and better AI understanding.'
+      },
+      {
+        id: 'images-missing-alt-text',
+        category: 'Technical SEO',
+        priority: 'Medium',
+        title: 'Images Missing Alt Text',
+        description: 'Some images on the page are missing descriptive alt text.',
+        suggestion: 'Add descriptive alt text to all images to improve accessibility and provide context to search engines.',
+        learnMore: 'Alt text helps search engines and screen readers understand what an image is about, contributing to better content analysis.'
+      }
     ]
   };
   
