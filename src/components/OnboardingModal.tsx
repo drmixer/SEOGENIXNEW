@@ -240,6 +240,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         localStorage.setItem('seogenix_onboarding', JSON.stringify(onboardingData));
         
         // Complete onboarding
+        onComplete();
         navigate('/dashboard');
       } catch (error: any) {
         console.error('Error saving onboarding data:', error);
