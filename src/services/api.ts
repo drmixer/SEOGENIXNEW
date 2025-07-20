@@ -7,7 +7,7 @@ const apiCall = async (url: string, options: RequestInit, authRequired: boolean 
   try {
     console.log(`Making API call to: ${url}`);
     
-    let headers = {
+    const headers = {
       'Content-Type': 'application/json',
       ...((options.headers as Record<string, string>) || {})
     };

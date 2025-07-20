@@ -195,7 +195,7 @@ export const handler = async (req: Request): Promise<Response> => {
     const generatedContent = geminiData.candidates[0].content.parts[0].text;
 
     // Parse content based on type
-    let parsedContent: any = { raw: generatedContent };
+    const parsedContent: any = { raw: generatedContent };
 
     if (contentType === 'faq') {
       const qaPairs = [];

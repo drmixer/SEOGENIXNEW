@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'reac t-router-dom';
 import { supabase } from './lib/supabase';
+import { User } from '@supabase/supabase-js';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
@@ -17,6 +18,7 @@ import TermsOfService from './components/pages/TermsOfService';
 import CookiePolicy from './components/pages/CookiePolicy';
 import { useToast } from './hooks/useToast';
 import { lemonsqueezyService } from './services/lemonsqueezy';
+import { User } from '@supabase/supabase-js';
 
 // Simplified App component structure
 function App() {
@@ -29,7 +31,7 @@ function App() {
 
 // Main content component with simplified state and effects
 function AppContent() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -57,11 +59,14 @@ function AppContent() {
         console.log('User found, fetching profile...');
         // Fetch user profile
         try {
-          const { data: profile, error } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('user_id', currentUser.id)
-            .single();
+          const { data: profile, error } = await Promise.race([
+            supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('user_id', currentUser.id)
+              .single(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
+          ]);
           
           if (error) {
             console.error('Error fetching profile:', error);
@@ -152,10 +157,6 @@ function AppContent() {
   const handleShowLogin = () => {
     setAuthModalMode('login');
     setShowAuthModal(true);
-  };
-
-  const handleShowPricing = () => {
-    setCurrentView('pricing');
   };
 
   const handlePlanSelect = async (plan: 'free' | 'core' | 'pro' | 'agency') => {

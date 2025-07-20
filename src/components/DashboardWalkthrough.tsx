@@ -65,7 +65,7 @@ const DashboardWalkthrough: React.FC<DashboardWalkthroughProps> = ({ onComplete,
     
     let top = rect.top + rect.height / 2 - tooltipHeight / 2;
     let left = rect.right + padding;
-    let transform = 'none';
+    const transform = 'none';
     
     // Adjust based on preferred position
     if (currentStepData.position === 'left') {
