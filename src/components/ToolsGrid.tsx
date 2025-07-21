@@ -63,7 +63,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [pageUrl, setPageUrl] = useState('');
 
   // Schema Generator specific state
-  const [schemaType, setSchemaType] = useState<'article' | 'product' | 'organization' | 'person' | 'faq' | 'howto'>('article');
+  const [schemaInputType, setSchemaInputType] = useState<'url' | 'text'>('url');
+  const [schemaContent, setSchemaContent] = useState('');
   
   // Generator tool specific state
   const [generatorContentType, setGeneratorContentType] = useState<'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions'>('faq');
@@ -251,7 +252,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           result = await apiService.runAudit(auditUrl);
           break;
         case 'schema':
-          result = await apiService.generateSchema(selectedWebsite, schemaType);
+          result = await apiService.generateSchema(
+            schemaInputType === 'url' ? selectedWebsite : undefined,
+            schemaInputType === 'text' ? schemaContent : undefined
+          );
           break;
         case 'citations':
           const domain = extractDomain(selectedWebsite);
@@ -549,25 +553,28 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           {activeToolId === 'schema' && (
             <div className="mb-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Schema Type
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Input Type</label>
                 <select
-                  value={schemaType}
-                  onChange={(e) => setSchemaType(e.target.value as any)}
+                  value={schemaInputType}
+                  onChange={(e) => setSchemaInputType(e.target.value as any)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 >
-                  <option value="article">Article</option>
-                  <option value="product">Product</option>
-                  <option value="organization">Organization</option>
-                  <option value="person">Person</option>
-                  <option value="faq">FAQ Page</option>
-                  <option value="howto">How-To Guide</option>
+                  <option value="url">Website URL</option>
+                  <option value="text">Paste Content</option>
                 </select>
-                <p className="mt-1 text-sm text-gray-500">
-                  Select the type of schema markup you want to generate
-                </p>
               </div>
+              {schemaInputType === 'text' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                  <textarea
+                    value={schemaContent}
+                    onChange={(e) => setSchemaContent(e.target.value)}
+                    placeholder="Paste your content here..."
+                    rows={6}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -812,7 +819,24 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
               )}
               
               {activeToolId === 'schema' && (
-                <div>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Suggested Schema Type:</h4>
+                    <p className="text-lg text-purple-600 font-semibold">{toolData.suggestedType}</p>
+                  </div>
+                  {toolData.validationWarnings && toolData.validationWarnings.length > 0 && (
+                    <div className="bg-yellow-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-yellow-900 mb-2">Validation Warnings:</h4>
+                      <ul className="text-sm text-yellow-800 space-y-2">
+                        {toolData.validationWarnings.map((warning: any, index: number) => (
+                          <li key={index} className="flex items-start space-x-2">
+                            <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                            <span><strong>{warning.field}:</strong> {warning.message}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div className="bg-gray-800 text-green-400 p-4 rounded-lg overflow-x-auto mb-4">
                     <pre className="text-sm">{toolData.schema}</pre>
                   </div>
