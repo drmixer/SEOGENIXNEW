@@ -1,10 +1,6 @@
 import { supabase } from '../../utils/supabaseClient.ts';
 
-export async function logToolRun({
-  projectId,
-  toolName,
-  inputPayload,
-}: {
+export async function logToolRun({ projectId, toolName, inputPayload }: {
   projectId: string;
   toolName: string;
   inputPayload: any;
