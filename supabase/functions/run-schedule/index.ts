@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { supabase } from '../../utils/supabaseClient';
-import cronParser from 'cron-parser';
+import cronParser from 'https://esm.sh/cron-parser@4.1.0';
 
 const SUPABASE_FUNCTIONS_URL = process.env.SUPABASE_FUNCTIONS_URL;
 
