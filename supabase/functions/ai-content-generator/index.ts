@@ -1,4 +1,4 @@
-import { serve } from 'std/server';
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { logToolRun } from '../_shared/logToolRun';
 import { updateToolRun } from '../_shared/updateToolRun';
 import { supabase } from '../../utils/supabaseClient';

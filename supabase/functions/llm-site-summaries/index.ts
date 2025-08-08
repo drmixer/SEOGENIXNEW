@@ -1,3 +1,4 @@
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { corsHeaders } from '../_shared/cors.ts';
 
 interface SummaryRequest {
@@ -168,7 +169,7 @@ export const handler = async (req: Request): Promise<Response> => {
   }
 };
 
-Deno.serve(handler);
+serve(handler);
 
 // Fallback function to generate sample summary when API fails
 function generateFallbackSummary(url: string, summaryType: string): Response {

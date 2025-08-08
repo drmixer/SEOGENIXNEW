@@ -1,4 +1,4 @@
-import { serve } from 'std/server';
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { supabase } from '../../utils/supabaseClient';
 import cronParser from 'cron-parser';
 
