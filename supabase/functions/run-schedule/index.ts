@@ -1,16 +1,9 @@
-import { serve } from 'std/server';
-import { supabase } from '../../utils/supabaseClient';
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { supabase } from '../../utils/supabaseClient.ts';
 import cronParser from 'cron-parser';
 
-const SUPABASE_FUNCTIONS_URL = process.env.SUPABASE_FUNCTIONS_URL;
-
-serve(async (req) => {
-  if (req.method !== 'POST' && req.method !== 'GET') {
-    return new Response('Method Not Allowed', { status: 405 });
-  }
-
-  // 1. Fetch schedules that are enabled and due to run
-  const { data: schedules, error } = await supabase
+serve(async (_req: Request) => {
+  const { data: dueSchedules, error } = await supabase
     .from('schedules')
     .select('*')
     .eq('enabled', true)
@@ -18,50 +11,35 @@ serve(async (req) => {
 
   if (error) {
     console.error('Error fetching schedules:', error);
-    return new Response('Internal Server Error', { status: 500 });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
-  const results: any[] = [];
-
-  for (const schedule of schedules || []) {
-    const { id, project_id, tool_name, cron_expression } = schedule;
-
+  const results = [];
+  for (const sch of dueSchedules) {
+    const url = `${Deno.env.get('SUPABASE_FUNCTIONS_URL')}/${sch.tool_name}`;
+    let invoked = false;
     try {
-      // 2. Call internal function endpoint for this tool
-      const functionUrl = `${SUPABASE_FUNCTIONS_URL}/${tool_name}`;
-      const resp = await fetch(functionUrl, {
+      await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project_id, input: {} }),
+        body: JSON.stringify({ projectId: sch.project_id, input: {} }),
       });
-
-      const output = await resp.json();
-
-      // 3. Calculate next_run_at using cron expression
-      let nextRunAt: string | null = null;
-      try {
-        const interval = cronParser.parseExpression(cron_expression, { currentDate: new Date() });
-        nextRunAt = interval.next().toISOString();
-      } catch (cronErr) {
-        console.error('Failed to parse cron expression:', cronErr);
-        nextRunAt = null;
-      }
-
-      // 4. Update schedule row with last_run_at and next_run_at
-      await supabase
-        .from('schedules')
-        .update({
-          last_run_at: new Date().toISOString(),
-          next_run_at: nextRunAt,
-        })
-        .eq('id', id);
-
-      results.push({ scheduleId: id, runInvoked: true, nextRunAt });
-    } catch (err: any) {
-      console.error('Error running scheduled tool:', err);
-      results.push({ scheduleId: id, runInvoked: false, error: err.message ?? String(err) });
+      invoked = true;
+    } catch (e) {
+      console.error(`Failed to invoke ${sch.tool_name}:`, e);
     }
+    const interval = cronParser.parseExpression(sch.cron_expression, { currentDate: new Date() });
+    const next = interval.next().toISOString();
+
+    await supabase
+      .from('schedules')
+      .update({ last_run_at: new Date().toISOString(), next_run_at: next })
+      .eq('id', sch.id);
+
+    results.push({ scheduleId: sch.id, invoked, nextRunAt: next });
   }
 
-  return Response.json({ results });
+  return new Response(JSON.stringify({ results }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
 });
