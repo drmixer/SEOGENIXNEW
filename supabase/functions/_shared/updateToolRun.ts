@@ -1,11 +1,6 @@
 import { supabase } from '../../utils/supabaseClient.ts';
 
-export async function updateToolRun({
-  runId,
-  status,
-  outputPayload,
-  errorMessage,
-}: {
+export async function updateToolRun({ runId, status, outputPayload, errorMessage }: {
   runId: string;
   status: 'completed' | 'error';
   outputPayload?: any;
