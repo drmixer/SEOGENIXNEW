@@ -117,7 +117,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
   // Generate actionable insights based on user data
   const generateActionableInsights = useCallback(async () => {
-    if (!user || !user.id || !userProfile) return;
+    // Guard: only run if userProfile is fully loaded and onboarding status is defined
+    if (!user || !user.id || !userProfile || typeof userProfile.onboarded !== 'boolean') return;
     
     // Prevent duplicate insight generation
     if (insightsGeneratedRef.current) return;
@@ -131,7 +132,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       const recentActivity = await userDataService.getRecentActivity(user.id, 10);
 
       // 1. No websites configured
-      if (!userProfile.websites || userProfile.websites.length === 0) {
+      // Only fire if userProfile.websites is an empty array AND onboarding is complete
+      if (
+        Array.isArray(userProfile.websites) &&
+        userProfile.websites.length === 0 &&
+        userProfile.onboarded === true
+      ) {
         insights.push({
           id: 'no-websites',
           type: 'urgent',
