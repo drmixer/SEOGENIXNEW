@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
-import { logToolRun } from '../_shared/logToolRun.ts';
-import { updateToolRun } from '../_shared/updateToolRun.ts';
+import { logToolRun } from 'shared/logToolRun.ts';
+import { updateToolRun } from 'shared/updateToolRun.ts';
 
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
