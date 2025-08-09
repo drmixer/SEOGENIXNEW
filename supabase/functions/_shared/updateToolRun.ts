@@ -1,4 +1,4 @@
-import { supabase } from '../../utils/supabaseClient.ts';
+import { supabase } from 'utils/supabaseClient.ts';
 
 export async function updateToolRun({ runId, status, outputPayload, errorMessage }: {
   runId: string;

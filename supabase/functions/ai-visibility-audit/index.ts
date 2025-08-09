@@ -1,5 +1,5 @@
-import { logToolRun } from '../_shared/logToolRun';
-import { updateToolRun } from '../_shared/updateToolRun';
+import { logToolRun } from 'shared/logToolRun';
+import { updateToolRun } from 'shared/updateToolRun';
 import { visibilityAuditHandler } from './visibilityAuditHandler';
 
 export default async function handler(req: Request): Promise<Response> {
