@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logToolRun } from "../_shared/logToolRun.ts";
-import { updateToolRun } from "../_shared/updateToolRun.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { logToolRun } from "shared/logToolRun.ts";
+import { updateToolRun } from "shared/updateToolRun.ts";
+import { corsHeaders } from "shared/cors.ts";
 import { voiceAssistantTesterHandler } from "./voiceAssistantTesterHandler.ts";
 
 const supabase = createClient(
