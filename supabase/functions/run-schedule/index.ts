@@ -1,7 +1,11 @@
 import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import cronParser from "https://esm.sh/cron-parser@4.1.0";
-import { logToolRun } from 'shared/logToolRun.ts';
-import { updateToolRun } from 'shared/updateToolRun.ts';
+
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
 
 serve(async (_req: Request) => {
   const { data: dueSchedules, error } = await supabase
