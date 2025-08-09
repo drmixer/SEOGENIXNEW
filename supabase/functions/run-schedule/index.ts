@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
-import { supabase } from '../../utils/supabaseClient.ts';
-import cronParser from 'cron-parser';
+import cronParser from "https://esm.sh/cron-parser@4.1.0";
+import { logToolRun } from '../_shared/logToolRun.ts';
+import { updateToolRun } from '../_shared/updateToolRun.ts';
 
 serve(async (_req: Request) => {
   const { data: dueSchedules, error } = await supabase
