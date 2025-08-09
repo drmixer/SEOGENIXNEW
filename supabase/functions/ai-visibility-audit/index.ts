@@ -1,65 +1,57 @@
-import { logToolRun } from 'shared/logToolRun';
-import { updateToolRun } from 'shared/updateToolRun';
-import { visibilityAuditHandler } from './visibilityAuditHandler';
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolRun } from "../_shared/logToolRun.ts";
+import { updateToolRun } from "../_shared/updateToolRun.ts";
+import { corsHeaders } from "../_shared/cors.ts";
+import { aiVisibilityAuditHandler } from "./aiVisibilityAuditHandler.ts";
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
+
+serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
 
-  let body: { projectId: string; input: any };
+  let runId;
   try {
-    body = await req.json();
-  } catch (e) {
-    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+    const { projectId, input } = await req.json();
+    const effectiveProjectId = projectId || input.projectId || null;
 
-  const { projectId, input } = body;
-
-  let runId: string | undefined;
-
-  try {
     runId = await logToolRun({
-      projectId,
+      projectId: effectiveProjectId,
       toolName: 'ai-visibility-audit',
-      inputPayload: input,
+      inputPayload: input
     });
 
-    const output = await visibilityAuditHandler(input);
+    const output = await aiVisibilityAuditHandler(input);
 
     await updateToolRun({
       runId,
       status: 'completed',
-      outputPayload: output,
+      outputPayload: output
     });
 
     return new Response(JSON.stringify({ runId, output }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Unknown error';
+  } catch (err) {
+    console.error(err);
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+
     if (runId) {
-      try {
-        await updateToolRun({
-          runId,
-          status: 'error',
-          errorMessage,
-        });
-      } catch (updateError) {
-        // Log but don't overwrite original error response
-        console.error('Failed to update tool run status on error:', updateError);
-      }
+      await updateToolRun({
+        runId,
+        status: 'error',
+        errorMessage: errorMessage,
+      });
     }
-    return new Response(JSON.stringify({ runId, error: errorMessage }), {
+
+    return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-}
+});
