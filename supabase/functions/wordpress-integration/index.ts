@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeaders } from "shared/cors.ts";
 import { wordpressIntegrationHandler } from "./wordpressIntegrationHandler.ts";
 
 const supabase = createClient(
