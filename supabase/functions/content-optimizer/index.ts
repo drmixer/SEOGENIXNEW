@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logToolRun } from "../_shared/logToolRun.ts";
 import { updateToolRun } from "../_shared/updateToolRun.ts";
 import { corsHeaders } from "../_shared/cors.ts";
-import { voiceAssistantTesterHandler } from "./voiceAssistantTesterHandler.ts";
+import { contentOptimizerHandler } from "./contentOptimizerHandler.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -22,11 +22,11 @@ serve(async (req: Request) => {
 
     runId = await logToolRun({
       projectId: effectiveProjectId,
-      toolName: 'voice-assistant-tester',
+      toolName: 'content-optimizer',
       inputPayload: input
     });
 
-    const output = await voiceAssistantTesterHandler(input);
+    const output = await contentOptimizerHandler(input);
 
     await updateToolRun({
       runId,
