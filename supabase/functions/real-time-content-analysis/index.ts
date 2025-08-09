@@ -1,4 +1,6 @@
-import { corsHeaders } from '../_shared/cors.ts';
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { logToolRun } from '../_shared/logToolRun.ts';
+import { updateToolRun } from '../_shared/updateToolRun.ts';
 
 interface RealTimeAnalysisRequest {
   content: string;

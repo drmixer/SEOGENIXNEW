@@ -1,5 +1,6 @@
-import { corsHeaders } from '../_shared/cors.ts';
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { logToolRun } from '../_shared/logToolRun.ts';
+import { updateToolRun } from '../_shared/updateToolRun.ts';
 
 interface ReportRequest {
   reportType: 'audit' | 'competitive' | 'citation' | 'comprehensive' | 'roi_focused';
