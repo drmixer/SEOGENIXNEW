@@ -1,89 +1,108 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createHmac } from "node:crypto";
 
-// Self-contained CORS headers
+// --- CORS Headers ---
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-// Initialize Supabase client
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-);
-
-// Helper functions for logging
-async function logToolRun({ projectId, toolName, inputPayload }) {
-  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging tool run:', error); return null; }
-  return data.id;
+// --- Type Definitions ---
+interface DiscoveryRequest {
+    industry: string;
+    topic?: string;
+    existingCompetitors?: string[];
 }
 
-async function updateToolRun({ runId, status, outputPayload, errorMessage }) {
-  const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
-  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating tool run:', error); }
+interface Competitor {
+    name: string;
+    url: string;
+    domainAuthority: number | null;
+    relevanceScore: number;
 }
 
-Deno.serve(async (req) => {
+// --- Main Service Handler ---
+export const competitorDiscoveryService = async (req: Request): Promise<Response> => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
 
-    let runId;
     try {
-        const { projectId, url, industry, businessDescription, existingCompetitors = [], analysisDepth = 'basic' } = await req.json();
+        const { industry, topic, existingCompetitors = [] }: DiscoveryRequest = await req.json();
 
-        runId = await logToolRun({
-            projectId: projectId,
-            toolName: 'competitor-discovery',
-            inputPayload: { url, industry, businessDescription, existingCompetitors, analysisDepth }
-        });
-
-        let competitorSuggestions = [];
-        if (industry?.includes('Technology')) {
-            competitorSuggestions = [
-                { name: 'Salesforce', url: 'https://salesforce.com', type: 'industry_leader', relevanceScore: 88 },
-                { name: 'HubSpot', url: 'https://hubspot.com', type: 'direct', relevanceScore: 92 },
-            ];
-        } else if (industry?.includes('E-commerce')) {
-            competitorSuggestions = [
-                { name: 'Shopify', url: 'https://shopify.com', type: 'industry_leader', relevanceScore: 94 },
-                { name: 'BigCommerce', url: 'https://bigcommerce.com', type: 'direct', relevanceScore: 88 },
-            ];
-        } else {
-            competitorSuggestions = [
-                { name: 'Moz', url: 'https://moz.com', type: 'industry_leader', relevanceScore: 88 },
-                { name: 'Ahrefs', url: 'https://ahrefs.com', type: 'direct', relevanceScore: 91 },
-            ];
+        if (!industry && !topic) {
+            throw new Error('Either `industry` or `topic` is required.');
         }
 
-        competitorSuggestions = competitorSuggestions.filter(comp => !existingCompetitors.some(existing => existing.toLowerCase().includes(comp.name.toLowerCase())));
-        const limit = analysisDepth === 'comprehensive' ? 10 : 6;
-        competitorSuggestions = competitorSuggestions.slice(0, limit);
+        // 1. Get API Keys from environment
+        const googleApiKey = Deno.env.get('GOOGLE_SEARCH_API_KEY');
+        const googleCx = Deno.env.get('GOOGLE_SEARCH_ENGINE_ID');
+        const mozAccessId = Deno.env.get('MOZ_ACCESS_ID');
+        const mozSecretKey = Deno.env.get('MOZ_SECRET_KEY');
 
-        const output = { competitorSuggestions };
+        if (!googleApiKey || !googleCx || !mozAccessId || !mozSecretKey) {
+            throw new Error('Required API keys (Google Search, Moz) are not configured as secrets.');
+        }
 
-        await updateToolRun({
-            runId,
-            status: 'completed',
-            outputPayload: output
-        });
+        // 2. Perform Google Search to find potential competitors
+        const searchQuery = `top ${industry || ''} ${topic || ''} companies`;
+        const googleUrl = `https://www.googleapis.com/customsearch/v1?key=${googleApiKey}&cx=${googleCx}&q=${encodeURIComponent(searchQuery)}`;
 
-        return new Response(JSON.stringify({ runId, output }), {
+        const googleResponse = await fetch(googleUrl);
+        if (!googleResponse.ok) {
+            throw new Error(`Google Search API request failed: ${googleResponse.statusText}`);
+        }
+        const searchResults = await googleResponse.json();
+
+        const competitorUrls = searchResults.items
+            ?.map((item: any) => item.link)
+            .filter((url: string) => url && !existingCompetitors.some(existing => url.includes(existing)))
+            .slice(0, 10) || []; // Limit to top 10 results to avoid excessive Moz API calls
+
+        // 3. Enrich with Moz Domain Authority
+        // Note: The free Moz API has strict rate limits. In a real app, this might need batching or queuing.
+        const competitors: Competitor[] = [];
+        for (const url of competitorUrls) {
+            try {
+                const domain = new URL(url).hostname;
+                const expires = Math.floor(Date.now() / 1000) + 300;
+                // Correct signature generation for Moz API using Node.js crypto compatibility
+                const sig = createHmac('sha1', mozSecretKey).update(`${mozAccessId}\n${expires}`).digest('base64');
+                const mozUrl = `https://lsapi.seomoz.com/v2/url_metrics?Cols=4&url=${domain}&AccessID=${mozAccessId}&Expires=${expires}&Signature=${sig}`;
+
+                const mozResponse = await fetch(mozUrl);
+                let domainAuthority = null;
+                if (mozResponse.ok) {
+                    const mozData = await mozResponse.json();
+                    domainAuthority = mozData?.domain_authority || null;
+                }
+
+                competitors.push({
+                    name: searchResults.items.find((item: any) => item.link === url)?.title || domain,
+                    url: url,
+                    domainAuthority: domainAuthority,
+                    relevanceScore: Math.floor(Math.random() * 20) + 75, // Placeholder relevance
+                });
+
+            } catch (e: unknown) {
+                const errorMessage = e instanceof Error ? e.message : String(e);
+                console.error(`Failed to process competitor URL ${url}:`, errorMessage);
+            }
+        }
+
+        return new Response(JSON.stringify({ success: true, data: { competitorSuggestions: competitors } }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
 
-    } catch (err) {
-        console.error(err);
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        if (runId) {
-            await updateToolRun({ runId, status: 'error', errorMessage: errorMessage });
-        }
-        return new Response(JSON.stringify({ error: errorMessage }), {
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
+        return new Response(JSON.stringify({ success: false, error: { message: errorMessage, code: errorCode } }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
-});
+};
+
+// --- Server ---
+Deno.serve(competitorDiscoveryService);
