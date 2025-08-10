@@ -884,6 +884,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           userProfile={userProfile}
           onToolComplete={handleToolComplete}
           onSwitchTool={handleSwitchTool}
+          context={toolContext}
         />;
     }
   };
