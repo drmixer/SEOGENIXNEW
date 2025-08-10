@@ -556,5 +556,14 @@ export const apiService = {
       body: JSON.stringify({ url })
     }, false); // authRequired = false
     return result.data;
+  },
+
+  // Adaptive Playbook Generator
+  async generateAdaptivePlaybook(userId: string, goal: string, focusArea: string) {
+    const result = await apiCall(`${API_BASE_URL}/adaptive-playbook-generator`, {
+      method: 'POST',
+      body: JSON.stringify({ userId, goal, focusArea })
+    });
+    return result.data;
   }
 };
