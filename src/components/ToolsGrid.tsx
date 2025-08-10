@@ -29,6 +29,7 @@ interface ToolsGridProps {
   userProfile?: any;
   onToolComplete?: (toolName: string, success: boolean, message?: string) => void;
   onSwitchTool: (toolId: string, context: any) => void;
+  context?: any;
 }
 
 interface Tool {
@@ -51,7 +52,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   selectedWebsite,
   userProfile,
   onToolComplete,
-  onSwitchTool
+  onSwitchTool,
+  context
 }) => {
   const [activeToolId, setActiveToolId] = useState<string | null>(selectedTool || null);
   const [showCompetitiveAnalysisModal, setShowCompetitiveAnalysisModal] = useState(false);
@@ -83,12 +85,23 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [promptContentType, setPromptContentType] = useState<'article' | 'product' | 'service' | 'faq' | 'guide'>('article');
   const [promptUserIntent, setPromptUserIntent] = useState<'informational' | 'transactional' | 'navigational' | 'commercial'>('informational');
 
+  // Entity to Content specific state
+  const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
+
   // Update active tool when selectedTool changes
   useEffect(() => {
     if (selectedTool) {
       setActiveToolId(selectedTool);
     }
   }, [selectedTool]);
+
+  // Handle context passing when switching tools
+  useEffect(() => {
+    if (activeToolId === 'generator' && context?.entitiesToInclude) {
+      setGeneratorTopic(context.topic || 'New content based on entity analysis');
+      setGeneratorKeywords(context.entitiesToInclude.join(', '));
+    }
+  }, [activeToolId, context]);
 
   // Reset tool data when active tool changes
   useEffect(() => {
@@ -230,6 +243,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     if (recommendation.action_type === 'content-optimizer') {
       onSwitchTool('editor', { url: selectedWebsite });
     }
+  };
+
+  const handleGenerateWithEntities = () => {
+    onSwitchTool('generator', {
+      entitiesToInclude: selectedEntities,
+      topic: `Content about ${extractDomain(selectedWebsite || '')} that includes key entities`,
+      targetKeywords: selectedEntities,
+    });
   };
 
   const extractDomain = (url: string): string => {
@@ -966,63 +987,60 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
               
               {activeToolId === 'entities' && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-center bg-white p-4 rounded-lg shadow-sm">
-                      <div className="text-3xl font-bold text-purple-600 mb-2">{toolData.coverageScore || 0}</div>
-                      <p className="text-gray-600">Entity Coverage Score</p>
-                    </div>
-                    <div className="text-center bg-white p-4 rounded-lg shadow-sm">
-                      <div className="text-3xl font-bold text-blue-600 mb-2">{toolData.mentionedCount || 0}</div>
-                      <p className="text-gray-600">Entities Mentioned</p>
-                    </div>
-                    <div className="text-center bg-white p-4 rounded-lg shadow-sm">
-                      <div className="text-3xl font-bold text-red-600 mb-2">{toolData.missingCount || 0}</div>
-                      <p className="text-gray-600">Entities Missing</p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                      <h4 className="font-medium mb-4 text-green-700">Mentioned Entities</h4>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {toolData.mentionedEntities?.map((entity: any, i: number) => (
-                          <div key={i} className="border-l-4 border-green-400 pl-3 py-1">
-                            <div className="flex justify-between">
-                              <h5 className="font-medium text-gray-900">{entity.name}</h5>
-                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">{entity.type}</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">{entity.description}</p>
-                          </div>
-                        ))}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                      <div className="bg-white p-4 rounded-lg shadow-sm">
+                          <div className="text-3xl font-bold text-purple-600 mb-2">{toolData.coverageScore || 0}%</div>
+                          <p className="text-gray-600">Coverage Score</p>
                       </div>
-                    </div>
-                    
-                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                      <h4 className="font-medium mb-4 text-red-700">Missing Entities</h4>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {toolData.missingEntities?.map((entity: any, i: number) => (
-                          <div key={i} className="border-l-4 border-red-400 pl-3 py-1">
-                            <div className="flex justify-between">
-                              <h5 className="font-medium text-gray-900">{entity.name}</h5>
-                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">{entity.type}</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">{entity.description}</p>
-                          </div>
-                        ))}
+                      <div className="bg-white p-4 rounded-lg shadow-sm">
+                          <div className="text-3xl font-bold text-blue-600 mb-2">{toolData.mentionedEntities?.length || 0}</div>
+                          <p className="text-gray-600">Entities Mentioned</p>
                       </div>
-                    </div>
+                      <div className="bg-white p-4 rounded-lg shadow-sm">
+                          <div className="text-3xl font-bold text-red-600 mb-2">{toolData.missingEntities?.length || 0}</div>
+                          <p className="text-gray-600">Entities Missing</p>
+                      </div>
                   </div>
                   
                   <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-3">Recommendations</h4>
-                    <ul className="space-y-2">
-                      {toolData.recommendations?.map((rec: string, i: number) => (
-                        <li key={i} className="flex items-start">
-                          <span className="text-purple-600 mr-2">•</span>
-                          <span className="text-gray-700">{rec}</span>
-                        </li>
+                    <h4 className="font-medium mb-4 text-red-700">Actionable Missing Entities</h4>
+                    <div className="space-y-3 max-h-60 overflow-y-auto">
+                      {toolData.missingEntities?.map((entity: any, i: number) => (
+                        <label key={i} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedEntities.includes(entity.name)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedEntities([...selectedEntities, entity.name]);
+                              } else {
+                                setSelectedEntities(selectedEntities.filter(name => name !== entity.name));
+                              }
+                            }}
+                            className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                          />
+                          <div className="flex-1">
+                            <div className="flex justify-between">
+                                <h5 className="font-medium text-gray-900">{entity.name}</h5>
+                                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">{entity.type}</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">{entity.description}</p>
+                          </div>
+                        </label>
                       ))}
-                    </ul>
+                    </div>
+                    {toolData.missingEntities?.length > 0 && (
+                      <div className="mt-4 text-right">
+                        <button
+                          onClick={handleGenerateWithEntities}
+                          disabled={selectedEntities.length === 0}
+                          className="bg-gradient-to-r from-pink-500 to-yellow-500 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                        >
+                          <Zap className="w-4 h-4" />
+                          <span>Generate Content with {selectedEntities.length} Entities</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
