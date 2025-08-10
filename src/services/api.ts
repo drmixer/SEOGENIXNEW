@@ -545,5 +545,16 @@ export const apiService = {
   clearPendingRequests() {
     pendingApiRequests.clear();
     console.log('Cleared all pending API requests');
+  },
+
+  // URL Content Fetcher
+  async fetchUrlContent(url: string): Promise<{ content: string }> {
+    // This is a utility function, so we don't cache it.
+    // It does not require authentication to run.
+    const result = await apiCall(`${API_BASE_URL}/url-fetcher`, {
+      method: 'POST',
+      body: JSON.stringify({ url })
+    }, false); // authRequired = false
+    return result.data;
   }
 };

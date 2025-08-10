@@ -28,6 +28,7 @@ interface ToolsGridProps {
   selectedWebsite?: string;
   userProfile?: any;
   onToolComplete?: (toolName: string, success: boolean, message?: string) => void;
+  onSwitchTool: (toolId: string, context: any) => void;
 }
 
 interface Tool {
@@ -49,7 +50,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   selectedTool,
   selectedWebsite,
   userProfile,
-  onToolComplete
+  onToolComplete,
+  onSwitchTool
 }) => {
   const [activeToolId, setActiveToolId] = useState<string | null>(selectedTool || null);
   const [showCompetitiveAnalysisModal, setShowCompetitiveAnalysisModal] = useState(false);
@@ -221,6 +223,12 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         const domain = extractDomain(selectedWebsite);
         setPromptTopic(domain);
       }
+    }
+  };
+
+  const handleFixItClick = (recommendation: any) => {
+    if (recommendation.action_type === 'content-optimizer') {
+      onSwitchTool('editor', { url: selectedWebsite });
     }
   };
 
@@ -792,16 +800,29 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                   </div>
 
                   {toolData.recommendations && toolData.recommendations.length > 0 && (
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <h4 className="font-medium text-green-900 mb-2">Key Recommendations:</h4>
-                      <ul className="text-sm text-green-800 space-y-2">
-                        {toolData.recommendations.map((rec: string, index: number) => (
-                          <li key={index} className="flex items-start space-x-2">
-                            <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                            <span>{rec}</span>
-                          </li>
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Key Recommendations:</h4>
+                      <div className="space-y-3">
+                        {toolData.recommendations.map((rec: { title: string, description: string, action_type?: string }, index: number) => (
+                          <div key={index} className="bg-green-50 p-4 rounded-lg flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-start space-x-2">
+                                <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                                <span className="font-medium text-green-900">{rec.title}</span>
+                              </div>
+                              <p className="text-sm text-green-800 ml-6">{rec.description}</p>
+                            </div>
+                            {rec.action_type === 'content-optimizer' && (
+                              <button
+                                onClick={() => handleFixItClick(rec)}
+                                className="ml-4 px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
+                              >
+                                Fix it
+                              </button>
+                            )}
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   )}
 
