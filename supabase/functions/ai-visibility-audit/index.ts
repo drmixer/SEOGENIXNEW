@@ -217,7 +217,7 @@ export const auditService = async (req: Request): Promise<Response> => {
       });
     }
 
-    return new Response(JSON.stringify({ success: true, data: { runId, ...analysisJson } }), {
+    return new Response(JSON.stringify({ success: true, data: { runId, ...analysisJson, pageContent } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 

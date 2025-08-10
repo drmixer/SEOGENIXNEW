@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 
 interface ContentEditorProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
+  context?: { url?: string };
 }
 
 interface ContentAnalysis {
@@ -30,8 +31,9 @@ interface RealTimeSuggestion {
   replacement?: string;
 }
 
-const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
+const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
   const [content, setContent] = useState('');
+  const [isLoadingUrl, setIsLoadingUrl] = useState(false);
   const [targetKeywords, setTargetKeywords] = useState('');
   const [contentType, setContentType] = useState<'article' | 'product' | 'faq' | 'meta'>('article');
   const [analysis, setAnalysis] = useState<ContentAnalysis | null>(null);
@@ -44,6 +46,26 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const analysisTimeoutRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    if (context?.url) {
+      const loadContentFromUrl = async () => {
+        setIsLoadingUrl(true);
+        try {
+          const result = await apiService.fetchUrlContent(context.url);
+          if (result.content) {
+            setContent(result.content);
+          }
+        } catch (error) {
+          console.error("Failed to fetch URL content:", error);
+          alert(`Failed to load content from ${context.url}. Please check the URL or paste the content manually.`);
+        } finally {
+          setIsLoadingUrl(false);
+        }
+      };
+      loadContentFromUrl();
+    }
+  }, [context]);
 
   // Debounced analysis
   const analyzeContent = useCallback(async () => {
@@ -343,6 +365,12 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan }) => {
 
           {/* Main Editor */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 relative">
+            {isLoadingUrl && (
+              <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-20">
+                <Loader className="w-8 h-8 text-purple-600 animate-spin" />
+                <span className="ml-2 text-gray-600">Loading content...</span>
+              </div>
+            )}
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-gray-900">Content Editor</h3>

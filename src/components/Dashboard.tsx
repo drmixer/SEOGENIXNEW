@@ -65,6 +65,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [userGoals, setUserGoals] = useState<string[]>([]);
   const [goalProgress, setGoalProgress] = useState<Record<string, number>>({});
+  const [toolContext, setToolContext] = useState<any>(null);
   
   // Use refs to prevent duplicate fetches and track component mount state
   const profileFetchedRef = useRef(false);
@@ -473,6 +474,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     }
   };
 
+  const handleSwitchTool = (toolId: string, context: any) => {
+    setToolContext(context);
+    setActiveSection(toolId);
+  };
+
   // Handle tool completion with toast notification
   const handleToolComplete = (toolName: string, success: boolean, message?: string) => {
     if (success) {
@@ -833,7 +839,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         return <ReportGenerator userPlan={userPlan} />;
       
       case 'editor':
-        return <ContentEditor userPlan={userPlan} />;
+        return <ContentEditor userPlan={userPlan} context={toolContext} />;
       
       case 'competitive-viz':
         return <CompetitiveVisualization userPlan={userPlan} />;
@@ -877,6 +883,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           selectedWebsite={selectedWebsite}
           userProfile={userProfile}
           onToolComplete={handleToolComplete}
+          onSwitchTool={handleSwitchTool}
         />;
     }
   };
