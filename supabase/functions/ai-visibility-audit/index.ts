@@ -7,57 +7,147 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-// Initialize Supabase client
+// Initialize Supabase client for logging
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-// Helper functions for logging
-async function logToolRun({ projectId, toolName, inputPayload }) {
-  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging tool run:', error); return null; }
+// --- Type Definitions ---
+interface LogToolRunParams {
+  projectId: string;
+  toolName: string;
+  inputPayload: Record<string, unknown>;
+}
+
+interface UpdateToolRunParams {
+  runId: string;
+  status: 'completed' | 'error';
+  outputPayload: Record<string, unknown> | null;
+  errorMessage: string | null;
+}
+
+// Helper functions for logging tool runs in the database
+async function logToolRun({ projectId, toolName, inputPayload }: LogToolRunParams) {
+  const { data, error } = await supabase
+    .from('tool_runs')
+    .insert({
+      project_id: projectId,
+      tool_name: toolName,
+      input_payload: inputPayload,
+      status: 'running'
+    })
+    .select('id')
+    .single();
+  if (error) {
+    console.error('Error logging tool run:', error);
+    return null;
+  }
   return data.id;
 }
 
-async function updateToolRun({ runId, status, outputPayload, errorMessage }) {
-  const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
+async function updateToolRun({ runId, status, outputPayload, errorMessage }: UpdateToolRunParams) {
+  const update = {
+    status,
+    completed_at: new Date().toISOString(),
+    output_payload: outputPayload,
+    error_message: errorMessage
+  };
   const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating tool run:', error); }
+  if (error) {
+    console.error('Error updating tool run:', error);
+  }
 }
 
-// Fallback function from the original gist
-function generateFallbackAudit(url) {
-    console.log(`Generating fallback audit for ${url}`);
-    const aiUnderstanding = Math.floor(Math.random() * 20) + 70;
-    const citationLikelihood = Math.floor(Math.random() * 25) + 60;
-    const conversationalReadiness = Math.floor(Math.random() * 30) + 60;
-    const contentStructure = Math.floor(Math.random() * 25) + 65;
-    const overallScore = Math.round((aiUnderstanding + citationLikelihood + conversationalReadiness + contentStructure) / 4);
-    const auditResult = {
-        overallScore,
-        subscores: { aiUnderstanding, citationLikelihood, conversationalReadiness, contentStructure },
-        recommendations: [
-            'Add structured data markup (Schema.org) to improve AI comprehension',
-            'Improve heading hierarchy with clear H1, H2, H3 structure',
-            'Include FAQ sections to address common user questions',
-        ],
-        issues: [
-            'Limited structured data implementation',
-            'Inconsistent heading hierarchy',
-            'Missing conversational content elements',
-        ]
-    };
-    return new Response(JSON.stringify(auditResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-}
+// --- New Enhanced Prompt ---
+const getAnalysisPrompt = (url: string, content: string) => {
+  const jsonSchema = `
+  {
+    "overallScore": "number (0-100)",
+    "subscores": {
+      "aiUnderstanding": "number (0-100, how well an AI can understand the core topic)",
+      "citationLikelihood": "number (0-100, likelihood of being cited by AI models)",
+      "conversationalReadiness": "number (0-100, suitability for voice search and chatbots)",
+      "contentStructure": "number (0-100, quality of HTML structure and metadata)"
+    },
+    "recommendations": [
+      {
+        "title": "string (short, clear title of the recommendation)",
+        "description": "string (detailed explanation of the recommendation and why it's important)",
+        "action_type": "string (enum: 'content-optimizer', 'schema-generator', 'general-advice')"
+      }
+    ],
+    "issues": [
+      {
+        "title": "string (short, clear title of the issue found)",
+        "description": "string (detailed explanation of the issue and its impact)"
+      }
+    ]
+  }
+  `;
+
+  const fewShotExample = `
+  {
+    "overallScore": 85,
+    "subscores": {
+      "aiUnderstanding": 90,
+      "citationLikelihood": 80,
+      "conversationalReadiness": 88,
+      "contentStructure": 82
+    },
+    "recommendations": [
+      {
+        "title": "Add FAQ Schema",
+        "description": "The page answers common questions but lacks FAQ schema markup. Adding it will make these Q&As more visible to search engines and AI, improving conversational readiness.",
+        "action_type": "schema-generator"
+      },
+      {
+        "title": "Incorporate a 'Key Takeaways' Section",
+        "description": "A concise summary section at the beginning of the article would improve AI understanding and increase the likelihood of being used as a citation source.",
+        "action_type": "content-optimizer"
+      }
+    ],
+    "issues": [
+      {
+        "title": "Missing Meta Description",
+        "description": "The page is missing a meta description, which harms both user click-through rates from search results and AI's ability to quickly summarize the page's purpose."
+      }
+    ]
+  }
+  `;
+
+  return `
+  You are an expert AI Visibility Auditor. Your task is to analyze the provided web page content and evaluate its visibility and readiness for AI-driven platforms like Google's Search Generative Experience (SGE), Perplexity, and other large language models.
+
+  Analyze the content from the following URL: ${url}
+  Content:
+  ---
+  ${content.substring(0, 15000)}
+  ---
+
+  Based on your analysis, you MUST provide a response in a valid JSON format. Do not include any text or formatting outside of the JSON object.
+
+  The JSON object must strictly adhere to the following schema:
+  \`\`\`json
+  ${jsonSchema}
+  \`\`\`
+
+  Here is an example of the ideal output format and quality (a "few-shot" example):
+  \`\`\`json
+  ${fewShotExample}
+  \`\`\`
+
+  Now, perform your expert analysis of the provided content and return the resulting JSON object.
+  `;
+};
 
 
-Deno.serve(async (req) => {
+export const auditService = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  let runId;
+  let runId: string | null = null;
   try {
     const { projectId, url, content } = await req.json();
 
@@ -73,18 +163,17 @@ Deno.serve(async (req) => {
 
     let pageContent = content;
     if (url && !content) {
-        try {
-            const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36' } });
-            if (response.ok) {
-                pageContent = await response.text();
-            } else {
-                console.warn(`Could not fetch content from ${url}, using fallback content`);
-                pageContent = `Fallback content for ${url} as fetch failed.`;
-            }
-        } catch (error) {
-            console.error('Failed to fetch URL:', error);
-            pageContent = `Sample content for ${url}`;
+      try {
+        const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36' } });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
         }
+        pageContent = await response.text();
+      } catch (error) {
+        console.error('Failed to fetch URL content:', error);
+        // Throw a more specific error for the client
+        throw new Error(`Could not retrieve content from the provided URL: ${url}. Please check the URL and try again.`);
+      }
     }
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
@@ -92,92 +181,65 @@ Deno.serve(async (req) => {
       throw new Error('Gemini API key not configured');
     }
 
-    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+    const prompt = getAnalysisPrompt(url, pageContent);
+
+    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            contents: [{ parts: [{ text: `You are an AI visibility expert. Analyze this content and provide EXACT numeric scores (0-100) for each category.
-Content to analyze:
-URL: ${url}
-Content: ${pageContent?.substring(0, 4000) || 'No content provided'}
-Provide scores for these 4 categories:
-1. AI Understanding Score (0-100)
-2. Citation Likelihood Score (0-100)
-3. Conversational Readiness Score (0-100)
-4. Content Structure Score (0-100)
-Then provide:
-- 5 specific, actionable recommendations
-- 4 specific issues found
-Format your response as:
-AI Understanding: [score]
-Citation Likelihood: [score]
-Conversational Readiness: [score]
-Content Structure: [score]
-Recommendations:
-1. [recommendation]
-Issues:
-1. [issue]` }] }],
-            generationConfig: { temperature: 0.2, topK: 40, topP: 0.8, maxOutputTokens: 1024 }
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              response_mime_type: "application/json",
+              temperature: 0.3,
+              topK: 40,
+              topP: 0.9,
+              maxOutputTokens: 2048
+            }
         })
     });
 
     if (!geminiResponse.ok) {
-        console.error('Gemini API error:', await geminiResponse.text());
-        return generateFallbackAudit(url);
+      const errorBody = await geminiResponse.text();
+      console.error('Gemini API error:', errorBody);
+      throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
     }
 
     const geminiData = await geminiResponse.json();
     const analysisText = geminiData.candidates[0].content.parts[0].text;
+    const analysisJson = JSON.parse(analysisText);
 
-    const aiUnderstandingMatch = analysisText.match(/AI Understanding:?\s*(\d+)/i);
-    const citationLikelihoodMatch = analysisText.match(/Citation Likelihood:?\s*(\d+)/i);
-    const conversationalReadinessMatch = analysisText.match(/Conversational Readiness:?\s*(\d+)/i);
-    const contentStructureMatch = analysisText.match(/Content Structure:?\s*(\d+)/i);
-    const aiUnderstanding = aiUnderstandingMatch ? parseInt(aiUnderstandingMatch[1]) : 75;
-    const citationLikelihood = citationLikelihoodMatch ? parseInt(citationLikelihoodMatch[1]) : 65;
-    const conversationalReadiness = conversationalReadinessMatch ? parseInt(conversationalReadinessMatch[1]) : 70;
-    const contentStructure = contentStructureMatch ? parseInt(contentStructureMatch[1]) : 60;
+    if (runId) {
+      await updateToolRun({
+        runId,
+        status: 'completed',
+        outputPayload: analysisJson,
+        errorMessage: null,
+      });
+    }
 
-    const recommendationsSection = analysisText.match(/Recommendations:?\s*([\s\S]*?)(?=Issues:|$)/i);
-    const recommendations = recommendationsSection ? recommendationsSection[1].split(/\d+\./).slice(1).map(rec => rec.trim()).filter(rec => rec.length > 0) : [];
-
-    const issuesSection = analysisText.match(/Issues:?\s*([\s\S]*?)$/i);
-    const issues = issuesSection ? issuesSection[1].split(/\d+\./).slice(1).map(issue => issue.trim()).filter(issue => issue.length > 0) : [];
-
-    const overallScore = Math.round((aiUnderstanding + citationLikelihood + conversationalReadiness + contentStructure) / 4);
-
-    const output = {
-        overallScore,
-        subscores: { aiUnderstanding, citationLikelihood, conversationalReadiness, contentStructure },
-        recommendations,
-        issues
-    };
-
-    await updateToolRun({
-      runId,
-      status: 'completed',
-      outputPayload: output
-    });
-
-    return new Response(JSON.stringify({ runId, output }), {
+    return new Response(JSON.stringify({ success: true, data: { runId, ...analysisJson } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (err) {
-    console.error(err);
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+    const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
 
     if (runId) {
       await updateToolRun({
         runId,
         status: 'error',
+        outputPayload: null,
         errorMessage: errorMessage,
       });
     }
 
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ success: false, error: { message: errorMessage, code: errorCode } }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+};
+
+// Start the server
+Deno.serve(auditService);

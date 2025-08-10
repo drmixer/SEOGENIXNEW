@@ -1,134 +1,142 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// Self-contained CORS headers
+// --- CORS Headers ---
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-// Initialize Supabase client
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-);
-
-// Helper functions for logging
-async function logToolRun({ projectId, toolName, inputPayload }) {
-  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging tool run:', error); return null; }
-  return data.id;
+// --- Type Definitions ---
+interface AnalysisRequest {
+    content: string;
+    keywords: string[];
 }
 
-async function updateToolRun({ runId, status, outputPayload, errorMessage }) {
-  const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
-  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating tool run:', error); }
+interface Suggestion {
+    type: 'grammar' | 'clarity' | 'seo' | 'tone';
+    severity: 'critical' | 'warning' | 'suggestion';
+    message: string;
+    suggestion: string;
+    position: {
+        start: number;
+        end: number;
+    };
 }
 
-function generateFallbackAnalysis(content, keywords) {
-    const suggestions = [{ type: 'grammar', severity: 'warning', message: 'Fallback analysis could not connect to the main service.', suggestion: 'Please try again later.', position: { start: 0, end: content.length } }];
-    return new Response(JSON.stringify({ suggestions, note: 'This is fallback data.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+interface AnalysisResponse {
+    aiReadabilityScore: number;
+    keywordDensity: { [key: string]: number };
+    suggestions: Suggestion[];
 }
 
-Deno.serve(async (req) => {
+// --- AI Prompt Engineering ---
+const getAnalysisPrompt = (content: string, keywords: string[]): string => {
+    const jsonSchema = `
+    {
+      "aiReadabilityScore": "number (0-100, how easily an AI can parse and understand the text)",
+      "keywordDensity": {
+        "keyword1": "number (percentage, e.g., 1.5 for 1.5%)"
+      },
+      "suggestions": [
+        {
+          "type": "string (enum: 'grammar', 'clarity', 'seo', 'tone')",
+          "severity": "string (enum: 'critical', 'warning', 'suggestion')",
+          "message": "string (A brief explanation of the issue)",
+          "suggestion": "string (A concrete suggestion for how to fix it)",
+          "position": {
+            "start": "number (The starting character index of the issue)",
+            "end": "number (The ending character index of the issue)"
+          }
+        }
+      ]
+    }
+    `;
+
+    return `
+    You are a Real-time AI Writing Assistant. Your task is to analyze a piece of text as it's being written and provide immediate, actionable feedback.
+
+    **Analysis Task:**
+    - **Content to Analyze:**
+      ---
+      ${content}
+      ---
+    - **Target Keywords:** ${keywords.join(', ')}
+
+    **Your Instructions:**
+    Analyze the content and provide a readability score, keyword density analysis, and a list of specific suggestions for improvement.
+
+    **Output Format:**
+    You MUST provide a response in a single, valid JSON object. Do not include any text or formatting outside of the JSON object. The JSON object must strictly adhere to the following schema:
+    \`\`\`json
+    ${jsonSchema}
+    \`\`\`
+
+    Now, perform your real-time analysis. If the content is too short or empty, return a JSON object with empty values.
+    `;
+};
+
+// --- Main Service Handler ---
+export const analysisService = async (req: Request): Promise<Response> => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
 
-    let runId;
     try {
-        const { projectId, content, keywords } = await req.json();
+        const { content, keywords }: AnalysisRequest = await req.json();
 
-        runId = await logToolRun({
-            projectId: projectId,
-            toolName: 'real-time-content-analysis',
-            inputPayload: { keywords, contentLength: content?.length }
-        });
+        if (typeof content !== 'string') {
+            throw new Error('`content` must be a string.');
+        }
 
-        if (!content || content.length < 10) throw new Error('Content too short for analysis');
+        // Handle cases with very short content without calling the AI
+        if (content.length < 20) {
+            return new Response(JSON.stringify({
+                success: true,
+                data: {
+                    aiReadabilityScore: 0,
+                    keywordDensity: {},
+                    suggestions: [],
+                }
+            }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
         if (!geminiApiKey) throw new Error('Gemini API key not configured');
 
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+        const prompt = getAnalysisPrompt(content, keywords || []);
+
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: `Analyze this content for AI visibility.
-Content: ${content}
-Keywords: ${keywords.join(', ')}
-Provide:
-- AI READABILITY SCORE (0-100)
-- KEYWORD DENSITY for each keyword
-- 3-5 REAL-TIME SUGGESTIONS with positions
-Format as:
-AI_READABILITY: [score]
-KEYWORD_DENSITY:
-[keyword1]: [percentage]
-SUGGESTIONS:
-TYPE: [type] | SEVERITY: [severity] | MESSAGE: [message] | SUGGESTION: [suggestion] | POSITION: [start]-[end]` }] }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    response_mime_type: "application/json",
+                    temperature: 0.3,
+                    maxOutputTokens: 1024,
+                }
             })
         });
 
         if (!geminiResponse.ok) {
-            console.error('Gemini API error:', await geminiResponse.text());
-            return generateFallbackAnalysis(content, keywords);
+            throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
         }
 
         const geminiData = await geminiResponse.json();
-        const analysisText = geminiData.candidates[0].content.parts[0].text;
+        const analysisJson: AnalysisResponse = JSON.parse(geminiData.candidates[0].content.parts[0].text);
 
-        const aiReadabilityScore = parseInt(analysisText.match(/AI_READABILITY:\s*(\d+)/i)?.[1] || '75');
-        const keywordDensitySection = analysisText.match(/KEYWORD_DENSITY:\s*([\s\S]*?)(?=SUGGESTIONS:|$)/i);
-        const keywordDensity = {};
-        if (keywordDensitySection) {
-            keywordDensitySection[1].split('\n').forEach(line => {
-                const parts = line.split(':');
-                if (parts.length === 2) keywordDensity[parts[0].trim()] = parseFloat(parts[1].trim().replace('%', ''));
-            });
-        }
-
-        const suggestions = [];
-        const suggestionSections = analysisText.match(/SUGGESTIONS:\s*([\s\S]*)/i);
-        if (suggestionSections) {
-            suggestionSections[1].split('TYPE:').slice(1).forEach(section => {
-                const parts = section.split('|').map(p => p.trim());
-                if (parts.length >= 5) {
-                    const pos = parts[4].match(/(\d+)-(\d+)/);
-                    suggestions.push({
-                        type: parts[0].split(':')[1]?.trim(),
-                        severity: parts[1].split(':')[1]?.trim(),
-                        message: parts[2].split(':')[1]?.trim(),
-                        suggestion: parts[3].split(':')[1]?.trim(),
-                        position: pos ? { start: parseInt(pos[1]), end: parseInt(pos[2]) } : { start: 0, end: 0 }
-                    });
-                }
-            });
-        }
-
-        const output = { aiReadabilityScore, keywordDensity, suggestions };
-
-        await updateToolRun({
-            runId,
-            status: 'completed',
-            outputPayload: output
-        });
-
-        return new Response(JSON.stringify({ runId, output }), {
+        return new Response(JSON.stringify({ success: true, data: analysisJson }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
 
-    } catch (err) {
-        console.error(err);
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        if (runId) {
-            await updateToolRun({ runId, status: 'error', errorMessage: errorMessage });
-        }
-        return new Response(JSON.stringify({ error: errorMessage }), {
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
+        return new Response(JSON.stringify({ success: false, error: { message: errorMessage, code: errorCode } }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
-});
+};
+
+// --- Server ---
+Deno.serve(analysisService);
