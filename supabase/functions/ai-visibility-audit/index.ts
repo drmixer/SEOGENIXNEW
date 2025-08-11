@@ -1,147 +1,109 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Self-contained CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-// Initialize Supabase client for logging
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-// --- Type Definitions ---
-interface LogToolRunParams {
-  projectId: string;
-  toolName: string;
-  inputPayload: Record<string, unknown>;
+// --- Type Definitions & Helpers ---
+interface LogToolRunParams { /* ... */ }
+interface UpdateToolRunParams { /* ... */ }
+
+// Database logging helpers (logToolRun, updateToolRun) are assumed to be here and correct.
+// For brevity, they are not redefined.
+
+async function logToolRun({ projectId, toolName, inputPayload }) {
+    const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
+    if (error) { console.error('Error logging tool run:', error); return null; }
+    return data.id;
 }
 
-interface UpdateToolRunParams {
-  runId: string;
-  status: 'completed' | 'error';
-  outputPayload: Record<string, unknown> | null;
-  errorMessage: string | null;
+async function updateToolRun({ runId, status, outputPayload, errorMessage }) {
+    const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
+    const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
+    if (error) { console.error('Error updating tool run:', error); }
 }
 
-// Helper functions for logging tool runs in the database
-async function logToolRun({ projectId, toolName, inputPayload }: LogToolRunParams) {
-  const { data, error } = await supabase
-    .from('tool_runs')
-    .insert({
-      project_id: projectId,
-      tool_name: toolName,
-      input_payload: inputPayload,
-      status: 'running'
-    })
-    .select('id')
-    .single();
+async function updateToolRunProgress(runId: string, progress: Record<string, unknown>) {
+  const { error } = await supabase.from('tool_runs').update({ progress }).eq('id', runId);
   if (error) {
-    console.error('Error logging tool run:', error);
-    return null;
-  }
-  return data.id;
-}
-
-async function updateToolRun({ runId, status, outputPayload, errorMessage }: UpdateToolRunParams) {
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output_payload: outputPayload,
-    error_message: errorMessage
-  };
-  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) {
-    console.error('Error updating tool run:', error);
+    console.error('Error updating tool run progress:', error);
   }
 }
 
-// --- New Enhanced Prompt ---
-const getAnalysisPrompt = (url: string, content: string) => {
-  const jsonSchema = `
-  {
-    "overallScore": "number (0-100)",
-    "subscores": {
-      "aiUnderstanding": "number (0-100, how well an AI can understand the core topic)",
-      "citationLikelihood": "number (0-100, likelihood of being cited by AI models)",
-      "conversationalReadiness": "number (0-100, suitability for voice search and chatbots)",
-      "contentStructure": "number (0-100, quality of HTML structure and metadata)"
-    },
-    "recommendations": [
-      {
-        "title": "string (short, clear title of the recommendation)",
-        "description": "string (detailed explanation of the recommendation and why it's important)",
-        "action_type": "string (enum: 'content-optimizer', 'schema-generator', 'general-advice')"
-      }
-    ],
-    "issues": [
-      {
-        "title": "string (short, clear title of the issue found)",
-        "description": "string (detailed explanation of the issue and its impact)"
-      }
-    ]
-  }
-  `;
+// --- Multi-Step Prompt Definitions ---
 
-  const fewShotExample = `
-  {
-    "overallScore": 85,
-    "subscores": {
-      "aiUnderstanding": 90,
-      "citationLikelihood": 80,
-      "conversationalReadiness": 88,
-      "contentStructure": 82
-    },
-    "recommendations": [
-      {
-        "title": "Add FAQ Schema",
-        "description": "The page answers common questions but lacks FAQ schema markup. Adding it will make these Q&As more visible to search engines and AI, improving conversational readiness.",
-        "action_type": "schema-generator"
-      },
-      {
-        "title": "Incorporate a 'Key Takeaways' Section",
-        "description": "A concise summary section at the beginning of the article would improve AI understanding and increase the likelihood of being used as a citation source.",
-        "action_type": "content-optimizer"
-      }
-    ],
-    "issues": [
-      {
-        "title": "Missing Meta Description",
-        "description": "The page is missing a meta description, which harms both user click-through rates from search results and AI's ability to quickly summarize the page's purpose."
-      }
-    ]
-  }
-  `;
+const getStep1Prompt = (content: string) => `
+You are an expert AI Visibility Auditor, focusing on on-page content. Analyze the following content.
+Content:
+---
+${content.substring(0, 8000)}
+---
+Evaluate the content's AI Understanding (how well an AI can understand the core topic).
+Return ONLY a JSON object with this structure:
+{
+  "aiUnderstanding": "number (0-100)",
+  "onPageRecommendations": [{"title": "string", "description": "string", "action_type": "string"}],
+  "onPageIssues": [{"title": "string", "description": "string"}]
+}`;
 
-  return `
-  You are an expert AI Visibility Auditor. Your task is to analyze the provided web page content and evaluate its visibility and readiness for AI-driven platforms like Google's Search Generative Experience (SGE), Perplexity, and other large language models.
+const getStep2Prompt = (content: string) => `
+You are an expert AI Visibility Auditor, focusing on content structure. Analyze the following content.
+Content:
+---
+${content.substring(0, 8000)}
+---
+Evaluate the Content Structure (quality of HTML structure, metadata, schema).
+Return ONLY a JSON object with this structure:
+{
+  "contentStructure": "number (0-100)",
+  "structureRecommendations": [{"title": "string", "description": "string", "action_type": "string"}],
+  "structureIssues": [{"title": "string", "description": "string"}]
+}`;
 
-  Analyze the content from the following URL: ${url}
-  Content:
-  ---
-  ${content.substring(0, 15000)}
-  ---
+const getStep3Prompt = (content: string) => `
+You are an expert AI Visibility Auditor, focusing on conversational readiness. Analyze the following content.
+Content:
+---
+${content.substring(0, 8000)}
+---
+Evaluate the Citation Likelihood and Conversational Readiness.
+Return ONLY a JSON object with this structure:
+{
+  "citationLikelihood": "number (0-100)",
+  "conversationalReadiness": "number (0-100)",
+  "readinessRecommendations": [{"title": "string", "description": "string", "action_type": "string"}],
+  "readinessIssues": [{"title": "string", "description": "string"}]
+}`;
 
-  Based on your analysis, you MUST provide a response in a valid JSON format. Do not include any text or formatting outside of the JSON object.
-
-  The JSON object must strictly adhere to the following schema:
-  \`\`\`json
-  ${jsonSchema}
-  \`\`\`
-
-  Here is an example of the ideal output format and quality (a "few-shot" example):
-  \`\`\`json
-  ${fewShotExample}
-  \`\`\`
-
-  Now, perform your expert analysis of the provided content and return the resulting JSON object.
-  `;
-};
+async function callGemini(prompt: string, apiKey: string) {
+    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              response_mime_type: "application/json",
+              temperature: 0.2, maxOutputTokens: 2048
+            }
+        })
+    });
+    if (!geminiResponse.ok) {
+        const errorBody = await geminiResponse.text();
+        console.error('Gemini API error:', errorBody);
+        throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
+    }
+    const geminiData = await geminiResponse.json();
+    return JSON.parse(geminiData.candidates[0].content.parts[0].text);
+}
 
 
+// --- Main Service ---
 export const auditService = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -152,94 +114,84 @@ export const auditService = async (req: Request): Promise<Response> => {
     const { projectId, url, content } = await req.json();
 
     runId = await logToolRun({
-      projectId: projectId,
+      projectId,
       toolName: 'ai-visibility-audit',
       inputPayload: { url, content: content ? 'Content provided' : 'No content provided' }
     });
-
-    if (!url && !content) {
-      throw new Error('URL or content is required');
-    }
+    if (!runId) throw new Error("Failed to create a run log.");
 
     let pageContent = content;
     if (url && !content) {
-      try {
-        const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36' } });
-        if (!response.ok) {
-          throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
-        }
+        // Fetch content logic...
+        const response = await fetch(url, { headers: { 'User-Agent': 'SEOGENIX Audit Bot 1.0' } });
+        if (!response.ok) throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
         pageContent = await response.text();
-      } catch (error) {
-        console.error('Failed to fetch URL content:', error);
-        // Throw a more specific error for the client
-        throw new Error(`Could not retrieve content from the provided URL: ${url}. Please check the URL and try again.`);
-      }
     }
+    if (!pageContent) throw new Error("Content is empty.");
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!geminiApiKey) {
-      throw new Error('Gemini API key not configured');
-    }
+    if (!geminiApiKey) throw new Error('Gemini API key not configured');
 
-    const prompt = getAnalysisPrompt(url, pageContent);
+    // --- Execute Step 1 ---
+    await updateToolRunProgress(runId, { step: 'Analyzing On-Page Content', progress: 10 });
+    const step1Result = await callGemini(getStep1Prompt(pageContent), geminiApiKey);
 
-    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              response_mime_type: "application/json",
-              temperature: 0.3,
-              topK: 40,
-              topP: 0.9,
-              maxOutputTokens: 2048
-            }
-        })
-    });
+    // --- Execute Step 2 ---
+    await updateToolRunProgress(runId, { step: 'Analyzing Content Structure', progress: 40 });
+    const step2Result = await callGemini(getStep2Prompt(pageContent), geminiApiKey);
 
-    if (!geminiResponse.ok) {
-      const errorBody = await geminiResponse.text();
-      console.error('Gemini API error:', errorBody);
-      throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
-    }
+    // --- Execute Step 3 ---
+    await updateToolRunProgress(runId, { step: 'Assessing Conversational Readiness', progress: 70 });
+    const step3Result = await callGemini(getStep3Prompt(pageContent), geminiApiKey);
 
-    const geminiData = await geminiResponse.json();
-    const analysisText = geminiData.candidates[0].content.parts[0].text;
-    const analysisJson = JSON.parse(analysisText);
+    await updateToolRunProgress(runId, { step: 'Compiling Final Report', progress: 95 });
 
-    if (runId) {
-      await updateToolRun({
+    // --- Combine Results ---
+    const finalResult = {
+        subscores: {
+            aiUnderstanding: step1Result.aiUnderstanding || 0,
+            contentStructure: step2Result.contentStructure || 0,
+            citationLikelihood: step3Result.citationLikelihood || 0,
+            conversationalReadiness: step3Result.conversationalReadiness || 0,
+        },
+        recommendations: [
+            ...(step1Result.onPageRecommendations || []),
+            ...(step2Result.structureRecommendations || []),
+            ...(step3Result.readinessRecommendations || [])
+        ],
+        issues: [
+            ...(step1Result.onPageIssues || []),
+            ...(step2Result.structureIssues || []),
+            ...(step3Result.readinessIssues || [])
+        ],
+        overallScore: 0
+    };
+
+    // Calculate overall score as an average of subscores
+    const scores = Object.values(finalResult.subscores);
+    finalResult.overallScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+
+    await updateToolRun({
         runId,
         status: 'completed',
-        outputPayload: analysisJson,
+        outputPayload: finalResult,
         errorMessage: null,
-      });
-    }
+    });
 
-    return new Response(JSON.stringify({ success: true, data: { runId, ...analysisJson, pageContent } }), {
+    return new Response(JSON.stringify({ success: true, data: { runId, ...finalResult } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-    const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
-
     if (runId) {
-      await updateToolRun({
-        runId,
-        status: 'error',
-        outputPayload: null,
-        errorMessage: errorMessage,
-      });
+      await updateToolRun({ runId, status: 'error', outputPayload: null, errorMessage });
     }
-
-    return new Response(JSON.stringify({ success: false, error: { message: errorMessage, code: errorCode } }), {
+    return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 };
 
-// Start the server
 Deno.serve(auditService);
