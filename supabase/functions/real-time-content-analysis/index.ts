@@ -1,3 +1,6 @@
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.140.0/http/server.ts";
+
 // --- CORS Headers ---
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -9,6 +12,7 @@ const corsHeaders = {
 interface AnalysisRequest {
     content: string;
     keywords: string[];
+    projectId: string;
 }
 
 interface Suggestion {
@@ -26,6 +30,19 @@ interface AnalysisResponse {
     aiReadabilityScore: number;
     keywordDensity: { [key: string]: number };
     suggestions: Suggestion[];
+}
+
+// --- Database Logging Helpers ---
+async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
+  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
+  if (error) { console.error('Error logging tool run:', error); return null; }
+  return data.id;
+}
+
+async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
+  const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
+  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
+  if (error) { console.error('Error updating tool run:', error); }
 }
 
 // --- AI Prompt Engineering ---
@@ -75,13 +92,16 @@ const getAnalysisPrompt = (content: string, keywords: string[]): string => {
 };
 
 // --- Main Service Handler ---
-export const analysisService = async (req: Request): Promise<Response> => {
+export const analysisService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
 
+    let runId;
     try {
-        const { content, keywords }: AnalysisRequest = await req.json();
+        const { content, keywords, projectId }: AnalysisRequest = await req.json();
+
+        runId = await logToolRun({ supabase, projectId, toolName: 'real-time-content-analysis', inputPayload: { keywords } });
 
         if (typeof content !== 'string') {
             throw new Error('`content` must be a string.');
@@ -104,7 +124,7 @@ export const analysisService = async (req: Request): Promise<Response> => {
 
         const prompt = getAnalysisPrompt(content, keywords || []);
 
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -124,12 +144,17 @@ export const analysisService = async (req: Request): Promise<Response> => {
         const geminiData = await geminiResponse.json();
         const analysisJson: AnalysisResponse = JSON.parse(geminiData.candidates[0].content.parts[0].text);
 
+        await updateToolRun({ supabase, runId, status: 'completed', outputPayload: analysisJson, errorMessage: null });
+
         return new Response(JSON.stringify({ success: true, data: analysisJson }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
 
     } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        if (runId) {
+            await updateToolRun({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
+        }
         const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
         return new Response(JSON.stringify({ success: false, error: { message: errorMessage, code: errorCode } }), {
             status: 500,
@@ -139,4 +164,10 @@ export const analysisService = async (req: Request): Promise<Response> => {
 };
 
 // --- Server ---
-Deno.serve(analysisService);
+serve(async (req) => {
+    const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    return await analysisService(req, supabase);
+});

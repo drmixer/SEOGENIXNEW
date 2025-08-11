@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Self-contained CORS headers
 const corsHeaders = {
@@ -7,20 +7,14 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-// Initialize Supabase client
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-);
-
 // Helper functions for logging
-async function logToolRun({ projectId, toolName, inputPayload }) {
+async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
   const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
   if (error) { console.error('Error logging tool run:', error); return null; }
   return data.id;
 }
 
-async function updateToolRun({ runId, status, outputPayload, errorMessage }) {
+async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
   const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
   const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
   if (error) { console.error('Error updating tool run:', error); }
@@ -33,16 +27,13 @@ function generateFallbackSummary(url, summaryType) {
     return new Response(JSON.stringify({ url, summaryType, summary, entities, topics, note: 'This is fallback data.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
-Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
-    }
-
+const llmSiteSummariesService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
     let runId;
     try {
         const { projectId, url, content, summaryType } = await req.json();
 
         runId = await logToolRun({
+            supabase,
             projectId: projectId,
             toolName: 'llm-site-summaries',
             inputPayload: { url, summaryType, contentLength: content?.length }
@@ -105,6 +96,7 @@ MAIN TOPICS:
         const output = { url, summaryType, summary, entities, topics };
 
         await updateToolRun({
+            supabase,
             runId,
             status: 'completed',
             outputPayload: output
@@ -118,11 +110,24 @@ MAIN TOPICS:
         console.error(err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         if (runId) {
-            await updateToolRun({ runId, status: 'error', errorMessage: errorMessage });
+            await updateToolRun({ supabase, runId, status: 'error', errorMessage: errorMessage });
         }
         return new Response(JSON.stringify({ error: errorMessage }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
+}
+
+Deno.serve(async (req) => {
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders });
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    return await llmSiteSummariesService(req, supabase);
 });

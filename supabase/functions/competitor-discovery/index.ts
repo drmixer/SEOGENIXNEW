@@ -1,4 +1,6 @@
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "https://deno.land/std@0.224.0/crypto/hmac.ts";
+import { serve } from "https://deno.land/std@0.140.0/http/server.ts";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -10,6 +12,7 @@ interface CompetitorDiscoveryPayload {
     topic?: string;
     existingCompetitors?: string[];
     userDescription?: string;
+    projectId: string;
 }
 
 interface Competitor {
@@ -18,6 +21,19 @@ interface Competitor {
     domainAuthority: number | null;
     relevanceScore: number;
     explanation: string;
+}
+
+// --- Database Logging Helpers ---
+async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
+  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
+  if (error) { console.error('Error logging tool run:', error); return null; }
+  return data.id;
+}
+
+async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
+  const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
+  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
+  if (error) { console.error('Error updating tool run:', error); }
 }
 
 const getRelevancePrompt = (competitors: any[], payload: CompetitorDiscoveryPayload): string => {
@@ -60,14 +76,13 @@ const getRelevancePrompt = (competitors: any[], payload: CompetitorDiscoveryPayl
     `;
 };
 
-Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
-    }
-
+const competitorDiscoveryService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
+    let runId;
     try {
         const payload: CompetitorDiscoveryPayload = await req.json();
-        const { industry, topic, existingCompetitors = [] } = payload;
+        const { industry, topic, existingCompetitors = [], projectId } = payload;
+
+        runId = await logToolRun({ supabase, projectId, toolName: 'competitor-discovery', inputPayload: payload });
 
         if (!industry && !topic) {
             throw new Error('Either `industry` or `topic` is required.');
@@ -95,7 +110,7 @@ Deno.serve(async (req) => {
             .slice(0, 15) || [];
 
         const relevancePrompt = getRelevancePrompt(potentialCompetitors, payload);
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -143,14 +158,34 @@ Deno.serve(async (req) => {
         // Sort by relevance score
         competitors.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-        return new Response(JSON.stringify({ success: true, data: { competitorSuggestions: competitors.slice(0, 10) } }), {
+        const output = { competitorSuggestions: competitors.slice(0, 10) };
+
+        await updateToolRun({ supabase, runId, status: 'completed', outputPayload: output, errorMessage: null });
+
+        return new Response(JSON.stringify({ success: true, data: output }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
 
     } catch (err) {
-        return new Response(JSON.stringify({ success: false, error: { message: err.message } }), {
+        const errorMessage = err.message;
+        if(runId) {
+            await updateToolRun({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
+        }
+        return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
+};
+
+serve(async (req) => {
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders });
+    }
+
+    const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    return await competitorDiscoveryService(req, supabase);
 });
