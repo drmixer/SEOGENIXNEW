@@ -26,6 +26,7 @@ interface ToolsGridProps {
   showPreview?: boolean;
   selectedTool?: string | null;
   selectedWebsite?: string;
+  selectedProjectId?: string;
   userProfile?: any;
   onToolComplete?: (toolName: string, success: boolean, message?: string) => void;
   onSwitchTool: (toolId: string, context: any) => void;
@@ -50,6 +51,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   showPreview = false,
   selectedTool,
   selectedWebsite,
+  selectedProjectId,
   userProfile,
   onToolComplete,
   onSwitchTool,
@@ -292,11 +294,13 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       switch (toolId) {
         case 'audit':
           const auditUrl = auditScope === 'page' && pageUrl ? `${selectedWebsite}${pageUrl}` : selectedWebsite;
-          result = await apiService.runAudit(auditUrl);
+          result = await apiService.runAudit(selectedProjectId, auditUrl);
           break;
         case 'schema':
           result = await apiService.generateSchema(
+            selectedProjectId,
             schemaInputType === 'url' ? selectedWebsite : undefined,
+            'article', // default content type
             schemaInputType === 'text' ? schemaContent : undefined
           );
           break;
@@ -308,6 +312,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           const fingerprintList = fingerprintPhrases.split('\n').map(p => p.trim()).filter(p => p);
           
           result = await apiService.trackCitations(
+            selectedProjectId,
             domain, 
             citationKeywordsList.length > 0 ? citationKeywordsList : ['AI visibility', 'SEO'],
             fingerprintList.length > 0 ? fingerprintList : undefined
@@ -320,10 +325,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           );
           break;
         case 'summaries':
-          result = await apiService.generateLLMSummary(selectedWebsite, 'overview');
+          result = await apiService.generateLLMSummary(selectedProjectId, selectedWebsite, 'overview');
           break;
         case 'entities':
           result = await apiService.analyzeEntityCoverage(
+            selectedProjectId,
             selectedWebsite, 
             undefined, 
             userProfile?.industry
@@ -338,6 +344,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           }
           
           result = await apiService.generateAIContent(
+            selectedProjectId,
             generatorContentType,
             generatorTopic,
             keywords,
@@ -350,6 +357,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         case 'competitive':
           const competitors = userProfile?.competitors?.map((c: any) => c.url) || [];
           result = await apiService.performCompetitiveAnalysis(
+            selectedProjectId,
             selectedWebsite,
             competitors.slice(0, 3),
             userProfile?.industry
@@ -357,6 +365,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           break;
         case 'discovery':
           result = await apiService.discoverCompetitors(
+            selectedProjectId,
             selectedWebsite,
             userProfile?.industry,
             userProfile?.business_description,
@@ -369,6 +378,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           }
           
           result = await apiService.generatePromptSuggestions(
+            selectedProjectId,
             promptTopic || extractDomain(selectedWebsite),
             userProfile?.industry,
             undefined,

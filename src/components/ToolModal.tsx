@@ -10,6 +10,7 @@ interface ToolModalProps {
   toolId: string;
   toolName: string;
   selectedWebsite?: string;
+  selectedProjectId?: string;
   userProfile?: any;
   onComplete?: (toolName: string, success: boolean, message?: string) => void;
 }
@@ -20,6 +21,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
   toolId,
   toolName,
   selectedWebsite,
+  selectedProjectId,
   userProfile,
   onComplete
 }) => {
@@ -48,7 +50,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
       summaries: Globe,
       entities: Users,
       generator: Zap,
-      optimizer: TrendingUp,
       prompts: Lightbulb,
       competitive: BarChart3,
       discovery: Radar
@@ -65,7 +66,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
       summaries: 'from-teal-500 to-teal-600',
       entities: 'from-pink-500 to-pink-600',
       generator: 'from-yellow-500 to-yellow-600',
-      optimizer: 'from-orange-500 to-orange-600',
       prompts: 'from-cyan-500 to-cyan-600',
       competitive: 'from-red-500 to-red-600',
       discovery: 'from-violet-500 to-violet-600'
@@ -100,7 +100,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
 
       switch (toolId) {
         case 'audit':
-          result = await apiService.runAudit(websiteUrl);
+          result = await apiService.runAudit(selectedProjectId, websiteUrl);
           
           // Save audit result to history
           try {
@@ -125,14 +125,14 @@ const ToolModal: React.FC<ToolModalProps> = ({
           break;
 
         case 'schema':
-          result = await apiService.generateSchema(websiteUrl, formData.contentType || 'article');
+          result = await apiService.generateSchema(selectedProjectId, websiteUrl, formData.contentType || 'article');
           break;
 
         case 'citations':
           const domain = new URL(websiteUrl).hostname;
           const keywords = formData.keywords ? formData.keywords.split(',').map((k: string) => k.trim()) : 
                           userProfile?.industry ? [userProfile.industry, 'AI', 'SEO'] : ['AI', 'SEO', 'optimization'];
-          result = await apiService.trackCitations(domain, keywords);
+          result = await apiService.trackCitations(selectedProjectId, domain, keywords);
           break;
 
         case 'voice':
@@ -142,11 +142,12 @@ const ToolModal: React.FC<ToolModalProps> = ({
           break;
 
         case 'summaries':
-          result = await apiService.generateLLMSummary(websiteUrl, formData.summaryType || 'overview');
+          result = await apiService.generateLLMSummary(selectedProjectId, websiteUrl, formData.summaryType || 'overview');
           break;
 
         case 'entities':
           result = await apiService.analyzeEntityCoverage(
+            selectedProjectId,
             websiteUrl, 
             undefined, 
             userProfile?.industry,
@@ -156,6 +157,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
 
         case 'generator':
           result = await apiService.generateAIContent(
+            selectedProjectId,
             formData.contentType || 'faq',
             formData.topic || userProfile?.industry || 'Technology',
             formData.keywords ? formData.keywords.split(',').map((k: string) => k.trim()) : ['AI', 'SEO', 'optimization'],
@@ -165,17 +167,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
           );
           break;
 
-        case 'optimizer':
-          const sampleContent = formData.content || `Welcome to our website. We provide excellent services and solutions for your business needs.`;
-          result = await apiService.optimizeContent(
-            sampleContent,
-            formData.keywords ? formData.keywords.split(',').map((k: string) => k.trim()) : ['AI', 'SEO', 'optimization'],
-            formData.contentType || 'article'
-          );
-          break;
-
         case 'prompts':
           result = await apiService.generatePromptSuggestions(
+            selectedProjectId,
             formData.topic || userProfile?.industry || 'Technology',
             userProfile?.industry,
             formData.audience || 'Business professionals',
@@ -189,6 +183,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
                              formData.competitors?.split(',').map((c: string) => c.trim()) || 
                              ['https://competitor1.com', 'https://competitor2.com'];
           result = await apiService.performCompetitiveAnalysis(
+            selectedProjectId,
             websiteUrl,
             competitors,
             userProfile?.industry,
@@ -198,6 +193,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
 
         case 'discovery':
           result = await apiService.discoverCompetitors(
+            selectedProjectId,
             websiteUrl,
             userProfile?.industry,
             userProfile?.business_description,

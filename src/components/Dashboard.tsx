@@ -52,6 +52,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [hasRunTools, setHasRunTools] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedCompetitor, setSelectedCompetitor] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -391,6 +392,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   useEffect(() => {
     if (userProfile && userProfile.websites && userProfile.websites.length > 0 && !selectedWebsite) {
       setSelectedWebsite(userProfile.websites[0].url);
+      setSelectedProjectId(userProfile.websites[0].id);
     }
     if (userProfile && userProfile.competitors && userProfile.competitors.length > 0 && !selectedCompetitor) {
       setSelectedCompetitor(userProfile.competitors[0].url);
@@ -680,7 +682,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   websites={userProfile.websites}
                   competitors={userProfile.competitors || []}
                   selectedWebsite={selectedWebsite}
-                  onWebsiteChange={setSelectedWebsite}
+                  onWebsiteChange={(url) => {
+                    const selected = userProfile.websites.find((w: any) => w.url === url);
+                    setSelectedWebsite(url);
+                    if (selected) {
+                      setSelectedProjectId(selected.id);
+                    }
+                  }}
                   userPlan={userPlan}
                 />
               )
@@ -780,6 +788,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   userPlan={userPlan} 
                   onToolRun={() => setHasRunTools(true)} 
                   selectedWebsite={selectedWebsite}
+                  selectedProjectId={selectedProjectId}
                   userProfile={userProfile}
                   onToolComplete={handleToolComplete}
                 />
@@ -881,6 +890,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           onToolRun={() => setHasRunTools(true)} 
           selectedTool={activeSection}
           selectedWebsite={selectedWebsite}
+          selectedProjectId={selectedProjectId}
           userProfile={userProfile}
           onToolComplete={handleToolComplete}
           onSwitchTool={handleSwitchTool}
