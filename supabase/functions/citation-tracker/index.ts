@@ -35,13 +35,13 @@ interface RedditPost {
 }
 
 // --- Database Logging Helpers ---
-async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
+async function logToolRun({ supabase, projectId, toolName, inputPayload }: { supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: any }) {
   const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
   if (error) { console.error('Error logging tool run:', error); return null; }
   return data.id;
 }
 
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
+async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string, status: string, outputPayload: any, errorMessage: string | null }) {
   const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
   const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
   if (error) { console.error('Error updating tool run:', error); }

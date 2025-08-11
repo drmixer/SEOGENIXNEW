@@ -1,5 +1,10 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+
+// Define CORS headers locally
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 // --- Type Definitions ---
 interface WPRequest {
@@ -79,7 +84,11 @@ export const wordpressService = async (req: Request, supabase: SupabaseClient): 
                             finalContent += `\n\n${schemaData.output.implementation}`;
                         }
                     } catch (e) {
-                        console.error("Schema generation failed, publishing without schema.", e.message);
+                        if (e instanceof Error) {
+                            console.error("Schema generation failed, publishing without schema.", e.message);
+                        } else {
+                            console.error("Schema generation failed with an unknown error.", e);
+                        }
                     }
                 }
 
@@ -120,9 +129,9 @@ export const wordpressService = async (req: Request, supabase: SupabaseClient): 
                 const pages = pagesResponse.ok ? await pagesResponse.json() : [];
 
                 const items = [
-                    ...posts.map(p => ({ id: p.id, title: p.title.rendered, type: 'post', date: p.date_gmt })),
-                    ...pages.map(p => ({ id: p.id, title: p.title.rendered, type: 'page', date: p.date_gmt }))
-                ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                    ...posts.map((p: any) => ({ id: p.id, title: p.title.rendered, type: 'post', date: p.date_gmt })),
+                    ...pages.map((p: any) => ({ id: p.id, title: p.title.rendered, type: 'page', date: p.date_gmt }))
+                ].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
                 return new Response(JSON.stringify({ success: true, data: { items } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 

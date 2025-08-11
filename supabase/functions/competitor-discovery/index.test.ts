@@ -3,6 +3,12 @@ import { competitorDiscoveryService } from "./index.ts";
 
 // --- Test Configuration & Mocks ---
 
+// Set mock environment variables required by the function
+Deno.env.set('GOOGLE_SEARCH_API_KEY', 'mock-google-key');
+Deno.env.set('GOOGLE_SEARCH_ENGINE_ID', 'mock-google-cx');
+Deno.env.set('MOZ_ACCESS_ID', 'mock-moz-id');
+Deno.env.set('MOZ_SECRET_KEY', 'mock-moz-secret');
+
 let shouldGoogleFail = false;
 let shouldMozFail = false;
 

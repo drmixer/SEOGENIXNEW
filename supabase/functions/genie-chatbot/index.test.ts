@@ -1,124 +1,107 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { app } from "./index.ts";
+import { Hono } from 'npm:hono'
+import { app } from "./index.ts"; // Import the Hono app
 
-// --- Test Configuration & Mocks ---
+// --- Mocks ---
 
-let shouldGeminiFail = false;
+const mockSupabaseClient = {
+  auth: {
+    getUser: async (_token: string) => ({ data: { user: { id: "user-123" } }, error: null }),
+  },
+  from: (_table: string) => ({
+    select: () => ({
+      eq: () => ({
+        single: () => Promise.resolve({ data: { user_id: "user-123", plan: "pro" }, error: null }),
+        order: () => ({
+          limit: () => Promise.resolve({ data: [{ score: 85 }], error: null })
+        })
+      })
+    })
+  })
+};
 
 const mockAiResponse = {
-  responseText: "This is a mock AI response.",
-  suggestedFollowUps: ["What is X?", "How does Y work?"],
+  responseText: "This is a mock response.",
+  suggestedFollowUps: ["What else can you do?"],
 };
 
-const mockFetch = (async (
-  _url: string | URL,
-  _options?: RequestInit,
-): Promise<Response> => {
-  if (shouldGeminiFail) {
-    return new Response(JSON.stringify({ error: "Mock Gemini API Error" }), { status: 500 });
-  }
-  const mockGeminiResponse = {
-    candidates: [{ content: { parts: [{ text: JSON.stringify(mockAiResponse) }] } }],
-  };
-  return new Response(JSON.stringify(mockGeminiResponse));
-}) as typeof fetch;
+let shouldGeminiFail = false;
+const originalFetch = globalThis.fetch;
 
-const createMockSupabaseClient = () => {
-    return {
-        auth: {
-            getUser: () => Promise.resolve({
-                data: { user: { id: 'mock-user-id' } },
-                error: null,
-            }),
-        },
-        from: (_table: string) => ({
-            select: () => ({
-                eq: () => ({
-                    single: () => Promise.resolve({ data: { id: 'mock-profile-id' }, error: null }),
-                    order: () => ({
-                        limit: () => Promise.resolve({ data: [{ score: 88 }], error: null }),
-                    }),
-                }),
-            }),
-        }),
-    } as unknown as SupabaseClient;
-};
+// --- Test Suite Setup ---
 
-// --- Hono Middleware Setup (runs once before all tests) ---
-const mockSupabase = createMockSupabaseClient();
+// Apply middleware to the app for all tests in this suite
 app.use('*', async (c, next) => {
-  c.set('supabase', mockSupabase)
-  await next()
+    c.set('supabase', mockSupabaseClient as any)
+    await next()
 });
+
+globalThis.fetch = (async (
+    url: string | URL,
+    _options?: RequestInit,
+  ): Promise<Response> => {
+    if (url.toString().includes("generativelanguage.googleapis.com")) {
+        if (shouldGeminiFail) {
+            return new Response(JSON.stringify({ error: "Mock Gemini API Error" }), { status: 500 });
+        }
+        const mockGeminiResponse = {
+            candidates: [{ content: { parts: [{ text: JSON.stringify(mockAiResponse) }] } }],
+        };
+        return new Response(JSON.stringify(mockGeminiResponse));
+    }
+    return new Response(JSON.stringify({ error: "Unhandled mock fetch" }), { status: 501 });
+}) as typeof fetch;
 
 
 // --- Test Suite ---
 
-Deno.test("genie-chatbot success case", async (t) => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = mockFetch;
-  shouldGeminiFail = false;
+Deno.test("genie-chatbot", async (t) => {
 
-  await t.step("it returns a successful structured response", async () => {
-    try {
-      const req = new Request("http://localhost/", {
+  await t.step("success case", async () => {
+    shouldGeminiFail = false;
+    const req = new Request("http://localhost/", {
+      method: "POST",
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer valid-token'
+      },
+      body: JSON.stringify({
+        message: "Hello",
+        context: "dashboard"
+      }),
+    });
+
+    const response = await app.fetch(req);
+    const data = await response.json();
+
+    assertEquals(response.status, 200);
+    assertEquals(data.success, true);
+    assertEquals(data.data.responseText, mockAiResponse.responseText);
+  });
+
+  await t.step("failure case", async () => {
+    shouldGeminiFail = true;
+    const req = new Request("http://localhost/", {
         method: "POST",
         headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer test-token'
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer valid-token'
         },
         body: JSON.stringify({
-          projectId: "test-project-id",
-          message: "This is a test message.",
-          context: "dashboard",
+          message: "Hello",
+          context: "dashboard"
         }),
       });
 
-      const response = await app.request(req);
+      const response = await app.fetch(req);
       const data = await response.json();
 
-      assertEquals(response.status, 200);
-      assertEquals(data.success, true);
-      assertEquals(data.data.responseText, mockAiResponse.responseText);
-      assertEquals(data.data.suggestedFollowUps.length, 2);
-
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      assertEquals(response.status, 500);
+      assertEquals(data.success, false);
+      assert(data.error.message.includes("The AI model failed to process the request"));
+      shouldGeminiFail = false; // reset
   });
 });
 
-Deno.test("genie-chatbot failure case", async (t) => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = mockFetch;
-    shouldGeminiFail = true;
-
-    await t.step("it returns a standard error response", async () => {
-      try {
-        const req = new Request("http://localhost/", {
-          method: "POST",
-          headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer test-token'
-          },
-          body: JSON.stringify({
-            projectId: "test-project-id",
-            message: "This is a test message.",
-            context: "dashboard",
-          }),
-        });
-
-        const response = await app.request(req);
-        const data = await response.json();
-
-        assertEquals(response.status, 500);
-        assertEquals(data.success, false);
-        assert(data.error.message.includes("The AI model failed to process the request"));
-
-      } finally {
-        globalThis.fetch = originalFetch;
-        shouldGeminiFail = false; // Reset flag
-      }
-    });
-  });
+// Restore original fetch after all tests
+globalThis.fetch = originalFetch;

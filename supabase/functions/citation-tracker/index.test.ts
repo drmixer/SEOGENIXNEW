@@ -1,7 +1,20 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { citationTrackerService } from "./index.ts";
 
-// --- Test Configuration & Mocks ---
+// --- Mocks ---
+
+const mockSupabaseClient = {
+  from: () => ({
+    insert: () => ({
+      select: () => ({
+        single: () => Promise.resolve({ data: { id: "run-123" }, error: null })
+      })
+    }),
+    update: () => ({
+      eq: () => Promise.resolve({ error: null })
+    })
+  })
+};
 
 let shouldRedditAuthFail = false;
 let shouldRedditSearchFail = false;
@@ -64,7 +77,7 @@ Deno.test("citation-tracker success case", async (t) => {
         body: JSON.stringify({ domain: "example.com", keywords: ["example"] }),
       });
 
-      const response = await citationTrackerService(req);
+      const response = await citationTrackerService(req, mockSupabaseClient as any);
       const data = await response.json();
 
       assertEquals(response.status, 200);
@@ -91,7 +104,7 @@ Deno.test("citation-tracker failure case (Reddit Auth)", async (t) => {
           body: JSON.stringify({ domain: "example.com", keywords: ["example"] }),
         });
 
-        const response = await citationTrackerService(req);
+        const response = await citationTrackerService(req, mockSupabaseClient as any);
         const data = await response.json();
 
         assertEquals(response.status, 500);

@@ -1,96 +1,105 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { auditService } from "./index.ts";
 
-// --- Test Configuration ---
+// --- Test Configuration & Mocks ---
 
-// Global flag to control the behavior of the Gemini API mock
-let shouldGeminiFail = false;
-
-// Mock the successful Gemini API response payload
-const mockSuccessPayload = {
-  overallScore: 85,
-  subscores: {
-    aiUnderstanding: 90,
-    citationLikelihood: 80,
-    conversationalReadiness: 88,
-    contentStructure: 82
-  },
-  recommendations: [],
-  issues: []
+const mockSupabaseClient = {
+    from: () => ({
+      insert: () => ({
+        select: () => ({
+          single: () => Promise.resolve({ data: { id: "run-123" }, error: null })
+        })
+      }),
+      update: () => ({
+        eq: () => Promise.resolve({ error: null })
+      })
+    })
 };
 
-// --- Mock Fetch Implementation ---
+let shouldGeminiFail = false;
+const progressUpdates: any[] = [];
+
+// Mock payloads for each step
+const mockStep1Payload = {
+  aiUnderstanding: 90,
+  onPageRecommendations: [{ title: "Rec 1", description: "Desc 1", action_type: "general-advice" }],
+  onPageIssues: [{ title: "Issue 1", description: "Desc 1" }],
+};
+const mockStep2Payload = {
+  contentStructure: 80,
+  structureRecommendations: [{ title: "Rec 2", description: "Desc 2", action_type: "general-advice" }],
+  structureIssues: [{ title: "Issue 2", description: "Desc 2" }],
+};
+const mockStep3Payload = {
+  citationLikelihood: 85,
+  conversationalReadiness: 88,
+  readinessRecommendations: [{ title: "Rec 3", description: "Desc 3", action_type: "general-advice" }],
+  readinessIssues: [{ title: "Issue 3", description: "Desc 3" }],
+};
 
 const mockFetch = (async (
   url: string | URL,
   options?: RequestInit,
 ): Promise<Response> => {
   const urlString = url.toString();
+  const body = options?.body ? JSON.parse(options.body.toString()) : {};
+  const prompt = body.contents?.[0]?.parts?.[0]?.text || '';
 
-  // Mock for fetching the content of the URL to be audited
   if (urlString.includes("example.com")) {
-    return new Response("<html><head><title>Test Page</title></head><body><h1>Mock Content</h1></body></html>", {
-        headers: { "Content-Type": "text/html" },
-        status: 200
-    });
+    return new Response("<html><body><h1>Test Content</h1></body></html>");
   }
 
-  // Mock for Gemini API
   if (urlString.includes("generativelanguage.googleapis.com")) {
-    if (shouldGeminiFail) {
-      return new Response(JSON.stringify({ error: "Mock Gemini API Error" }), { status: 500 });
-    }
-    const mockGeminiResponse = {
-      candidates: [{ content: { parts: [{ text: JSON.stringify(mockSuccessPayload) }] } }],
-    };
-    return new Response(JSON.stringify(mockGeminiResponse));
+    if (shouldGeminiFail) return new Response(JSON.stringify({ error: "Mock Gemini API Error" }), { status: 500 });
+
+    let responsePayload = {};
+    if (prompt.includes("on-page content")) responsePayload = mockStep1Payload;
+    else if (prompt.includes("content structure")) responsePayload = mockStep2Payload;
+    else if (prompt.includes("conversational readiness")) responsePayload = mockStep3Payload;
+
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(responsePayload) }] } }] }));
   }
 
-  // Mock for Supabase tool_runs logging
-  if (urlString.includes("localhost:54321/rest/v1/tool_runs")) {
-    if (options?.method === 'POST') {
-        // Return a single object, not an array, to satisfy .single()
-        return new Response(JSON.stringify({ id: "mock-run-id-audit" }), {
-            headers: { "Content-Type": "application/json" },
-            status: 201
-        });
+  if (urlString.includes("/rest/v1/tool_runs")) {
+    if (options?.method === 'PATCH' || options?.method === 'PUT') {
+      progressUpdates.push(body); // Spy on progress updates
     }
-    // For UPDATE/PATCH calls
-    return new Response(null, { status: 204 });
+    return new Response(JSON.stringify({ id: "mock-run-id" }), { status: 201 });
   }
 
-  // Fallback for any unhandled fetch calls
-  return new Response(JSON.stringify({ error: "Unhandled mock fetch call" }), { status: 501 });
+  return new Response(JSON.stringify({ error: "Unhandled mock fetch" }), { status: 501 });
 }) as typeof fetch;
 
 
 // --- Test Suite ---
 
-Deno.test("ai-visibility-audit success case", async (t) => {
+Deno.test("ai-visibility-audit multi-step success case", async (t) => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = mockFetch;
-  shouldGeminiFail = false; // Ensure success mode
+  shouldGeminiFail = false;
+  progressUpdates.length = 0; // Reset spy
 
-  await t.step("it returns a successful response with valid data", async () => {
+  await t.step("it returns a combined successful response from all steps", async () => {
     try {
       const req = new Request("http://localhost/audit", {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: "test-project-id",
-          url: "https://example.com",
-        }),
+        body: JSON.stringify({ projectId: "test-project", url: "https://example.com" }),
       });
 
-      const response = await auditService(req);
+      const response = await auditService(req, mockSupabaseClient as any);
       const data = await response.json();
 
       assertEquals(response.status, 200);
       assertEquals(data.success, true);
-      assertEquals(data.data.overallScore, mockSuccessPayload.overallScore);
-      // In the current test environment, the Supabase client's fetch is not being mocked,
-      // so logToolRun fails gracefully and returns null. This assertion verifies that behavior.
-      assertEquals(data.data.runId, null);
+
+      const expectedOverall = Math.round((90 + 80 + 85 + 88) / 4);
+      assertEquals(data.data.overallScore, expectedOverall);
+
+      assertEquals(data.data.recommendations.length, 3);
+      assertEquals(data.data.issues.length, 3);
+
+      assert(progressUpdates.length >= 3, "Progress should be updated multiple times");
 
     } finally {
       globalThis.fetch = originalFetch;
@@ -98,24 +107,20 @@ Deno.test("ai-visibility-audit success case", async (t) => {
   });
 });
 
-
-Deno.test("ai-visibility-audit error case (Gemini API failure)", async (t) => {
+Deno.test("ai-visibility-audit multi-step failure case", async (t) => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mockFetch;
-    shouldGeminiFail = true; // Ensure failure mode
+    shouldGeminiFail = true;
 
-    await t.step("it returns a standard error response", async () => {
+    await t.step("it returns a standard error if a step fails", async () => {
         try {
             const req = new Request("http://localhost/audit", {
               method: "POST",
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                projectId: "test-project-id",
-                url: "https://example.com",
-              }),
+              body: JSON.stringify({ projectId: "test-project", url: "https://example.com" }),
             });
 
-            const response = await auditService(req);
+            const response = await auditService(req, mockSupabaseClient as any);
             const data = await response.json();
 
             assertEquals(response.status, 500);
@@ -124,7 +129,7 @@ Deno.test("ai-visibility-audit error case (Gemini API failure)", async (t) => {
 
           } finally {
             globalThis.fetch = originalFetch;
-            shouldGeminiFail = false; // Reset flag
+            shouldGeminiFail = false;
           }
     });
-  });
+});

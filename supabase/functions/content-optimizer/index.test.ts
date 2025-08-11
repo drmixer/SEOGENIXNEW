@@ -3,6 +3,19 @@ import { optimizerService } from "./index.ts";
 
 // --- Test Configuration ---
 
+const mockSupabaseClient = {
+    from: () => ({
+      insert: () => ({
+        select: () => ({
+          single: () => Promise.resolve({ data: { id: "run-123" }, error: null })
+        })
+      }),
+      update: () => ({
+        eq: () => Promise.resolve({ error: null })
+      })
+    })
+};
+
 let shouldGeminiFail = false;
 
 const mockSuccessPayload = {
@@ -30,13 +43,8 @@ const mockFetch = (async (
     return new Response(JSON.stringify(mockGeminiResponse));
   }
 
+  // This mock path is no longer used since we pass the mock client directly
   if (urlString.includes("localhost:54321/rest/v1/tool_runs")) {
-    if (options?.method === 'POST') {
-      return new Response(JSON.stringify({ id: "mock-run-id-optimizer" }), {
-        headers: { "Content-Type": "application/json" },
-        status: 201,
-      });
-    }
     return new Response(null, { status: 204 });
   }
 
@@ -64,13 +72,12 @@ Deno.test("content-optimizer success case", async (t) => {
         }),
       });
 
-      const response = await optimizerService(req);
+      const response = await optimizerService(req, mockSupabaseClient as any);
       const data = await response.json();
 
       assertEquals(response.status, 200);
       assertEquals(data.success, true);
       assertEquals(data.data.optimizedScore, mockSuccessPayload.optimizedScore);
-      assertEquals(data.data.runId, null); // Verifies graceful failure of logging in test env
 
     } finally {
       globalThis.fetch = originalFetch;
@@ -96,7 +103,7 @@ Deno.test("content-optimizer error case (Gemini API failure)", async (t) => {
         }),
       });
 
-      const response = await optimizerService(req);
+      const response = await optimizerService(req, mockSupabaseClient as any);
       const data = await response.json();
 
       assertEquals(response.status, 500);

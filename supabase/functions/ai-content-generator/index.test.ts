@@ -48,7 +48,7 @@ Deno.test("content-generator success case", async (t) => {
         }),
       });
 
-      const response = await contentGeneratorService(req);
+      const response = await contentGeneratorService(req, {} as any); // Pass mock client
       const data = await response.json();
 
       assertEquals(response.status, 200);
@@ -79,7 +79,7 @@ Deno.test("content-generator failure case", async (t) => {
           }),
         });
 
-        const response = await contentGeneratorService(req);
+        const response = await contentGeneratorService(req, {} as any); // Pass mock client
         const data = await response.json();
 
         assertEquals(response.status, 500);

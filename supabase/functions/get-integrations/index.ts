@@ -1,7 +1,12 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
 
-const handler = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
+// Define CORS headers locally
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+export const handler = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
