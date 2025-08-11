@@ -1,5 +1,12 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { serve } from "https://deno.land/std@0.140.0/http/server.ts";
+
+// --- CORS Headers ---
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+};
 
 // --- Type Definitions ---
 interface WPRequest {
@@ -191,7 +198,7 @@ export const wordpressService = async (req: Request, supabase: SupabaseClient): 
 };
 
 // --- Server ---
-Deno.serve(async (req) => {
+serve(async (req) => {
     const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
