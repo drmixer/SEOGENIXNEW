@@ -4,6 +4,8 @@ import { reportGenerationService } from "./index.ts";
 
 // --- Test Configuration & Mocks ---
 
+Deno.env.set("GEMINI_API_KEY", "mock-key");
+
 let shouldGeminiFail = false;
 
 const mockAiAnalysis = {

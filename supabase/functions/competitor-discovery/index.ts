@@ -23,13 +23,13 @@ interface Competitor {
 }
 
 // --- Database Logging Helpers ---
-async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
+async function logToolRun({ supabase, projectId, toolName, inputPayload }: { supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object }) {
   const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
   if (error) { console.error('Error logging tool run:', error); return null; }
   return data.id;
 }
 
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
+async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null }) {
   const update = {
     status,
     completed_at: new Date().toISOString(),
@@ -79,7 +79,7 @@ const getRelevancePrompt = (competitors: any[], payload: CompetitorDiscoveryPayl
     `;
 };
 
-const competitorDiscoveryService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
+export const competitorDiscoveryService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
     let runId;
     try {
         const payload: CompetitorDiscoveryPayload = await req.json();
@@ -124,8 +124,19 @@ const competitorDiscoveryService = async (req: Request, supabase: SupabaseClient
 
         if (!geminiResponse.ok) throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
         const geminiData = await geminiResponse.json();
-        const relevanceAnalysis = JSON.parse(geminiData.candidates[0].content.parts[0].text);
-        const relevanceMap = new Map(relevanceAnalysis.competitors.map(c => [c.url, c]));
+
+        interface RelevanceInfo {
+            url: string;
+            relevanceScore: number;
+            explanation: string;
+        }
+
+        interface RelevanceAnalysis {
+            competitors: RelevanceInfo[];
+        }
+
+        const relevanceAnalysis: RelevanceAnalysis = JSON.parse(geminiData.candidates[0].content.parts[0].text);
+        const relevanceMap = new Map(relevanceAnalysis.competitors.map((c) => [c.url, c]));
 
         const competitors: Competitor[] = [];
         for (const competitor of potentialCompetitors) {
@@ -154,7 +165,9 @@ const competitorDiscoveryService = async (req: Request, supabase: SupabaseClient
                     });
                 }
             } catch (e) {
-                console.error(`Failed to process competitor URL ${competitor.link}:`, e.message);
+                if (e instanceof Error) {
+                    console.error(`Failed to process competitor URL ${competitor.link}:`, e.message);
+                }
             }
         }
 
@@ -170,7 +183,7 @@ const competitorDiscoveryService = async (req: Request, supabase: SupabaseClient
         });
 
     } catch (err) {
-        const errorMessage = err.message;
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
         if(runId) {
             await updateToolRun({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
         }

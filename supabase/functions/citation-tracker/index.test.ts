@@ -1,7 +1,26 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { citationTrackerService } from "./index.ts";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // --- Test Configuration & Mocks ---
+
+Deno.env.set("GEMINI_API_KEY", "mock-key");
+Deno.env.set("REDDIT_CLIENT_ID", "mock-key");
+Deno.env.set("REDDIT_CLIENT_SECRET", "mock-key");
+Deno.env.set("REDDIT_USER_AGENT", "mock-key");
+
+const mockSupabaseClient = {
+    from: () => ({
+      insert: () => ({
+        select: () => ({
+          single: () => ({ data: { id: '123' }, error: null })
+        })
+      }),
+      update: () => ({
+        eq: () => ({ data: null, error: null })
+      })
+    })
+} as unknown as SupabaseClient;
 
 let shouldRedditAuthFail = false;
 let shouldRedditSearchFail = false;
@@ -61,10 +80,10 @@ Deno.test("citation-tracker success case", async (t) => {
       const req = new Request("http://localhost/citation-tracker", {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: "example.com", keywords: ["example"] }),
+        body: JSON.stringify({ projectId: "test-project-id", domain: "example.com", keywords: ["example"] }),
       });
 
-      const response = await citationTrackerService(req);
+      const response = await citationTrackerService(req, mockSupabaseClient);
       const data = await response.json();
 
       assertEquals(response.status, 200);
@@ -88,10 +107,10 @@ Deno.test("citation-tracker failure case (Reddit Auth)", async (t) => {
         const req = new Request("http://localhost/citation-tracker", {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domain: "example.com", keywords: ["example"] }),
+          body: JSON.stringify({ projectId: "test-project-id", domain: "example.com", keywords: ["example"] }),
         });
 
-        const response = await citationTrackerService(req);
+        const response = await citationTrackerService(req, mockSupabaseClient);
         const data = await response.json();
 
         assertEquals(response.status, 500);

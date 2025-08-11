@@ -1,7 +1,23 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { analysisService } from "./index.ts";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // --- Test Configuration & Mocks ---
+
+Deno.env.set("GEMINI_API_KEY", "mock-key");
+
+const mockSupabaseClient = {
+    from: () => ({
+      insert: () => ({
+        select: () => ({
+          single: () => ({ data: { id: '123' }, error: null })
+        })
+      }),
+      update: () => ({
+        eq: () => ({ data: null, error: null })
+      })
+    })
+} as unknown as SupabaseClient;
 
 let shouldGeminiFail = false;
 
@@ -46,12 +62,13 @@ Deno.test("real-time-analysis success case", async (t) => {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          projectId: "test-project-id",
           content: "This is a long piece of content for testing purposes.",
           keywords: ["testing"],
         }),
       });
 
-      const response = await analysisService(req);
+      const response = await analysisService(req, mockSupabaseClient);
       const data = await response.json();
 
       assertEquals(response.status, 200);
@@ -76,12 +93,13 @@ Deno.test("real-time-analysis failure case", async (t) => {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            projectId: "test-project-id",
             content: "This is a long piece of content for testing purposes.",
             keywords: ["testing"],
           }),
         });
 
-        const response = await analysisService(req);
+        const response = await analysisService(req, mockSupabaseClient);
         const data = await response.json();
 
         assertEquals(response.status, 500);

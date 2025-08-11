@@ -1,7 +1,27 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { competitorDiscoveryService } from "./index.ts";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // --- Test Configuration & Mocks ---
+
+Deno.env.set("GEMINI_API_KEY", "mock-key");
+Deno.env.set("GOOGLE_SEARCH_API_KEY", "mock-key");
+Deno.env.set("GOOGLE_SEARCH_ENGINE_ID", "mock-key");
+Deno.env.set("MOZ_ACCESS_ID", "mock-key");
+Deno.env.set("MOZ_SECRET_KEY", "mock-key");
+
+const mockSupabaseClient = {
+    from: () => ({
+      insert: () => ({
+        select: () => ({
+          single: () => ({ data: { id: '123' }, error: null })
+        })
+      }),
+      update: () => ({
+        eq: () => ({ data: null, error: null })
+      })
+    })
+} as unknown as SupabaseClient;
 
 let shouldGoogleFail = false;
 let shouldMozFail = false;
@@ -17,6 +37,13 @@ const mockMozResponse = {
     domain_authority: 88,
 };
 
+const mockRelevanceAnalysis = {
+    competitors: [
+        { url: "https://competitor-a.com", relevanceScore: 90, explanation: "Direct competitor" },
+        { url: "https://competitor-b.com", relevanceScore: 80, explanation: "Indirect competitor" }
+    ]
+};
+
 const mockFetch = (async (
   url: string | URL,
   _options?: RequestInit,
@@ -25,7 +52,7 @@ const mockFetch = (async (
 
   if (urlString.includes("googleapis.com/customsearch")) {
     if (shouldGoogleFail) {
-      return new Response(JSON.stringify({ error: "Mock Google API Error" }), { status: 500 });
+      return new Response(JSON.stringify({ error: "Mock Google API Error" }), { status: 500, statusText: "Internal Server Error" });
     }
     return new Response(JSON.stringify(mockGoogleResponse));
   }
@@ -35,6 +62,13 @@ const mockFetch = (async (
       return new Response(JSON.stringify({ error: "Mock Moz API Error" }), { status: 500 });
     }
     return new Response(JSON.stringify(mockMozResponse));
+  }
+
+  if (urlString.includes("generativelanguage.googleapis.com")) {
+    const mockGeminiResponse = {
+      candidates: [{ content: { parts: [{ text: JSON.stringify(mockRelevanceAnalysis) }] } }],
+    };
+    return new Response(JSON.stringify(mockGeminiResponse));
   }
 
   return new Response(JSON.stringify({ error: "Unhandled mock fetch call" }), { status: 501 });
@@ -55,11 +89,12 @@ Deno.test("competitor-discovery success case", async (t) => {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          projectId: "test-project-id",
           industry: "SaaS",
         }),
       });
 
-      const response = await competitorDiscoveryService(req);
+      const response = await competitorDiscoveryService(req, mockSupabaseClient);
       const data = await response.json();
 
       assertEquals(response.status, 200);
@@ -86,16 +121,17 @@ Deno.test("competitor-discovery Google API failure", async (t) => {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            projectId: "test-project-id",
             industry: "SaaS",
           }),
         });
 
-        const response = await competitorDiscoveryService(req);
+        const response = await competitorDiscoveryService(req, mockSupabaseClient);
         const data = await response.json();
 
         assertEquals(response.status, 500);
         assertEquals(data.success, false);
-        assert(data.error.message.includes("Google Search API request failed"));
+        assert(data.error.message.includes("Google Search API failed"));
 
       } finally {
         globalThis.fetch = originalFetch;

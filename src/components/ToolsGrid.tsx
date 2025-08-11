@@ -792,8 +792,9 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           <div className="mb-6">
             <button
               onClick={() => handleRunTool(activeToolId)}
-              disabled={loading || 
-                (!selectedWebsite && activeToolId !== 'generator') || 
+              disabled={loading ||
+                (!selectedProjectId && activeToolId !== 'voice') ||
+                (!selectedWebsite && activeToolId !== 'generator') ||
                 (activeToolId === 'generator' && (!generatorTopic || !generatorKeywords)) ||
                 (activeToolId === 'prompts' && !promptTopic)}
               className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
