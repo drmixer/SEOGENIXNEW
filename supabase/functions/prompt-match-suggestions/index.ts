@@ -22,18 +22,7 @@ interface PromptSuggestion {
     intent: string;
 }
 
-// --- Database Logging Helpers ---
-async function logOperationStart({ supabase, projectId, operationName, inputPayload }: { supabase: SupabaseClient, projectId: string, operationName: string, inputPayload: any }) {
-  const { data, error } = await supabase.from('operation_logs').insert({ project_id: projectId, operation_name: operationName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging operation start:', error); return null; }
-  return data.id;
-}
-
-async function updateOperationLog({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string, status: string, outputPayload: any, errorMessage: string | null }) {
-  const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
-  const { error } = await supabase.from('operation_logs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating operation log:', error); }
-}
+import { logToolRun, updateToolRun } from '../_shared/dbLogger.ts';
 
 // --- AI Prompt Engineering ---
 const getSuggestionPrompt = (request: SuggestionRequest): string => {
@@ -71,7 +60,7 @@ export const suggestionService = async (req: Request, supabase: SupabaseClient):
             throw new Error('`topic` is a required field.');
         }
 
-        runId = await logOperationStart({ supabase, projectId, operationName: 'prompt-match-suggestions', inputPayload });
+        runId = await logToolRun(supabase, projectId, 'prompt-match-suggestions', inputPayload);
 
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
         if (!geminiApiKey) throw new Error('Gemini API key not configured');
@@ -92,7 +81,7 @@ export const suggestionService = async (req: Request, supabase: SupabaseClient):
         const suggestionsJson = JSON.parse(geminiData.candidates[0].content.parts[0].text);
 
         if (runId) {
-            await updateOperationLog({ supabase, runId, status: 'completed', outputPayload: suggestionsJson, errorMessage: null });
+            await updateToolRun(supabase, runId, 'completed', suggestionsJson);
         }
 
         return new Response(JSON.stringify({ success: true, data: suggestionsJson }), {
@@ -102,7 +91,7 @@ export const suggestionService = async (req: Request, supabase: SupabaseClient):
     } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
         if (runId) {
-            await updateOperationLog({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
+            await updateToolRun(supabase, runId, 'error', null, errorMessage);
         }
         return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
             status: 500,

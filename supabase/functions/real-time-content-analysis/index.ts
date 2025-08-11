@@ -31,22 +31,7 @@ interface AnalysisResponse {
     suggestions: Suggestion[];
 }
 
-// --- Database Logging Helpers ---
-async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
-  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging tool run:', error); return null; }
-  return data.id;
-}
-
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output: errorMessage ? { error: errorMessage } : outputPayload || null
-  };
-  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating tool run:', error); }
-}
+import { logToolRun, updateToolRun } from '../_shared/dbLogger.ts';
 
 // --- AI Prompt Engineering ---
 const getAnalysisPrompt = (content: string, keywords: string[]): string => {
@@ -104,7 +89,7 @@ export const analysisService = async (req: Request, supabase: SupabaseClient): P
     try {
         const { content, keywords, projectId }: AnalysisRequest = await req.json();
 
-        runId = await logToolRun({ supabase, projectId, toolName: 'real-time-content-analysis', inputPayload: { keywords } });
+        runId = await logToolRun(supabase, projectId, 'real-time-content-analysis', { keywords });
 
         if (typeof content !== 'string') {
             throw new Error('`content` must be a string.');
@@ -147,7 +132,7 @@ export const analysisService = async (req: Request, supabase: SupabaseClient): P
         const geminiData = await geminiResponse.json();
         const analysisJson: AnalysisResponse = JSON.parse(geminiData.candidates[0].content.parts[0].text);
 
-        await updateToolRun({ supabase, runId, status: 'completed', outputPayload: analysisJson, errorMessage: null });
+        await updateToolRun(supabase, runId, 'completed', analysisJson);
 
         return new Response(JSON.stringify({ success: true, data: analysisJson }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -156,7 +141,7 @@ export const analysisService = async (req: Request, supabase: SupabaseClient): P
     } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
         if (runId) {
-            await updateToolRun({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
+            await updateToolRun(supabase, runId, 'error', null, errorMessage);
         }
         const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
         return new Response(JSON.stringify({ success: false, error: { message: errorMessage, code: errorCode } }), {
