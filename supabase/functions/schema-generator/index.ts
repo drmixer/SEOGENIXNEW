@@ -8,20 +8,47 @@ const corsHeaders = {
 };
 
 // Helper functions for logging
-async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
-  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging tool run:', error); return null; }
+async function logToolRun(supabase, projectId, toolName, inputPayload) {
+  if (!projectId) {
+    throw new Error("logToolRun error: projectId is required.");
+  }
+  const { data, error } = await supabase
+    .from("tool_runs")
+    .insert({
+      project_id: projectId,
+      tool_name: toolName,
+      input_payload: inputPayload,
+      status: "running",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("Error logging tool run:", error);
+    throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
+  }
+  if (!data || !data.id) {
+    console.error("No data or data.id returned from tool_runs insert.");
+    throw new Error("Failed to log tool run: No data returned after insert.");
+  }
   return data.id;
 }
 
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
+async function updateToolRun(supabase, runId, status, outputPayload, errorMessage) {
+  if (!runId) {
+    console.error("updateToolRun error: runId is required.");
+    return;
+  }
   const update = {
     status,
     completed_at: new Date().toISOString(),
-    output: errorMessage ? { error: errorMessage } : outputPayload || null
+    output_payload: errorMessage ? { error: errorMessage } : outputPayload || null,
+    error_message: errorMessage || null,
   };
-  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating tool run:', error); }
+  const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
+  if (error) {
+    console.error(`Error updating tool run ID ${runId}:`, error);
+  }
 }
 
 function generateFallbackSchema(contentType, url) {
@@ -34,12 +61,12 @@ const schemaGeneratorService = async (req: Request, supabase: SupabaseClient): P
     try {
         const { projectId, url, contentType, content } = await req.json();
 
-        runId = await logToolRun({
+        runId = await logToolRun(
             supabase,
-            projectId: projectId,
-            toolName: 'schema-generator',
-            inputPayload: { url, contentType, contentLength: content?.length }
-        });
+            projectId,
+            'schema-generator',
+            { url, contentType, contentLength: content?.length }
+        );
 
         let pageContent = content;
         if (url && !content) {
@@ -83,12 +110,12 @@ Return ONLY the JSON object.` }] }],
             const formattedSchema = JSON.stringify(parsedSchema, null, 2);
             const output = { schema: formattedSchema, implementation: `<script type="application/ld+json">${formattedSchema}</script>` };
 
-            await updateToolRun({
+            await updateToolRun(
                 supabase,
                 runId,
-                status: 'completed',
-                outputPayload: output
-            });
+                'completed',
+                output
+            );
 
             return new Response(JSON.stringify({ runId, output }), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -102,7 +129,7 @@ Return ONLY the JSON object.` }] }],
         console.error(err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         if (runId) {
-            await updateToolRun({ supabase, runId, status: 'error', errorMessage: errorMessage });
+            await updateToolRun(supabase, runId, 'error', null, errorMessage);
         }
         return new Response(JSON.stringify({ error: errorMessage }), {
             status: 500,
