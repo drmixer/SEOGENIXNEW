@@ -957,8 +957,22 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
               
               {activeToolId === 'discovery' && (
                 <div className="space-y-4">
-                  <p className="text-gray-700">Found {toolData.totalSuggestions || 0} potential competitors for {selectedWebsite}</p>
+                  <p className="text-gray-700">Found {toolData.competitorSuggestions?.length || 0} potential competitors for {selectedWebsite}</p>
                   
+                  {toolData.competitorSuggestions && toolData.competitorSuggestions.length > 0 && (
+                    <div className="mt-4 text-right">
+                      <button
+                        onClick={() => {
+                          setShowCompetitiveAnalysisModal(true);
+                        }}
+                        className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 flex items-center space-x-2"
+                      >
+                        <BarChart3 className="w-4 h-4" />
+                        <span>Analyze these Competitors</span>
+                      </button>
+                    </div>
+                  )}
+
                   <div className="space-y-3">
                     {toolData.competitorSuggestions?.map((comp: any, i: number) => (
                       <div key={i} className="bg-white p-4 rounded-lg shadow-sm">
@@ -968,12 +982,12 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                             <a href={comp.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">{comp.url}</a>
                           </div>
                           <div className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">
-                            {comp.type.replace('_', ' ')}
+                            Relevance: {comp.relevanceScore}%
                           </div>
                         </div>
-                        <p className="text-sm text-gray-600 mt-2">{comp.reason}</p>
+                        <p className="text-sm text-gray-600 mt-2">{comp.explanation}</p>
                         <div className="mt-2">
-                          <div className="text-xs text-gray-500">Relevance Score: {comp.relevanceScore}/100</div>
+                          <div className="text-xs text-gray-500">Domain Authority: {comp.domainAuthority || 'N/A'}</div>
                         </div>
                       </div>
                     )) || (
@@ -1382,11 +1396,12 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       {showCompetitiveAnalysisModal && (
         <CompetitiveAnalysisModal
           userWebsites={userProfile?.websites || []}
-          userCompetitors={userProfile?.competitors || []}
+          userCompetitors={toolData?.competitorSuggestions || userProfile?.competitors || []}
           onClose={() => setShowCompetitiveAnalysisModal(false)}
           onAnalysisComplete={(results) => {
             setToolData(results);
             setActiveToolId('competitive');
+            setShowCompetitiveAnalysisModal(false);
           }}
         />
       )}
