@@ -1,6 +1,5 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "https://deno.land/std@0.224.0/crypto/hmac.ts";
-import { serve } from "https://deno.land/std@0.140.0/http/server.ts";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -178,7 +177,7 @@ const competitorDiscoveryService = async (req: Request, supabase: SupabaseClient
     }
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
