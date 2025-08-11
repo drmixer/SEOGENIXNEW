@@ -30,7 +30,11 @@ async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
 }
 
 async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
-  const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
+  const update = {
+    status,
+    completed_at: new Date().toISOString(),
+    output: errorMessage ? { error: errorMessage } : outputPayload || null
+  };
   const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
   if (error) { console.error('Error updating tool run:', error); }
 }

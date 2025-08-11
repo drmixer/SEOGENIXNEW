@@ -47,8 +47,7 @@ async function updateToolRun({ supabase, runId, status, outputPayload, errorMess
   const update = {
     status,
     completed_at: new Date().toISOString(),
-    output_payload: outputPayload,
-    error_message: errorMessage,
+    output: errorMessage ? { error: errorMessage } : outputPayload || null,
   };
   const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
   if (error) {
