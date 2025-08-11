@@ -484,12 +484,13 @@ export const apiService = {
     status?: 'draft' | 'publish';
     categories?: string[];
     tags?: string[];
+    autoGenerateSchema?: boolean;
   }) {
     return await apiCall(`${API_BASE_URL}/wordpress-integration`, {
       method: 'POST',
-      body: JSON.stringify({ 
-        action: 'publish', 
-        content 
+      body: JSON.stringify({
+        action: 'publish',
+        ...content
       })
     });
   },
@@ -505,22 +506,25 @@ export const apiService = {
     });
   },
 
-  async publishToShopify(product: {
-    title: string;
-    body_html: string;
-    vendor?: string;
-    product_type?: string;
-    tags?: string;
-    variants?: Array<{
-      price: string;
-      inventory_quantity?: number;
-    }>;
+  async publishToShopify(payload: {
+    product: {
+      title: string;
+      body_html: string;
+      vendor?: string;
+      product_type?: string;
+      tags?: string;
+      variants?: Array<{
+        price: string;
+        inventory_quantity?: number;
+      }>;
+    };
+    autoGenerateSchema?: boolean;
   }) {
     return await apiCall(`${API_BASE_URL}/shopify-integration`, {
       method: 'POST',
-      body: JSON.stringify({ 
-        action: 'publish', 
-        product 
+      body: JSON.stringify({
+        action: 'publish',
+        ...payload
       })
     });
   },
@@ -539,6 +543,53 @@ export const apiService = {
       method: 'POST',
       body: JSON.stringify({ action: 'disconnect' })
     });
+  },
+
+  async getCMSContentList(cmsType: 'wordpress' | 'shopify', options: { page?: number, search?: string }) {
+    const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
+    const action = cmsType === 'wordpress' ? 'get_posts' : 'get_products';
+    const result = await apiCall(`${API_BASE_URL}/${endpoint}`, {
+        method: 'POST',
+        body: JSON.stringify({
+            action,
+            ...options
+        })
+    });
+    // The backend functions return the list directly in the data property
+    // To keep consistency with how the picker expects data.items
+    return result.data;
+  },
+
+  async getCMSContentItem(cmsType: 'wordpress' | 'shopify', itemId: number | string) {
+      const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
+      const idKey = cmsType === 'wordpress' ? 'postId' : 'productId';
+      const result = await apiCall(`${API_BASE_URL}/${endpoint}`, {
+          method: 'POST',
+          body: JSON.stringify({
+              action: 'get_content',
+              [idKey]: itemId
+          })
+      });
+      return result.data;
+  },
+
+  async updateCMSContentItem(cmsType: 'wordpress' | 'shopify', itemId: number | string, content: { title?: string, content: string }) {
+      const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
+      const idKey = cmsType === 'wordpress' ? 'postId' : 'productId';
+
+      // Shopify requires the content to be in a specific format
+      const bodyPayload = cmsType === 'shopify'
+        ? { product: { id: itemId, body_html: content.content } }
+        : { title: content.title, content: content.content };
+
+      return await apiCall(`${API_BASE_URL}/${endpoint}`, {
+          method: 'POST', // Wordpress uses POST for updates, Shopify uses PUT but our function abstracts it
+          body: JSON.stringify({
+              action: 'update_content',
+              [idKey]: itemId,
+              content: bodyPayload
+          })
+      });
   },
   
   // Clear pending requests cache
@@ -563,6 +614,13 @@ export const apiService = {
     const result = await apiCall(`${API_BASE_URL}/adaptive-playbook-generator`, {
       method: 'POST',
       body: JSON.stringify({ userId, goal, focusArea })
+    });
+    return result.data;
+  },
+
+  async getConnectedIntegrations(): Promise<Array<{ id: string; cms_type: 'wordpress' | 'shopify'; cms_name: string; site_url: string }>> {
+    const result = await apiCall(`${API_BASE_URL}/get-integrations`, {
+      method: 'GET',
     });
     return result.data;
   }
