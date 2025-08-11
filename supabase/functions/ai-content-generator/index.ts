@@ -4,7 +4,49 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
-import { logToolRun, updateToolRun } from '../_shared/dbLogger.ts';
+// --- Database Logging Helpers ---
+async function logToolRun(supabase, projectId, toolName, inputPayload) {
+  if (!projectId) {
+    throw new Error("logToolRun error: projectId is required.");
+  }
+  const { data, error } = await supabase
+    .from("tool_runs")
+    .insert({
+      project_id: projectId,
+      tool_name: toolName,
+      input_payload: inputPayload,
+      status: "running",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("Error logging tool run:", error);
+    throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
+  }
+  if (!data || !data.id) {
+    console.error("No data or data.id returned from tool_runs insert.");
+    throw new Error("Failed to log tool run: No data returned after insert.");
+  }
+  return data.id;
+}
+
+async function updateToolRun(supabase, runId, status, outputPayload, errorMessage) {
+  if (!runId) {
+    console.error("updateToolRun error: runId is required.");
+    return;
+  }
+  const update = {
+    status,
+    completed_at: new Date().toISOString(),
+    output_payload: errorMessage ? { error: errorMessage } : outputPayload || null,
+    error_message: errorMessage || null,
+  };
+  const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
+  if (error) {
+    console.error(`Error updating tool run ID ${runId}:`, error);
+  }
+}
 // --- AI Prompt Engineering ---
 const getContentGenerationPrompt = (request)=>{
   const { contentType, topic, targetKeywords, tone, entitiesToInclude } = request;
@@ -84,7 +126,7 @@ export const contentGeneratorService = async (req, supabase)=>{
     const geminiData = await geminiResponse.json();
     const generatedJson = JSON.parse(geminiData.candidates[0].content.parts[0].text);
     if (runId) {
-      await updateToolRun(supabase, runId, 'completed', generatedJson);
+      await updateToolRun(supabase, runId, 'completed', generatedJson, null);
     }
     return new Response(JSON.stringify({
       success: true,
