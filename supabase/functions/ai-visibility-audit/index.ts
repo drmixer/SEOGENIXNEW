@@ -34,7 +34,7 @@ const getStep3Prompt = (content: string) => `...`;
 
 async function callGemini(prompt: string, apiKey: string) {
     // ... (callGemini logic is correct)
-    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
+    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
