@@ -97,9 +97,15 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
   // Handle context passing when switching tools
   useEffect(() => {
-    if (activeToolId === 'generator' && context?.entitiesToInclude) {
-      setGeneratorTopic(context.topic || 'New content based on entity analysis');
-      setGeneratorKeywords(context.entitiesToInclude.join(', '));
+    if (activeToolId === 'generator') {
+      if (context?.entitiesToInclude) {
+        setGeneratorTopic(context.topic || 'New content based on entity analysis');
+        setGeneratorKeywords(context.entitiesToInclude.join(', '));
+      } else if (context?.citation) {
+        setGeneratorTopic(context.topic || `Responding to: "${context.citation.snippet}"`);
+        setGeneratorKeywords(context.targetKeywords || '');
+        setGeneratorContentType('faq'); // Default to FAQ for citation responses
+      }
     }
   }, [activeToolId, context]);
 
@@ -250,6 +256,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       entitiesToInclude: selectedEntities,
       topic: `Content about ${extractDomain(selectedWebsite || '')} that includes key entities`,
       targetKeywords: selectedEntities,
+    });
+  };
+
+  const handleCreateContentFromCitation = (citation: any) => {
+    onSwitchTool('generator', {
+      citation,
+      topic: `Responding to a mention on ${citation.source}`,
+      targetKeywords: citation.snippet.split(' ').slice(0, 5).join(', '), // Use first 5 words as keywords
     });
   };
 
@@ -1192,6 +1206,15 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                           <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
                             <span>Confidence: {citation.confidence_score || 0}%</span>
                             <span>{new Date(citation.date).toLocaleDateString()}</span>
+                          </div>
+                          <div className="mt-3 pt-3 border-t border-gray-200 text-right">
+                            <button
+                              onClick={() => handleCreateContentFromCitation(citation)}
+                              className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-3 py-1 rounded-md text-sm font-medium hover:shadow-lg transition-all duration-300 flex items-center space-x-2"
+                            >
+                              <Zap className="w-4 h-4" />
+                              <span>Create Content</span>
+                            </button>
                           </div>
                         </div>
                       ))}
