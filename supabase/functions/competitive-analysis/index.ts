@@ -65,7 +65,7 @@ const competitiveAnalysisService = async (req: Request, supabase: SupabaseClient
                     if (response.ok) content = await response.text();
                 } catch (error) { console.error(`Failed to fetch ${url}:`, error); }
 
-                const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+                const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

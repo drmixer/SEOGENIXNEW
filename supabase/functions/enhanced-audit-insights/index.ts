@@ -35,7 +35,7 @@ const enhancedAuditInsightsService = async (req: Request, supabase: SupabaseClie
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
         if (!geminiApiKey) throw new Error('Gemini API key not configured');
 
-        const sentenceAnalysisResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+        const sentenceAnalysisResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -53,7 +53,7 @@ SUGGESTIONS: [suggestion1] | [suggestion2]` }] }],
             })
         });
 
-        const scoreExplanationResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+        const scoreExplanationResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
