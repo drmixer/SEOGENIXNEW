@@ -4,74 +4,52 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
 // --- Type Definitions ---
 interface PlaybookRequest {
     userId: string;
-    goal: string;
-    focusArea: 'overall' | 'ai_understanding' | 'citation_likelihood' | 'conversational_readiness' | 'content_structure';
+    goal: 'increase-traffic' | 'improve-rankings' | 'boost-engagement';
+    focusArea: 'on-page-seo' | 'content-quality' | 'technical-seo' | 'citations';
+    projectId: string;
 }
 
-interface PlaybookStep {
-    id: string;
-    title: string;
-    description: string;
-    rationale: string; // The new AI-generated reason for this step
-    toolId: string;
+// --- Database Helpers ---
+async function getUserData(supabase: SupabaseClient, userId: string) {
+    const { data: profile } = await supabase.from('user_profiles').select('business_description, website_url, target_audience').eq('user_id', userId).single();
+    const { data: auditHistory } = await supabase.from('audit_history').select('score, created_at, recommendations').eq('user_id', userId).order('created_at', { ascending: false }).limit(5);
+    const { data: activity } = await supabase.from('user_activity').select('activity_type, activity_data, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10);
+    return { profile, auditHistory, activity };
 }
 
-interface AIParsedPlaybook {
-    playbookTitle: string;
-    playbookDescription: string;
-    steps: PlaybookStep[];
+async function logToolRun({ supabase, projectId, toolName, inputPayload }: { supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: any }) {
+    const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
+    if (error) { console.error('Error logging tool run:', error); return null; }
+    return data.id;
+}
+
+async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string, status: string, outputPayload: any, errorMessage: string | null }) {
+    const update = { status, completed_at: new Date().toISOString(), output_payload: outputPayload || null, error_message: errorMessage || null };
+    const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
+    if (error) { console.error('Error updating tool run:', error); }
 }
 
 // --- AI Prompt Engineering ---
 const getPlaybookPrompt = (request: PlaybookRequest, userData: any): string => {
     const { goal, focusArea } = request;
-    const { profile, auditHistory, userActivity } = userData;
-
-    const jsonSchema = `
-    {
-      "playbookTitle": "string (A compelling, personalized title for the playbook)",
-      "playbookDescription": "string (A 1-2 sentence summary of what this playbook will help the user achieve)",
-      "steps": [
-        {
-          "id": "string (A unique ID for the step, e.g., 'step_1_audit')",
-          "title": "string (A short, action-oriented title for the step)",
-          "description": "string (A brief description of what the user will do in this step)",
-          "rationale": "string (A personalized explanation for WHY this step is important for this specific user, referencing their data)",
-          "toolId": "string (The ID of the SEOGENIX tool to use for this step, e.g., 'audit', 'optimizer', 'entities')"
-        }
-      ]
-    }
-    `;
-
+    const jsonSchema = `{ "playbookTitle": "string", "executiveSummary": "string", "steps": [{ "stepNumber": "number", "title": "string", "description": "string", "rationale": "string", "action_type": "string" }] }`;
     return `
-    You are an Expert SEO Strategist and AI Coach for the SEOGENIX platform. Your task is to create a personalized, step-by-step optimization playbook for a user based on their goals and performance data.
-
-    **User & Performance Data:**
-    - **User's Primary Goal:** ${goal}
-    - **Chosen Focus Area:** ${focusArea}
-    - **User Profile & Settings:** ${JSON.stringify(profile, null, 2)}
-    - **Recent Audit History (last 5):** ${JSON.stringify(auditHistory, null, 2)}
-    - **Recent User Activity (last 50 actions):** ${JSON.stringify(userActivity, null, 2)}
-
-    **Your Instructions:**
-    1.  Analyze all the provided data to understand the user's current situation, weaknesses, and goals.
-    2.  Generate a concise, prioritized, and actionable playbook with 3-5 steps.
-    3.  **For each step, you MUST provide a personalized 'rationale'.** This is the most important part. The rationale should explain to the user *why* this step is being recommended *for them*, referencing their specific data. For example: "Your 'Citation Likelihood' score is 58, which is why we're starting with content generation to create more citable assets." or "Since you haven't used the 'entities' tool yet, running it first will provide crucial data for content optimization."
-    4.  The recommended toolId for each step must be one of the valid SEOGENIX tools.
-
-    **Output Format:**
-    You MUST provide a response in a single, valid JSON object. Do not include any text or formatting outside of the JSON object. The JSON object must strictly adhere to the following schema:
+    You are an Expert SEO Strategist and AI Coach...
+    **User Goal:** ${goal}
+    **User Focus Area:** ${focusArea}
+    **User Data:**
+    ${JSON.stringify(userData, null, 2)}
+    ...
+    You MUST provide a response in a single, valid JSON object...
     \`\`\`json
     ${jsonSchema}
     \`\`\`
-
-    Now, create the expert, data-driven playbook for this user.
+    Now, create the personalized playbook.
     `;
 };
 
@@ -81,53 +59,37 @@ export const playbookGeneratorService = async (req: Request, supabase: SupabaseC
         return new Response('ok', { headers: corsHeaders });
     }
 
+    let runId: string | null = null;
     try {
-        const { userId, goal, focusArea }: PlaybookRequest = await req.json();
+        const requestBody: PlaybookRequest = await req.json();
+        const { projectId, userId, goal, focusArea } = requestBody;
 
-        if (!userId || !goal || !focusArea) {
-            throw new Error('`userId`, `goal`, and `focusArea` are required.');
-        }
+        runId = await logToolRun({ supabase, projectId, toolName: 'adaptive-playbook-generator', inputPayload: { userId, goal, focusArea } });
 
-        // 1. Fetch all necessary user data in parallel
-        const [profileRes, auditHistoryRes, userActivityRes] = await Promise.all([
-            supabase.from('user_profiles').select('*').eq('user_id', userId).single(),
-            supabase.from('audit_history').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(5),
-            supabase.from('user_activity').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50)
-        ]);
+        const userData = await getUserData(supabase, userId);
+        if (!userData.profile) throw new Error("User profile not found.");
 
-        if (profileRes.error) throw new Error(`Failed to fetch user profile: ${profileRes.error.message}`);
-
-        const userData = {
-            profile: profileRes.data,
-            auditHistory: auditHistoryRes.data || [],
-            userActivity: userActivityRes.data || []
-        };
-
-        // 2. Get AI-generated playbook
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
         if (!geminiApiKey) throw new Error('Gemini API key not configured');
 
-        const prompt = getPlaybookPrompt({ userId, goal, focusArea }, userData);
-
+        const prompt = getPlaybookPrompt(requestBody, userData);
         const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                    response_mime_type: "application/json",
-                    temperature: 0.5,
-                    maxOutputTokens: 4096,
-                }
+                generationConfig: { response_mime_type: "application/json", temperature: 0.5, maxOutputTokens: 4096 }
             })
         });
 
-        if (!geminiResponse.ok) {
-            throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
-        }
+        if (!geminiResponse.ok) throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
 
         const geminiData = await geminiResponse.json();
-        const playbookJson: AIParsedPlaybook = JSON.parse(geminiData.candidates[0].content.parts[0].text);
+        const playbookJson = JSON.parse(geminiData.candidates[0].content.parts[0].text);
+
+        if (runId) {
+            await updateToolRun({ supabase, runId, status: 'completed', outputPayload: playbookJson, errorMessage: null });
+        }
 
         return new Response(JSON.stringify({ success: true, data: playbookJson }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -135,8 +97,10 @@ export const playbookGeneratorService = async (req: Request, supabase: SupabaseC
 
     } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
-        return new Response(JSON.stringify({ success: false, error: { message: errorMessage, code: errorCode } }), {
+        if (runId) {
+            await updateToolRun({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
+        }
+        return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
