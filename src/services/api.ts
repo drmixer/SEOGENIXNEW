@@ -93,8 +93,8 @@ export interface VoiceTestResult {
 
 export const apiService = {
   // AI Visibility Audit
-  async runAudit(url: string, content?: string): Promise<AuditResult> {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/ai-visibility-audit`, { url, content });
+  async runAudit(projectId: string, url: string, content?: string): Promise<AuditResult> {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/ai-visibility-audit`, { projectId, url, content });
     
     if (pendingApiRequests.has(cacheKey)) {
       console.log('Audit request already in progress, returning existing promise');
@@ -103,7 +103,7 @@ export const apiService = {
     
     const auditPromise = apiCall(`${API_BASE_URL}/ai-visibility-audit`, {
       method: 'POST',
-      body: JSON.stringify({ url, content })
+      body: JSON.stringify({ projectId, url, content })
     });
     
     pendingApiRequests.set(cacheKey, auditPromise);
@@ -139,8 +139,8 @@ export const apiService = {
   },
 
   // Schema Generator
-  async generateSchema(url: string, contentType: string, content?: string) {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/schema-generator`, { url, contentType, content });
+  async generateSchema(projectId: string, url: string, contentType: string, content?: string) {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/schema-generator`, { projectId, url, contentType, content });
     
     if (pendingApiRequests.has(cacheKey)) {
       console.log('Schema generator request already in progress, returning existing promise');
@@ -149,7 +149,7 @@ export const apiService = {
     
     const schemaPromise = apiCall(`${API_BASE_URL}/schema-generator`, {
       method: 'POST',
-      body: JSON.stringify({ url, contentType, content })
+      body: JSON.stringify({ projectId, url, contentType, content })
     });
     
     pendingApiRequests.set(cacheKey, schemaPromise);
@@ -162,8 +162,8 @@ export const apiService = {
   },
 
   // Citation Tracker
-  async trackCitations(domain: string, keywords: string[], fingerprintPhrases?: string[]) {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/citation-tracker`, { domain, keywords, fingerprintPhrases });
+  async trackCitations(projectId: string, domain: string, keywords: string[], fingerprintPhrases?: string[]) {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/citation-tracker`, { projectId, domain, keywords, fingerprintPhrases });
     
     if (pendingApiRequests.has(cacheKey)) {
       console.log('Citation tracker request already in progress, returning existing promise');
@@ -172,7 +172,7 @@ export const apiService = {
     
     const citationsPromise = apiCall(`${API_BASE_URL}/citation-tracker`, {
       method: 'POST',
-      body: JSON.stringify({ domain, keywords, fingerprintPhrases })
+      body: JSON.stringify({ projectId, domain, keywords, fingerprintPhrases })
     });
     
     pendingApiRequests.set(cacheKey, citationsPromise);
@@ -272,8 +272,8 @@ export const apiService = {
   },
 
   // Entity Coverage Analyzer
-  async analyzeEntityCoverage(url: string, content?: string, industry?: string, competitors?: string[]) {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/entity-coverage-analyzer`, { url, content, industry, competitors });
+  async analyzeEntityCoverage(projectId: string, url: string, content?: string, industry?: string, competitors?: string[]) {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/entity-coverage-analyzer`, { projectId, url, content, industry, competitors });
     
     if (pendingApiRequests.has(cacheKey)) {
       console.log('Entity coverage analysis request already in progress, returning existing promise');
@@ -282,7 +282,7 @@ export const apiService = {
     
     const entityPromise = apiCall(`${API_BASE_URL}/entity-coverage-analyzer`, {
       method: 'POST',
-      body: JSON.stringify({ url, content, industry, competitors })
+      body: JSON.stringify({ projectId, url, content, industry, competitors })
     });
     
     pendingApiRequests.set(cacheKey, entityPromise);
@@ -296,6 +296,7 @@ export const apiService = {
 
   // AI Content Generator
   async generateAIContent(
+    projectId: string,
     contentType: 'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions',
     topic: string,
     targetKeywords: string[],
@@ -305,7 +306,7 @@ export const apiService = {
     contentLength?: 'short' | 'medium' | 'long'
   ) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/ai-content-generator`, { 
-      contentType, topic, targetKeywords, tone, industry, targetAudience, contentLength 
+      projectId, contentType, topic, targetKeywords, tone, industry, targetAudience, contentLength
     });
     
     if (pendingApiRequests.has(cacheKey)) {
@@ -316,6 +317,7 @@ export const apiService = {
     const contentPromise = apiCall(`${API_BASE_URL}/ai-content-generator`, {
       method: 'POST',
       body: JSON.stringify({ 
+        projectId,
         contentType, 
         topic, 
         targetKeywords, 
@@ -337,6 +339,7 @@ export const apiService = {
 
   // Prompt Match Suggestions
   async generatePromptSuggestions(
+    projectId: string,
     topic: string,
     industry?: string,
     targetAudience?: string,
@@ -344,7 +347,7 @@ export const apiService = {
     userIntent?: 'informational' | 'transactional' | 'navigational' | 'commercial'
   ) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/prompt-match-suggestions`, { 
-      topic, industry, targetAudience, contentType, userIntent 
+      projectId, topic, industry, targetAudience, contentType, userIntent
     });
     
     if (pendingApiRequests.has(cacheKey)) {
@@ -354,7 +357,7 @@ export const apiService = {
     
     const promptsPromise = apiCall(`${API_BASE_URL}/prompt-match-suggestions`, {
       method: 'POST',
-      body: JSON.stringify({ topic, industry, targetAudience, contentType, userIntent })
+      body: JSON.stringify({ projectId, topic, industry, targetAudience, contentType, userIntent })
     });
     
     pendingApiRequests.set(cacheKey, promptsPromise);
@@ -368,13 +371,14 @@ export const apiService = {
 
   // Competitive Analysis
   async performCompetitiveAnalysis(
+    projectId: string,
     primaryUrl: string,
     competitorUrls: string[],
     industry?: string,
     analysisType?: 'basic' | 'detailed' | 'comprehensive'
   ) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/competitive-analysis`, { 
-      primaryUrl, competitorUrls, industry, analysisType 
+      projectId, primaryUrl, competitorUrls, industry, analysisType
     });
     
     if (pendingApiRequests.has(cacheKey)) {
@@ -384,7 +388,7 @@ export const apiService = {
     
     const analysisPromise = apiCall(`${API_BASE_URL}/competitive-analysis`, {
       method: 'POST',
-      body: JSON.stringify({ primaryUrl, competitorUrls, industry, analysisType })
+      body: JSON.stringify({ projectId, primaryUrl, competitorUrls, industry, analysisType })
     });
     
     pendingApiRequests.set(cacheKey, analysisPromise);
@@ -398,6 +402,7 @@ export const apiService = {
 
   // Competitor Discovery
   async discoverCompetitors(
+    projectId: string,
     url: string,
     industry?: string,
     businessDescription?: string,
@@ -405,7 +410,7 @@ export const apiService = {
     analysisDepth?: 'basic' | 'comprehensive'
   ) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/competitor-discovery`, { 
-      url, industry, businessDescription, existingCompetitors, analysisDepth 
+      projectId, url, industry, businessDescription, existingCompetitors, analysisDepth
     });
     
     if (pendingApiRequests.has(cacheKey)) {
@@ -415,7 +420,7 @@ export const apiService = {
     
     const discoveryPromise = apiCall(`${API_BASE_URL}/competitor-discovery`, {
       method: 'POST',
-      body: JSON.stringify({ url, industry, businessDescription, existingCompetitors, analysisDepth })
+      body: JSON.stringify({ projectId, url, industry, businessDescription, existingCompetitors, analysisDepth })
     });
     
     pendingApiRequests.set(cacheKey, discoveryPromise);
@@ -428,8 +433,8 @@ export const apiService = {
   },
 
   // Real-time Content Analysis
-  async analyzeContentRealTime(content: string, keywords: string[]) {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/real-time-content-analysis`, { content, keywords });
+  async analyzeContentRealTime(projectId: string, content: string, keywords: string[]) {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/real-time-content-analysis`, { projectId, content, keywords });
     
     if (pendingApiRequests.has(cacheKey)) {
       console.log('Real-time analysis request already in progress, returning existing promise');
@@ -438,7 +443,7 @@ export const apiService = {
     
     const analysisPromise = apiCall(`${API_BASE_URL}/real-time-content-analysis`, {
       method: 'POST',
-      body: JSON.stringify({ content, keywords })
+      body: JSON.stringify({ projectId, content, keywords })
     });
     
     pendingApiRequests.set(cacheKey, analysisPromise);
