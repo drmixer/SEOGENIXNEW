@@ -5,23 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+import { logToolRun, updateToolRun } from '../_shared/dbLogger.ts';
+
 // --- Type Definitions & Helpers ---
-
-async function logToolRun({ supabase, projectId, toolName, inputPayload }: { supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: any }) {
-    const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-    if (error) { console.error('Error logging tool run:', error); return null; }
-    return data.id;
-}
-
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string, status: string, outputPayload: any, errorMessage: string | null }) {
-    const update: { status: string; completed_at: string; output: any; } = {
-        status,
-        completed_at: new Date().toISOString(),
-        output: errorMessage ? { error: errorMessage } : outputPayload || null
-    };
-    const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-    if (error) { console.error('Error updating tool run:', error); }
-}
 
 async function updateToolRunProgress(supabase: SupabaseClient, runId: string, progress: Record<string, unknown>) {
   const { error } = await supabase.from('tool_runs').update({ progress }).eq('id', runId);
@@ -69,12 +55,12 @@ export const auditService = async (req: Request, supabase: SupabaseClient): Prom
   try {
     const { projectId, url, content } = await req.json();
 
-    runId = await logToolRun({
+    runId = await logToolRun(
       supabase,
       projectId,
-      toolName: 'ai-visibility-audit',
-      inputPayload: { url, content: content ? 'Content provided' : 'No content provided' }
-    });
+      'ai-visibility-audit',
+      { url, content: content ? 'Content provided' : 'No content provided' }
+    );
     if (!runId) throw new Error("Failed to create a run log.");
 
     let pageContent = content;
@@ -126,13 +112,7 @@ export const auditService = async (req: Request, supabase: SupabaseClient): Prom
     const scores = Object.values(finalResult.subscores);
     finalResult.overallScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
 
-    await updateToolRun({
-        supabase,
-        runId,
-        status: 'completed',
-        outputPayload: finalResult,
-        errorMessage: null,
-    });
+    await updateToolRun(supabase, runId, 'completed', finalResult);
 
     return new Response(JSON.stringify({ success: true, data: { runId, ...finalResult } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -141,7 +121,7 @@ export const auditService = async (req: Request, supabase: SupabaseClient): Prom
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
     if (runId) {
-      await updateToolRun({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
+      await updateToolRun(supabase, runId, 'error', null, errorMessage);
     }
     return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
       status: 500,

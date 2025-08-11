@@ -7,10 +7,6 @@ const corsHeaders = {
 };
 
 export const handler = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
-    }
-
     try {
         const authHeader = req.headers.get('Authorization');
         if (!authHeader) throw new Error('Authorization header required');
@@ -41,6 +37,9 @@ export const handler = async (req: Request, supabase: SupabaseClient): Promise<R
 
 
 Deno.serve(async (req) => {
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders });
+    }
     const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
