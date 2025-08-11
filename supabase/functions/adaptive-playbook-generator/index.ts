@@ -28,11 +28,13 @@ async function logToolRun({ supabase, projectId, toolName, inputPayload }: { sup
     return data.id;
 }
 
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string, status: string, outputPayload: any, errorMessage: string | null }) {
-    const update: { status: string; completed_at: string; output: any; } = {
+async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string | null, status: string, outputPayload: any, errorMessage: string | null }) {
+    if (!runId) return;
+    const update = {
         status,
         completed_at: new Date().toISOString(),
-        output: errorMessage ? { error: errorMessage } : outputPayload || null
+        output_payload: errorMessage ? { error: errorMessage } : outputPayload,
+        error_message: errorMessage,
     };
     const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
     if (error) { console.error('Error updating tool run:', error); }

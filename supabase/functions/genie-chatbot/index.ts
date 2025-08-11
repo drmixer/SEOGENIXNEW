@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Hono } from 'npm:hono'
+import { Hono, Context } from 'npm:hono'
 
 // --- CORS Headers ---
 const corsHeaders = {
@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 // --- Hono Environment Typing ---
-type Env = {
+export type Env = {
     Variables: {
         supabase: SupabaseClient;
     };
@@ -86,7 +86,12 @@ const getChatPrompt = (message: string, context: string, userPlan: string, conve
 // --- Hono App & Main Logic ---
 export const app = new Hono<Env>();
 
-app.post('/', async (c) => {
+// Handle CORS preflight requests
+app.options('*', () => {
+    return new Response(null, { status: 204, headers: corsHeaders });
+});
+
+export const genieChatbotPostHandler = async (c: Context<Env>) => {
     const supabase = c.get('supabase');
 
     try {
@@ -146,8 +151,10 @@ app.post('/', async (c) => {
         const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
         return c.json({ success: false, error: { message: errorMessage, code: errorCode } }, 500, corsHeaders);
     }
-});
+};
 
+
+app.post('/', genieChatbotPostHandler);
 
 // --- Server ---
 if (import.meta.main) {

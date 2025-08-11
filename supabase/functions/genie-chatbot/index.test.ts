@@ -1,8 +1,11 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { app } from "./index.ts";
+import { Hono } from "npm:hono";
+import { genieChatbotPostHandler, Env } from "./index.ts";
 
 // --- Test Configuration & Mocks ---
+
+Deno.env.set("GEMINI_API_KEY", "mock-key");
 
 let shouldGeminiFail = false;
 
@@ -45,20 +48,20 @@ const createMockSupabaseClient = () => {
     } as unknown as SupabaseClient;
 };
 
-// --- Hono Middleware Setup (runs once before all tests) ---
-const mockSupabase = createMockSupabaseClient();
-app.use('*', async (c, next) => {
-  c.set('supabase', mockSupabase)
-  await next()
-});
-
-
 // --- Test Suite ---
 
 Deno.test("genie-chatbot success case", async (t) => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = mockFetch;
   shouldGeminiFail = false;
+
+  const testApp = new Hono<Env>();
+  const mockSupabase = createMockSupabaseClient();
+  testApp.use('*', async (c, next) => {
+    c.set('supabase', mockSupabase);
+    await next();
+  });
+  testApp.post('/', genieChatbotPostHandler);
 
   await t.step("it returns a successful structured response", async () => {
     try {
@@ -75,7 +78,7 @@ Deno.test("genie-chatbot success case", async (t) => {
         }),
       });
 
-      const response = await app.request(req);
+      const response = await testApp.request(req);
       const data = await response.json();
 
       assertEquals(response.status, 200);
@@ -94,6 +97,14 @@ Deno.test("genie-chatbot failure case", async (t) => {
     globalThis.fetch = mockFetch;
     shouldGeminiFail = true;
 
+    const testApp = new Hono<Env>();
+    const mockSupabase = createMockSupabaseClient();
+    testApp.use('*', async (c, next) => {
+        c.set('supabase', mockSupabase);
+        await next();
+    });
+    testApp.post('/', genieChatbotPostHandler);
+
     await t.step("it returns a standard error response", async () => {
       try {
         const req = new Request("http://localhost/", {
@@ -109,7 +120,7 @@ Deno.test("genie-chatbot failure case", async (t) => {
           }),
         });
 
-        const response = await app.request(req);
+        const response = await testApp.request(req);
         const data = await response.json();
 
         assertEquals(response.status, 500);

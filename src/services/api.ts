@@ -249,8 +249,8 @@ export const apiService = {
   },
 
   // LLM Site Summaries
-  async generateLLMSummary(url: string, summaryType: 'overview' | 'technical' | 'business' | 'audience', content?: string) {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/llm-site-summaries`, { url, summaryType, content });
+  async generateLLMSummary(projectId: string, url: string, summaryType: 'overview' | 'technical' | 'business' | 'audience', content?: string) {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/llm-site-summaries`, { projectId, url, summaryType, content });
     
     if (pendingApiRequests.has(cacheKey)) {
       console.log('LLM summary request already in progress, returning existing promise');
@@ -259,7 +259,7 @@ export const apiService = {
     
     const summaryPromise = apiCall(`${API_BASE_URL}/llm-site-summaries`, {
       method: 'POST',
-      body: JSON.stringify({ url, summaryType, content })
+      body: JSON.stringify({ projectId, url, summaryType, content })
     });
     
     pendingApiRequests.set(cacheKey, summaryPromise);

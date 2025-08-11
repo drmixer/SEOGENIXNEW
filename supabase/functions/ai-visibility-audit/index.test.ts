@@ -1,29 +1,47 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { auditService } from "./index.ts";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // --- Test Configuration ---
+
+Deno.env.set("GEMINI_API_KEY", "mock-key");
+
+const mockSupabaseClient = {
+    from: () => ({
+      insert: () => ({
+        select: () => ({
+          single: () => ({ data: { id: '123' }, error: null })
+        })
+      }),
+      update: () => ({
+        eq: () => ({ data: null, error: null })
+      })
+    })
+  } as unknown as SupabaseClient;
 
 // Global flag to control the behavior of the Gemini API mock
 let shouldGeminiFail = false;
 
 // Mock the successful Gemini API response payload
 const mockSuccessPayload = {
-  overallScore: 85,
-  subscores: {
     aiUnderstanding: 90,
+    contentStructure: 82,
     citationLikelihood: 80,
     conversationalReadiness: 88,
-    contentStructure: 82
-  },
-  recommendations: [],
-  issues: []
-};
+    onPageRecommendations: [],
+    structureRecommendations: [],
+    readinessRecommendations: [],
+    onPageIssues: [],
+    structureIssues: [],
+    readinessIssues: [],
+    overallScore: 85
+  };
 
 // --- Mock Fetch Implementation ---
 
 const mockFetch = (async (
   url: string | URL,
-  options?: RequestInit,
+  _options?: RequestInit,
 ): Promise<Response> => {
   const urlString = url.toString();
 
@@ -44,19 +62,6 @@ const mockFetch = (async (
       candidates: [{ content: { parts: [{ text: JSON.stringify(mockSuccessPayload) }] } }],
     };
     return new Response(JSON.stringify(mockGeminiResponse));
-  }
-
-  // Mock for Supabase tool_runs logging
-  if (urlString.includes("localhost:54321/rest/v1/tool_runs")) {
-    if (options?.method === 'POST') {
-        // Return a single object, not an array, to satisfy .single()
-        return new Response(JSON.stringify({ id: "mock-run-id-audit" }), {
-            headers: { "Content-Type": "application/json" },
-            status: 201
-        });
-    }
-    // For UPDATE/PATCH calls
-    return new Response(null, { status: 204 });
   }
 
   // Fallback for any unhandled fetch calls
@@ -82,15 +87,13 @@ Deno.test("ai-visibility-audit success case", async (t) => {
         }),
       });
 
-      const response = await auditService(req);
+      const response = await auditService(req, mockSupabaseClient);
       const data = await response.json();
 
       assertEquals(response.status, 200);
       assertEquals(data.success, true);
       assertEquals(data.data.overallScore, mockSuccessPayload.overallScore);
-      // In the current test environment, the Supabase client's fetch is not being mocked,
-      // so logToolRun fails gracefully and returns null. This assertion verifies that behavior.
-      assertEquals(data.data.runId, null);
+      assertEquals(data.data.runId, '123');
 
     } finally {
       globalThis.fetch = originalFetch;
@@ -115,7 +118,7 @@ Deno.test("ai-visibility-audit error case (Gemini API failure)", async (t) => {
               }),
             });
 
-            const response = await auditService(req);
+            const response = await auditService(req, mockSupabaseClient);
             const data = await response.json();
 
             assertEquals(response.status, 500);

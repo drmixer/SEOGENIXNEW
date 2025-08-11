@@ -1,11 +1,11 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 // --- CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 // --- Database Logging Helpers ---
-async function logToolRun(supabase, projectId, toolName, inputPayload) {
+async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
   if (!projectId) {
     throw new Error("logToolRun error: projectId is required.");
   }
@@ -31,7 +31,7 @@ async function logToolRun(supabase, projectId, toolName, inputPayload) {
   return data.id;
 }
 
-async function updateToolRun(supabase, runId, status, outputPayload, errorMessage) {
+async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null) {
   if (!runId) {
     console.error("updateToolRun error: runId is required.");
     return;
@@ -47,8 +47,17 @@ async function updateToolRun(supabase, runId, status, outputPayload, errorMessag
     console.error(`Error updating tool run ID ${runId}:`, error);
   }
 }
+
+interface ContentGenerationRequest {
+    contentType: 'faq' | 'meta-tags' | 'snippets' | 'headings' | 'article-section';
+    topic: string;
+    targetKeywords: string[];
+    tone?: string;
+    entitiesToInclude?: string[];
+}
+
 // --- AI Prompt Engineering ---
-const getContentGenerationPrompt = (request)=>{
+const getContentGenerationPrompt = (request: ContentGenerationRequest)=>{
   const { contentType, topic, targetKeywords, tone, entitiesToInclude } = request;
   const baseInstructions = {
     'faq': 'Generate a comprehensive FAQ section. Create questions that people commonly ask and provide clear, concise answers.',
@@ -79,7 +88,7 @@ const getContentGenerationPrompt = (request)=>{
     `;
 };
 // --- Main Service Handler ---
-export const contentGeneratorService = async (req, supabase)=>{
+export const contentGeneratorService = async (req: Request, supabase: SupabaseClient)=>{
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
       headers: corsHeaders
@@ -158,6 +167,6 @@ export const contentGeneratorService = async (req, supabase)=>{
 };
 // --- Server ---
 Deno.serve(async (req)=>{
-  const supabase = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   return await contentGeneratorService(req, supabase);
 });

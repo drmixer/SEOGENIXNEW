@@ -1,7 +1,23 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { entityAnalyzerService } from "./index.ts";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // --- Test Configuration & Mocks ---
+
+Deno.env.set("GEMINI_API_KEY", "mock-key");
+
+const mockSupabaseClient = {
+    from: () => ({
+      insert: () => ({
+        select: () => ({
+          single: () => ({ data: { id: '123' }, error: null })
+        })
+      }),
+      update: () => ({
+        eq: () => ({ data: null, error: null })
+      })
+    })
+} as unknown as SupabaseClient;
 
 let shouldGeminiFail = false;
 
@@ -43,11 +59,12 @@ Deno.test("entity-analyzer success case", async (t) => {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          projectId: "test-project-id",
           content: "This content talks about Playwright.",
         }),
       });
 
-      const response = await entityAnalyzerService(req);
+      const response = await entityAnalyzerService(req, mockSupabaseClient);
       const data = await response.json();
 
       assertEquals(response.status, 200);
@@ -73,11 +90,12 @@ Deno.test("entity-analyzer failure case", async (t) => {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            projectId: "test-project-id",
             content: "This content talks about Playwright.",
           }),
         });
 
-        const response = await entityAnalyzerService(req);
+        const response = await entityAnalyzerService(req, mockSupabaseClient);
         const data = await response.json();
 
         assertEquals(response.status, 500);

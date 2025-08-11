@@ -4,6 +4,8 @@ import { playbookGeneratorService } from "./index.ts";
 
 // --- Test Configuration & Mocks ---
 
+Deno.env.set("GEMINI_API_KEY", "mock-key");
+
 let shouldGeminiFail = false;
 
 const mockAiResponse = {
@@ -30,16 +32,30 @@ const mockFetch = (async (
 
 const createMockSupabaseClient = () => {
     return {
-        from: (_table: string) => ({
-            select: () => ({
-                eq: () => ({
-                    single: () => Promise.resolve({ data: { id: 'mock-profile-id', goals: ['increase_citations'] }, error: null }),
-                    order: () => ({
-                        limit: () => Promise.resolve({ data: [{ overall_score: 65 }], error: null }),
+        from: (table: string) => {
+            if (table === 'tool_runs') {
+                return {
+                    insert: () => ({
+                        select: () => ({
+                            single: () => Promise.resolve({ data: { id: '123' }, error: null })
+                        })
+                    }),
+                    update: () => ({
+                        eq: () => Promise.resolve({ data: null, error: null })
+                    })
+                }
+            }
+            return {
+                select: () => ({
+                    eq: () => ({
+                        single: () => Promise.resolve({ data: { id: 'mock-profile-id', goals: ['increase_citations'] }, error: null }),
+                        order: () => ({
+                            limit: () => Promise.resolve({ data: [{ overall_score: 65 }], error: null }),
+                        }),
                     }),
                 }),
-            }),
-        }),
+            }
+        },
     } as unknown as SupabaseClient;
 };
 
@@ -58,6 +74,7 @@ Deno.test("playbook-generator success case", async (t) => {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          projectId: "test-project-id",
           userId: "test-user-id",
           goal: "Increase citations",
           focusArea: "citation_likelihood"
@@ -91,6 +108,7 @@ Deno.test("playbook-generator failure case", async (t) => {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            projectId: "test-project-id",
             userId: "test-user-id",
             goal: "Increase citations",
             focusArea: "citation_likelihood"

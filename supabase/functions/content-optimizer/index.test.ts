@@ -1,7 +1,23 @@
 import { assertEquals, assert } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { optimizerService } from "./index.ts";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // --- Test Configuration ---
+
+Deno.env.set("GEMINI_API_KEY", "mock-key");
+
+const mockSupabaseClient = {
+    from: () => ({
+      insert: () => ({
+        select: () => ({
+          single: () => ({ data: { id: '123' }, error: null })
+        })
+      }),
+      update: () => ({
+        eq: () => ({ data: null, error: null })
+      })
+    })
+} as unknown as SupabaseClient;
 
 let shouldGeminiFail = false;
 
@@ -30,16 +46,6 @@ const mockFetch = (async (
     return new Response(JSON.stringify(mockGeminiResponse));
   }
 
-  if (urlString.includes("localhost:54321/rest/v1/tool_runs")) {
-    if (options?.method === 'POST') {
-      return new Response(JSON.stringify({ id: "mock-run-id-optimizer" }), {
-        headers: { "Content-Type": "application/json" },
-        status: 201,
-      });
-    }
-    return new Response(null, { status: 204 });
-  }
-
   return new Response(JSON.stringify({ error: "Unhandled mock fetch call" }), { status: 501 });
 }) as typeof fetch;
 
@@ -64,13 +70,13 @@ Deno.test("content-optimizer success case", async (t) => {
         }),
       });
 
-      const response = await optimizerService(req);
+      const response = await optimizerService(req, mockSupabaseClient);
       const data = await response.json();
 
       assertEquals(response.status, 200);
       assertEquals(data.success, true);
       assertEquals(data.data.optimizedScore, mockSuccessPayload.optimizedScore);
-      assertEquals(data.data.runId, null); // Verifies graceful failure of logging in test env
+      assertEquals(data.data.runId, '123');
 
     } finally {
       globalThis.fetch = originalFetch;
@@ -96,7 +102,7 @@ Deno.test("content-optimizer error case (Gemini API failure)", async (t) => {
         }),
       });
 
-      const response = await optimizerService(req);
+      const response = await optimizerService(req, mockSupabaseClient);
       const data = await response.json();
 
       assertEquals(response.status, 500);

@@ -35,7 +35,7 @@ interface RedditPost {
 }
 
 // --- Database Logging Helpers ---
-async function logToolRun(supabase, projectId, toolName, inputPayload) {
+async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
   if (!projectId) {
     throw new Error("logToolRun error: projectId is required.");
   }
@@ -61,7 +61,7 @@ async function logToolRun(supabase, projectId, toolName, inputPayload) {
   return data.id;
 }
 
-async function updateToolRun(supabase, runId, status, outputPayload, errorMessage) {
+async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null) {
   if (!runId) {
     console.error("updateToolRun error: runId is required.");
     return;
