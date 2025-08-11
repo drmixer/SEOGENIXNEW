@@ -1,4 +1,6 @@
 import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import puppeteer from "https://deno.land/x/puppeteer@16.2.0/mod.ts";
+import chromium from "npm:@sparticuz/chromium@106.0.2";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -36,7 +38,16 @@ const pdfGeneratorService = async (req: Request, supabase: SupabaseClient): Prom
       htmlContent = new TextDecoder().decode(fileData);
     }
 
-    const pdfOptions = {
+    const browser = await puppeteer.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(),
+        headless: true,
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
       format: options.format || 'A4',
       landscape: options.landscape || false,
       margin: options.margin || { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' },
@@ -44,10 +55,21 @@ const pdfGeneratorService = async (req: Request, supabase: SupabaseClient): Prom
       displayHeaderFooter: !!(options.headerTemplate || options.footerTemplate),
       headerTemplate: options.headerTemplate || '',
       footerTemplate: options.footerTemplate || ''
-    };
+    });
+
+    await browser.close();
 
     const pdfStoragePath = `reports/${report.user_id}/${reportId}.pdf`;
-    const { data: urlData } = await supabase.storage.from('reports').getPublicUrl(pdfStoragePath);
+    const { error: uploadError } = await supabase.storage.from('reports').upload(pdfStoragePath, pdfBuffer, {
+        contentType: 'application/pdf',
+        upsert: true,
+    });
+
+    if (uploadError) {
+        throw new Error(`Failed to upload PDF: ${uploadError.message}`);
+    }
+
+    const { data: urlData } = supabase.storage.from('reports').getPublicUrl(pdfStoragePath);
     const downloadUrl = urlData.publicUrl;
 
     await supabase.from('reports').update({
@@ -61,11 +83,9 @@ const pdfGeneratorService = async (req: Request, supabase: SupabaseClient): Prom
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'PDF generation simulated successfully',
+      message: 'PDF generated successfully',
       downloadUrl,
-      reportId,
-      options: pdfOptions,
-      note: 'In a real implementation, this would generate a PDF using Puppeteer and upload it to Supabase Storage'
+      reportId
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
