@@ -390,12 +390,22 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 
   // Auto-select first website if none is selected
   useEffect(() => {
-    if (userProfile && userProfile.websites && userProfile.websites.length > 0 && !selectedWebsite) {
-      setSelectedWebsite(userProfile.websites[0].url);
-      setSelectedProjectId(userProfile.websites[0].id);
+    if (userProfile?.websites?.length > 0 && !selectedWebsite) {
+      const firstWebsite = userProfile.websites[0];
+      if (firstWebsite?.url && firstWebsite?.id) {
+        setSelectedWebsite(firstWebsite.url);
+        setSelectedProjectId(firstWebsite.id);
+      }
     }
-    if (userProfile && userProfile.competitors && userProfile.competitors.length > 0 && !selectedCompetitor) {
-      setSelectedCompetitor(userProfile.competitors[0].url);
+  }, [userProfile, selectedWebsite]);
+
+  // Auto-select first competitor
+  useEffect(() => {
+    if (userProfile?.competitors?.length > 0 && !selectedCompetitor) {
+      const firstCompetitor = userProfile.competitors[0];
+      if (firstCompetitor?.url) {
+        setSelectedCompetitor(firstCompetitor.url);
+      }
     }
   }, [userProfile, selectedCompetitor]);
 
