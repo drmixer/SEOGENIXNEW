@@ -397,7 +397,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     if (userProfile && userProfile.competitors && userProfile.competitors.length > 0 && !selectedCompetitor) {
       setSelectedCompetitor(userProfile.competitors[0].url);
     }
-  }, [userProfile, selectedWebsite, selectedCompetitor]);
+  }, [userProfile, selectedCompetitor]);
 
   // Generate insights when profile loads - only once
   useEffect(() => {
