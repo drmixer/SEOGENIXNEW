@@ -1,6 +1,0 @@
-{
-  "imports": {
-    "shared/": "../_shared/"
-  },
-  "nodeModulesDir": "auto"
-}
