@@ -1,6 +1,50 @@
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { serviceHandler, createSuccessResponse, createErrorResponse } from "../_shared/service-handler.ts";
-// --- Type Definitions & Helpers ---
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// --- Injected Shared Code ---
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+};
+
+function createErrorResponse(message: string, status: number = 500) {
+  return new Response(JSON.stringify({ success: false, error: { message } }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function createSuccessResponse(data: object, status: number = 200) {
+  return new Response(JSON.stringify({ success: true, data }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+type ToolLogic = (req: Request, supabase: SupabaseClient) => Promise<Response>;
+
+async function serviceHandler(req: Request, toolLogic: ToolLogic): Promise<Response> {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    return await toolLogic(req, supabase);
+
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
+    console.error(`[ServiceHandler Error] ${errorMessage}`, err);
+    return createErrorResponse(errorMessage);
+  }
+}
+
+// --- Original File Content ---
 
 async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
   if (!projectId) {
@@ -51,8 +95,6 @@ async function updateToolRunProgress(supabase: SupabaseClient, runId: string, pr
     console.error('Error updating tool run progress:', error);
   }
 }
-
-// --- Multi-Step Prompt Definitions ---
 
 const getStep1Prompt = (content: string) => `Analyze the following webpage content to determine its clarity and comprehensibility for an AI model. Focus on on-page elements.
 
@@ -177,8 +219,6 @@ async function callGemini(prompt: string, apiKey: string) {
     return JSON.parse(geminiData.candidates[0].content.parts[0].text);
 }
 
-
-// --- Main Service ---
 const auditToolLogic = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
   let runId: string | null = null;
   try {
@@ -203,21 +243,10 @@ const auditToolLogic = async (req: Request, supabase: SupabaseClient): Promise<R
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     if (!geminiApiKey) throw new Error('Gemini API key not configured');
 
-    // --- Execute Step 1 ---
-    await updateToolRunProgress(supabase, runId, { step: 'Analyzing On-Page Content', progress: 10 });
     const step1Result = await callGemini(getStep1Prompt(pageContent), geminiApiKey);
-
-    // --- Execute Step 2 ---
-    await updateToolRunProgress(supabase, runId, { step: 'Analyzing Content Structure', progress: 40 });
     const step2Result = await callGemini(getStep2Prompt(pageContent), geminiApiKey);
-
-    // --- Execute Step 3 ---
-    await updateToolRunProgress(supabase, runId, { step: 'Assessing Conversational Readiness', progress: 70 });
     const step3Result = await callGemini(getStep3Prompt(pageContent), geminiApiKey);
 
-    await updateToolRunProgress(supabase, runId, { step: 'Compiling Final Report', progress: 95 });
-
-    // --- Combine Results ---
     const finalResult = {
         subscores: {
             aiUnderstanding: step1Result.aiUnderstanding || 0,
