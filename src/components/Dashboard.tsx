@@ -693,10 +693,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   competitors={userProfile.competitors || []}
                   selectedWebsite={selectedWebsite}
                   onWebsiteChange={(url) => {
-                    const selected = userProfile.websites.find((w: any) => w.url === url);
                     setSelectedWebsite(url);
-                    if (selected) {
+                    const selected = userProfile.websites.find((w: any) => w.url === url);
+                    // FIX: Ensure project ID is set if found, otherwise clear it
+                    // to prevent using a stale ID with a new website URL.
+                    if (selected && selected.id) {
                       setSelectedProjectId(selected.id);
+                    } else {
+                      setSelectedProjectId('');
                     }
                   }}
                   userPlan={userPlan}
@@ -801,6 +805,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   selectedProjectId={selectedProjectId}
                   userProfile={userProfile}
                   onToolComplete={handleToolComplete}
+                  onSwitchTool={handleSwitchTool}
+                  context={toolContext}
                 />
               </>
             ) : (
@@ -835,8 +841,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   onToolRun={() => setHasRunTools(true)} 
                   showPreview={true}
                   selectedWebsite={selectedWebsite}
+                  selectedProjectId={selectedProjectId}
                   userProfile={userProfile}
                   onToolComplete={handleToolComplete}
+                  onSwitchTool={handleSwitchTool}
+                  context={toolContext}
                 />
               </div>
             )}
