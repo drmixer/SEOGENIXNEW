@@ -120,7 +120,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   // Generate actionable insights based on user data
   const generateActionableInsights = useCallback(async () => {
     // Guard: only run if userProfile is fully loaded and onboarding status is defined
-    if (!user || !user.id || !userProfile || typeof userProfile.onboarded !== 'boolean') return;
+    if (!user || !user.id || !userProfile || !userProfile.onboarding_completed_at) return;
     
     // Prevent duplicate insight generation
     if (insightsGeneratedRef.current) return;
@@ -134,11 +134,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       const recentActivity = await userDataService.getRecentActivity(user.id, 10);
 
       // 1. No websites configured
-      // Only fire if userProfile.websites is an empty array AND onboarding is complete
       if (
         Array.isArray(userProfile.websites) &&
         userProfile.websites.length === 0 &&
-        userProfile.onboarded === true
+        userProfile.onboarding_completed_at
       ) {
         insights.push({
           id: 'no-websites',
@@ -388,16 +387,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     };
   }, []);
 
-  // Auto-select first website if none is selected
+  // FINAL FIX: This hook now correctly sets the initial website and project ID
+  // as soon as the userProfile prop is available.
   useEffect(() => {
-    if (userProfile?.websites?.length > 0 && !selectedWebsite) {
+    if (userProfile && Array.isArray(userProfile.websites) && userProfile.websites.length > 0) {
       const firstWebsite = userProfile.websites[0];
-      if (firstWebsite?.url && firstWebsite?.id) {
-        setSelectedWebsite(firstWebsite.url);
-        setSelectedProjectId(firstWebsite.id);
+      // Check if a site is already selected to prevent unnecessary re-renders
+      if (firstWebsite && firstWebsite.url && firstWebsite.id && !selectedWebsite) {
+          setSelectedWebsite(firstWebsite.url);
+          setSelectedProjectId(firstWebsite.id);
       }
     }
-  }, [userProfile, selectedWebsite]);
+  }, [userProfile, selectedWebsite]); // Depend on selectedWebsite to avoid re-running if already set
 
   // Auto-select first competitor
   useEffect(() => {
@@ -695,8 +696,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                   onWebsiteChange={(url) => {
                     setSelectedWebsite(url);
                     const selected = userProfile.websites.find((w: any) => w.url === url);
-                    // FIX: Ensure project ID is set if found, otherwise clear it
-                    // to prevent using a stale ID with a new website URL.
                     if (selected && selected.id) {
                       setSelectedProjectId(selected.id);
                     } else {
@@ -986,7 +985,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           user={user}
           userProfile={userProfile}
           onProfileUpdate={(profile) => {
-            setUserProfile(profile);
+            // setUserProfile(profile); // This should be handled by the parent component (App.tsx)
             
             // Update user goals if they've changed
             if (profile.goals && Array.isArray(profile.goals)) {
@@ -1074,4 +1073,5 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 };
 
 export default Dashboard;
+
 
