@@ -53,25 +53,37 @@ function AppContent() {
     if (currentUser) {
       console.log('User found, fetching profile...');
       try {
-        // FIX: Fetch the user's profile AND their associated websites in one query.
-        const { data: profile, error } = await Promise.race([
-          supabase
-            .from('user_profiles')
-            .select('*, websites(*)') // This now includes the websites
-            .eq('user_id', currentUser.id)
-            .single(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
-        ]);
+        // Step 1: Fetch the user profile.
+        const { data: profile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', currentUser.id)
+          .single();
 
-        if (error) {
-          console.error('Error fetching profile:', error);
+        if (profileError) {
+          throw profileError;
         }
 
-        console.log('Profile fetched (with websites):', profile);
-
         if (profile) {
-          setUserProfile(profile);
-          console.log('Profile exists, checking onboarding status...');
+          // Step 2: Fetch the user's websites from the corrected 'projects' table.
+          const { data: websites, error: websitesError } = await supabase
+            .from('projects')
+            .select('id, name, url')
+            .eq('user_id', currentUser.id);
+
+          if (websitesError) {
+            throw websitesError;
+          }
+          
+          // Step 3: Combine the profile and the websites into a single object for the dashboard.
+          const completeProfile = {
+            ...profile,
+            websites: websites || [] // Use the real websites, not the old jsonb field.
+          };
+          
+          setUserProfile(completeProfile);
+          console.log('Profile and websites fetched:', completeProfile);
+
           setUserPlan(profile.plan || 'free');
           if (!profile.onboarding_completed_at) {
             console.log('Onboarding not complete, showing onboarding modal.');
@@ -86,7 +98,8 @@ function AppContent() {
           setShowOnboarding(true);
         }
       } catch (e) {
-        console.error('Exception fetching profile:', e);
+        console.error('Exception fetching profile and websites:', e);
+        // Fallback to onboarding if anything fails
         setShowOnboarding(true);
       }
     } else {
@@ -96,8 +109,6 @@ function AppContent() {
       setCurrentView('landing');
       navigate('/');
     }
-
-    console.log('Setting loading to false.');
     setLoading(false);
   };
 
