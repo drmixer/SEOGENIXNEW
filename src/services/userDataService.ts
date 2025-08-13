@@ -95,15 +95,24 @@ export interface FingerprintPhrase {
   created_at: string;
 }
 
+// Enhanced cache for user profiles to reduce database calls
 const profileCache = new Map<string, {profile: UserProfile, timestamp: number}>();
 const auditHistoryCache = new Map<string, {data: AuditHistoryEntry[], timestamp: number}>();
 const activityCache = new Map<string, {data: UserActivity[], timestamp: number}>();
 const reportsCache = new Map<string, {data: Report[], timestamp: number}>();
 
+// Longer cache TTL to reduce database calls
 const CACHE_TTL = 300000; // 5 minutes cache TTL
+
+// Activity tracking throttling
+const activityThrottleMap = new Map<string, number>();
+const ACTIVITY_THROTTLE_MS = 10000; // 10 seconds between identical activities
+
+// Request in progress tracking to prevent duplicate calls
 const pendingRequests = new Map<string, Promise<any>>();
 
 export const userDataService = {
+  // User Profile Management
   async getUserProfile(userId: string, forceRefresh = false): Promise<UserProfile | null> {
     if (!userId) {
       console.error('getUserProfile called with empty userId');
@@ -128,6 +137,7 @@ export const userDataService = {
     }
 
     const profilePromise = (async () => {
+      // Step 1: Fetch the core user profile from 'user_profiles'
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
@@ -144,6 +154,7 @@ export const userDataService = {
         return null;
       }
 
+      // Step 2: Fetch the user's websites from the 'projects' table using 'owner_id'
       const { data: websites, error: websitesError } = await supabase
         .from('projects')
         .select('id, name, url')
@@ -154,6 +165,7 @@ export const userDataService = {
         throw websitesError;
       }
       
+      // Step 3: Combine the profile and websites into a single, complete object
       const completeProfile = {
         ...profileData,
         websites: websites || []
@@ -161,6 +173,7 @@ export const userDataService = {
 
       console.log('Successfully fetched complete user profile:', completeProfile.id);
       
+      // Cache the combined result
       profileCache.set(userId, {
         profile: completeProfile as UserProfile,
         timestamp: Date.now()
