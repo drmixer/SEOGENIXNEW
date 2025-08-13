@@ -30,11 +30,12 @@ interface DashboardProps {
   user: any;
   onSignOut: () => void;
   userProfile: any;
+  onProfileUpdate: (profile: any) => void;
   showWalkthrough: boolean;
   onWalkthroughComplete: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut, userProfile, showWalkthrough, onWalkthroughComplete }) => {
+const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut, userProfile, onProfileUpdate, showWalkthrough, onWalkthroughComplete }) => {
   const [showChatbot, setShowChatbot] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
   const [hasRunTools, setHasRunTools] = useState(false);
@@ -890,34 +891,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
           onClose={() => setShowSettings(false)}
           user={user}
           userProfile={userProfile}
-          onProfileUpdate={(profile) => {
-            setUserProfile(profile);
-            
-            // Update user goals if they've changed
-            if (profile.goals && Array.isArray(profile.goals)) {
-              setUserGoals(profile.goals);
-            }
-            
-            addToast({
-              id: `settings-updated-${Date.now()}`,
-              type: 'success',
-              title: 'Settings Updated',
-              message: 'Your profile has been updated successfully',
-              duration: 3000,
-              onClose: () => {}
-            });
-            
-            // Clear profile cache to ensure fresh data
-            userDataService.clearCache(user.id);
-            
-            // Reset insights generation flag to allow regeneration
-            insightsGeneratedRef.current = false;
-            
-            // Regenerate insights after profile update
-            setTimeout(() => {
-              generateActionableInsights();
-            }, 500);
-          }}
+          onProfileUpdate={onProfileUpdate}
         />
       )}
 
