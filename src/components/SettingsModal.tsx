@@ -70,42 +70,44 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
   const handleSave = async () => {
     setLoading(true);
     try {
-      // Step 1: Process and save new websites as projects
+      // Step 1: Process and save NEW websites as projects.
+      // We only care about websites that don't have an ID yet.
       await Promise.all(
         formData.websites
-          .filter(w => w.url.trim() && w.name.trim() && !w.id) // Filter for only new websites
+          .filter(w => w.url.trim() && w.name.trim() && !w.id)
           .map(async (website) => {
             console.log(`Creating new project for website: ${website.name}`);
             const { error } = await supabase
               .from('projects')
-              .insert({ 
-                name: website.name, 
+              .insert({
+                name: website.name,
                 owner_id: user.id,
                 url: website.url,
                 // FIX: Add the required org_id with a placeholder value
-                org_id: '00000000-0000-0000-0000-000000000000' 
+                org_id: '00000000-0000-0000-0000-000000000000'
               });
 
             if (error) throw new Error(`Failed to create project for ${website.name}: ${error.message}`);
           })
       );
 
-      // Step 2: Update the user profile with other changes (excluding websites)
+      // Step 2: Update the user profile with all other changes.
+      // We no longer save websites directly to the user_profiles table.
       const updates = {
         industry: formData.industry,
         business_description: formData.businessDescription,
-        // FIX: Remove websites from this update, as they are now managed in the 'projects' table
         competitors: formData.competitors.filter(c => c.url.trim() && c.name.trim()),
         goals: formData.goals
       };
       await userDataService.updateUserProfile(user.id, updates);
 
-      // Step 3: Force a fresh fetch of the complete profile (which will include the new project/website)
+      // Step 3: Force a fresh fetch of the profile from the backend.
+      // This will now include the newly created project because we'll fix getUserProfile.
       console.log("Forcing a fresh fetch of the user profile from backend...");
       const freshProfile = await userDataService.getUserProfile(user.id, true);
       console.log("Fetched profile:", freshProfile);
 
-      // Step 4: Update the global state with the fresh profile
+      // Step 4: Update the global state with the fresh profile.
       if (freshProfile) {
         onProfileUpdate(freshProfile);
       }
