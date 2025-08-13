@@ -385,7 +385,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
         setSelectedProjectId(firstWebsite.id);
       }
     }
-  }, [userProfile, selectedWebsite]);
+  }, [userProfile]);
 
   // Auto-select first competitor
   useEffect(() => {

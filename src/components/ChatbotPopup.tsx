@@ -157,6 +157,8 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
     if (action.type === 'launchTool' && action.toolId && onToolLaunch) {
       onToolLaunch(action.toolId);
       onClose();
+    } else if (action.type === 'suggestion' && action.label) {
+      setInputValue(action.label);
     }
   };
 
