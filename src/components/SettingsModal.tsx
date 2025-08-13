@@ -70,38 +70,37 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
   const handleSave = async () => {
     setLoading(true);
     try {
-      // Step 1: Process and save websites, creating projects if necessary
-      const processedWebsites = await Promise.all(
+      // Step 1: Process and save new websites as projects
+      await Promise.all(
         formData.websites
-          .filter(w => w.url.trim() && w.name.trim())
+          .filter(w => w.url.trim() && w.name.trim() && !w.id) // Filter for only new websites
           .map(async (website) => {
-            if (website.id) return website;
-
             console.log(`Creating new project for website: ${website.name}`);
-            const { data: newProject, error } = await supabase
+            const { error } = await supabase
               .from('projects')
-              .insert({ name: website.name, owner_id: user.id })
-              .select('id')
-              .single();
+              .insert({ 
+                name: website.name, 
+                owner_id: user.id,
+                url: website.url,
+                // FIX: Add the required org_id with a placeholder value
+                org_id: '00000000-0000-0000-0000-000000000000' 
+              });
 
             if (error) throw new Error(`Failed to create project for ${website.name}: ${error.message}`);
-
-            console.log("Saved project with ID:", newProject.id);
-            return { url: website.url, name: website.name, id: newProject.id };
           })
       );
 
-      // Step 2: Update the user profile with all changes
+      // Step 2: Update the user profile with other changes (excluding websites)
       const updates = {
         industry: formData.industry,
         business_description: formData.businessDescription,
-        websites: processedWebsites,
+        // FIX: Remove websites from this update, as they are now managed in the 'projects' table
         competitors: formData.competitors.filter(c => c.url.trim() && c.name.trim()),
         goals: formData.goals
       };
       await userDataService.updateUserProfile(user.id, updates);
 
-      // Step 3: Force a fresh fetch of the profile from the backend
+      // Step 3: Force a fresh fetch of the complete profile (which will include the new project/website)
       console.log("Forcing a fresh fetch of the user profile from backend...");
       const freshProfile = await userDataService.getUserProfile(user.id, true);
       console.log("Fetched profile:", freshProfile);
