@@ -1,7 +1,46 @@
 # Supabase project configuration
 
-[functions]
-  import_map = "./import_map.json"
-
-# The per-function import_map settings are now removed.
-# The global setting above will apply to all functions.
+[functions.adaptive-playbook-generator]
+  import_map = "./functions/adaptive-playbook-generator/deno.json"
+[functions.ai-content-generator]
+  import_map = "./functions/ai-content-generator/deno.json"
+[functions.anomaly-detection]
+  import_map = "./functions/anomaly-detection/deno.json"
+[functions.citation-tracker]
+  import_map = "./functions/citation-tracker/deno.json"
+[functions.competitive-analysis]
+  import_map = "./functions/competitive-analysis/deno.json"
+[functions.competitor-discovery]
+  import_map = "./functions/competitor-discovery/deno.json"
+[functions.content-optimizer]
+  import_map = "./functions/content-optimizer/deno.json"
+[functions.create-checkout]
+  import_map = "./functions/create-checkout/deno.json"
+[functions.enhanced-audit-insights]
+  import_map = "./functions/enhanced-audit-insights/deno.json"
+[functions.enhanced-report-generation]
+  import_map = "./functions/enhanced-report-generation/deno.json"
+[functions.entity-coverage-analyzer]
+  import_map = "./functions/entity-coverage-analyzer/deno.json"
+[functions.generate-report]
+  import_map = "./functions/generate-report/deno.json"
+[functions.lemonsqueezy-webhook]
+  import_map = "./functions/lemonsqueezy-webhook/deno.json"
+[functions.llm-site-summaries]
+  import_map = "./functions/llm-site-summaries/deno.json"
+[functions.prompt-match-suggestions]
+  import_map = "./functions/prompt-match-suggestions/deno.json"
+[functions.real-time-content-analysis]
+  import_map = "./functions/real-time-content-analysis/deno.json"
+[functions.report-viewer]
+  import_map = "./functions/report-viewer/deno.json"
+[functions.run-schedule]
+  import_map = "./functions/run-schedule/deno.json"
+[functions.schema-generator]
+  import_map = "./functions/schema-generator/deno.json"
+[functions.shopify-integration]
+  import_map = "./functions/shopify-integration/deno.json"
+[functions.voice-assistant-tester]
+  import_map = "./functions/voice-assistant-tester/deno.json"
+[functions.wordpress-integration]
+  import_map = "./functions/wordpress-integration/deno.json"
