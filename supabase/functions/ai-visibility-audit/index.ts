@@ -1,10 +1,5 @@
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceHandler, createSuccessResponse, createErrorResponse } from "../_shared/service-handler.ts";
 // --- Type Definitions & Helpers ---
 
 async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
@@ -59,9 +54,106 @@ async function updateToolRunProgress(supabase: SupabaseClient, runId: string, pr
 
 // --- Multi-Step Prompt Definitions ---
 
-const getStep1Prompt = (content: string) => `...`; // Prompts are correct, hiding for brevity
-const getStep2Prompt = (content: string) => `...`;
-const getStep3Prompt = (content: string) => `...`;
+const getStep1Prompt = (content: string) => `Analyze the following webpage content to determine its clarity and comprehensibility for an AI model. Focus on on-page elements.
+
+**Content to Analyze:**
+\`\`\`html
+${content}
+\`\`\`
+
+**Instructions:**
+1.  **AI Understanding Score (0-100):** Rate how easily an AI can understand the main topics, entities, and intent of the content. A higher score means the content is clear, well-written, and uses unambiguous language.
+2.  **On-Page Issues:** Identify specific problems that hinder AI understanding (e.g., keyword stuffing, vague language, conflicting statements, lack of clear focus).
+3.  **On-Page Recommendations:** Suggest concrete improvements to enhance AI clarity (e.g., "Define the acronym 'XYZ' immediately," "Use the primary keyword 'ABC' in the main heading," "Clarify the relationship between Concept A and Concept B.").
+
+**Output Format:**
+You MUST provide a response in a single, valid JSON object. Do not include any text outside of the JSON. The JSON object must strictly adhere to the following schema:
+\`\`\`json
+{
+  "aiUnderstanding": "number (0-100)",
+  "onPageIssues": [
+    {
+      "issue": "string (A concise description of the problem)",
+      "recommendation": "string (A specific, actionable recommendation to fix it)"
+    }
+  ],
+  "onPageRecommendations": [
+    {
+      "recommendation": "string (A specific, actionable recommendation for improvement)",
+      "priority": "string ('High', 'Medium', or 'Low')"
+    }
+  ]
+}
+\`\`\`
+`;
+
+const getStep2Prompt = (content: string) => `Analyze the structural and technical elements of the following webpage content. Focus on how the structure impacts an AI's ability to parse, categorize, and interpret the information.
+
+**Content to Analyze:**
+\`\`\`html
+${content}
+\`\`\`
+
+**Instructions:**
+1.  **Content Structure Score (0-100):** Rate the quality of the content's structure for machine readability. Consider the logical use of headings (H1, H2, etc.), presence of lists, tables, and any structured data (like Schema.org JSON-LD).
+2.  **Structure Issues:** Identify structural problems (e.g., "Multiple H1 tags found," "Lack of semantic HTML tags like <article> or <nav>," "No structured data detected," "Poor heading hierarchy").
+3.  **Structure Recommendations:** Suggest concrete improvements to the structure (e.g., "Use a single H1 for the main title," "Implement FAQPage schema for the FAQ section," "Break down long paragraphs into bulleted lists.").
+
+**Output Format:**
+You MUST provide a response in a single, valid JSON object. Do not include any text outside of the JSON. The JSON object must strictly adhere to the following schema:
+\`\`\`json
+{
+  "contentStructure": "number (0-100)",
+  "structureIssues": [
+    {
+      "issue": "string (A concise description of the problem)",
+      "recommendation": "string (A specific, actionable recommendation to fix it)"
+    }
+  ],
+  "structureRecommendations": [
+    {
+      "recommendation": "string (A specific, actionable recommendation for improvement)",
+      "priority": "string ('High', 'Medium', or 'Low')"
+    }
+  ]
+}
+\`\`\`
+`;
+
+const getStep3Prompt = (content: string) => `Assess the provided webpage content for its conversational readiness and likelihood of being cited by an AI.
+
+**Content to Analyze:**
+\`\`\`html
+${content}
+\`\`\`
+
+**Instructions:**
+1.  **Conversational Readiness Score (0-100):** Rate how well the content answers questions directly. Is it suitable for a voice assistant to read aloud? Does it contain clear, concise answers to potential user queries?
+2.  **Citation Likelihood Score (0-100):** Rate how likely an AI is to cite this page as a source. Consider the presence of unique data, statistics, expert opinions, and clear, quotable statements.
+3.  **Readiness Issues:** Identify issues that harm its conversational or citation potential (e.g., "Answers are buried in long paragraphs," "Lacks specific data or statistics," "Content is purely opinion-based with no evidence.").
+4.  **Readiness Recommendations:** Suggest concrete improvements (e.g., "Create a 'Key Takeaways' section at the top," "Add a Q&A section that directly answers common questions," "Include specific data points and cite their sources to build authority.").
+
+**Output Format:**
+You MUST provide a response in a single, valid JSON object. Do not include any text outside of the JSON. The JSON object must strictly adhere to the following schema:
+\`\`\`json
+{
+  "conversationalReadiness": "number (0-100)",
+  "citationLikelihood": "number (0-100)",
+  "readinessIssues": [
+    {
+      "issue": "string (A concise description of the problem)",
+      "recommendation": "string (A specific, actionable recommendation to fix it)"
+    }
+  ],
+  "readinessRecommendations": [
+    {
+      "recommendation": "string (A specific, actionable recommendation for improvement)",
+      "priority": "string ('High', 'Medium', or 'Low')"
+    }
+  ]
+}
+\`\`\`
+`;
 
 async function callGemini(prompt: string, apiKey: string) {
     // ... (callGemini logic is correct)
@@ -87,11 +179,7 @@ async function callGemini(prompt: string, apiKey: string) {
 
 
 // --- Main Service ---
-export const auditService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
+const auditToolLogic = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
   let runId: string | null = null;
   try {
     const { projectId, url, content } = await req.json();
@@ -155,26 +243,15 @@ export const auditService = async (req: Request, supabase: SupabaseClient): Prom
 
     await updateToolRun(supabase, runId, 'completed', finalResult, null);
 
-    return new Response(JSON.stringify({ success: true, data: { runId, ...finalResult } }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return createSuccessResponse({ runId, ...finalResult });
 
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
     if (runId) {
       await updateToolRun(supabase, runId, 'error', null, errorMessage);
     }
-    return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return createErrorResponse(errorMessage);
   }
 };
 
-Deno.serve(async (req) => {
-    const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    return await auditService(req, supabase);
-});
+Deno.serve((req) => serviceHandler(req, auditToolLogic));

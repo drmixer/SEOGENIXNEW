@@ -1,19 +1,5 @@
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Hono, Context } from 'npm:hono'
-
-// --- CORS Headers ---
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
-};
-
-// --- Hono Environment Typing ---
-export type Env = {
-    Variables: {
-        supabase: SupabaseClient;
-    };
-};
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceHandler, createSuccessResponse, createErrorResponse } from "../_shared/service-handler.ts";
 
 // --- Type Definitions ---
 interface ChatRequest {
@@ -83,27 +69,18 @@ const getChatPrompt = (message: string, context: string, userPlan: string, conve
 };
 
 
-// --- Hono App & Main Logic ---
-export const app = new Hono<Env>();
-
-// Handle CORS preflight requests
-app.options('*', () => {
-    return new Response(null, { status: 204, headers: corsHeaders });
-});
-
-export const genieChatbotPostHandler = async (c: Context<Env>) => {
-    const supabase = c.get('supabase');
-
+// --- Main Service ---
+const chatbotToolLogic = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
     try {
-        const { message, context, userPlan, conversationHistory = [], userData }: ChatRequest = await c.req.json();
+        const { message, context, userPlan, conversationHistory = [], userData }: ChatRequest = await req.json();
 
         if (!message || !context) {
-            throw new Error('`message` and `context` are required.');
+            return createErrorResponse('`message` and `context` are required.', 400);
         }
 
         // 1. Enhance user data if logged in
         let enhancedUserData = userData;
-        const authHeader = c.req.header('Authorization');
+        const authHeader = req.headers.get('Authorization');
         if (authHeader && context === 'dashboard') {
             try {
                 const token = authHeader.replace('Bearer ', '');
@@ -144,28 +121,12 @@ export const genieChatbotPostHandler = async (c: Context<Env>) => {
 
         const output = { ...analysisJson, personalized: !!enhancedUserData };
 
-        return c.json({ success: true, data: output }, 200, corsHeaders);
+        return createSuccessResponse(output);
 
     } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
-        return c.json({ success: false, error: { message: errorMessage, code: errorCode } }, 500, corsHeaders);
+        return createErrorResponse(errorMessage);
     }
 };
 
-
-app.post('/', genieChatbotPostHandler);
-
-// --- Server ---
-if (import.meta.main) {
-    const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    // Middleware to inject Supabase client
-    app.use('*', async (c, next) => {
-        c.set('supabase', supabase)
-        await next()
-    })
-    Deno.serve(app.fetch);
-}
+Deno.serve((req) => serviceHandler(req, chatbotToolLogic));
