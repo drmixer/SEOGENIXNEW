@@ -1,51 +1,44 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// --- Injected Shared Code ---
+// --- SHARED: CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE'
 };
 
-function createErrorResponse(message, status = 500) {
+// --- SHARED: Response Helpers ---
+function createErrorResponse(message: string, status = 500, details?: any) {
   return new Response(JSON.stringify({
     success: false,
     error: {
-      message
+      message,
+      details: details || undefined,
     }
   }), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json"
-    }
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
-function createSuccessResponse(data, status = 200) {
+function createSuccessResponse(data: object, status = 200) {
   return new Response(JSON.stringify({
     success: true,
-    data
+    data,
   }), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json"
-    }
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
-// --- Service Handler ---
-async function serviceHandler(req, toolLogic) {
+// --- SHARED: Service Handler ---
+async function serviceHandler(req: Request, toolLogic: Function) {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: corsHeaders
-    });
+    return new Response('ok', { headers: corsHeaders });
   }
   try {
     const supabaseAdminClient = createClient(
-        Deno.env.get("SUPABASE_URL") ?? '',
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ''
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
     const authHeader = req.headers.get('Authorization');
@@ -54,31 +47,29 @@ async function serviceHandler(req, toolLogic) {
     }
 
     const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? '',
-      Deno.env.get("SUPABASE_ANON_KEY") ?? '',
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    return await toolLogic(req, { supabaseClient, supabaseAdminClient });
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) {
+        return createErrorResponse('Invalid or expired token', 401);
+    }
+
+    return await toolLogic(req, { user, supabaseClient, supabaseAdminClient });
 
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
-    console.error(`[ServiceHandler Error] ${errorMessage}`, err);
-    return createErrorResponse(errorMessage);
+    console.error(`[ServiceHandler Error]`, err);
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
   }
 }
 
-// --- Tool Run Logging ---
-async function logToolRun(supabase, projectId, toolName, inputPayload) {
-  if (!projectId) {
-    throw new Error("logToolRun error: projectId is required.");
-  }
-  const { data, error } = await supabase.from("tool_runs").insert({
-    project_id: projectId,
-    tool_name: toolName,
-    input_payload: inputPayload,
-    status: "running"
-  }).select("id").single();
+// --- SHARED: Database Logging Helpers ---
+async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
+  if (!projectId) throw new Error("logToolRun error: projectId is required.");
+  const { data, error } = await supabase.from("tool_runs").insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: "running" }).select("id").single();
   if (error) {
     console.error("Error logging tool run:", error);
     throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
@@ -90,148 +81,181 @@ async function logToolRun(supabase, projectId, toolName, inputPayload) {
   return data.id;
 }
 
-async function updateToolRun(supabase, runId, status, outputPayload, errorMessage) {
+async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null) {
   if (!runId) {
     console.error("updateToolRun error: runId is required.");
     return;
   }
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output_payload: errorMessage ? {
-      error: errorMessage
-    } : outputPayload || null,
-    error_message: errorMessage || null
-  };
+  const update = { status, completed_at: new Date().toISOString(), output_payload: errorMessage ? { error: errorMessage } : outputPayload || null, error_message: errorMessage || null };
   const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
-  if (error) {
-    console.error(`Error updating tool run ID ${runId}:`, error);
-  }
+  if (error) console.error(`Error updating tool run ID ${runId}:`, error);
 }
 
-// --- AI Prompts ---
-const getStep1Prompt = (content) => `Analyze the following webpage content...`; // Content omitted for brevity
-const getStep2Prompt = (content) => `Analyze the structural and technical elements...`; // Content omitted for brevity
-const getStep3Prompt = (content) => `Assess the provided webpage content...`; // Content omitted for brevity
-
-// --- FINAL FIX: Robust AI Call Function with Correct Exponential Backoff ---
-async function callGeminiWithRetry(prompt, apiKey) {
+// --- SHARED: Robust AI Call Function ---
+async function callGeminiWithRetry(prompt: string, apiKey: string) {
   let attempts = 0;
   const maxAttempts = 4;
-  let delay = 1000; // Start with a 1-second delay
+  let delay = 1000;
 
   while (attempts < maxAttempts) {
     try {
-      // Attempt to call the Gemini API
-      return await callGemini(prompt, apiKey);
-    } catch (error) {
-      // Check if the error is a 503 (Service Unavailable) or other retryable code
-      if (error.message.includes("Status: 503") || error.message.includes("Status: 429")) {
-        attempts++;
-        console.log(`AI model is overloaded or rate-limited. Retrying in ${delay / 1000} seconds... (Attempt ${attempts}/${maxAttempts})`);
-        // Wait for the specified delay
-        await new Promise(resolve => setTimeout(resolve, delay));
-        // Double the delay for the next attempt
-        delay *= 2;
-      } else {
-        // If it's a different error, fail immediately
-        throw error;
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 2048,
+            },
+          }),
+        }
+      );
+
+      if (!geminiResponse.ok) {
+        if (geminiResponse.status === 429 || geminiResponse.status === 503) {
+            const errorText = await geminiResponse.text();
+            throw new Error(`Retryable Gemini API error: ${geminiResponse.status} ${errorText}`);
+        }
+        const errorText = await geminiResponse.text();
+        console.error('Gemini API error:', geminiResponse.status, errorText);
+        throw new Error(`Gemini API failed with status ${geminiResponse.status}: ${errorText}`);
       }
+
+      const geminiData = await geminiResponse.json();
+      const candidate = geminiData.candidates?.[0];
+      if (!candidate) throw new Error('No content generated by Gemini API');
+
+      const responseText = candidate.content?.parts?.[0]?.text;
+      if (!responseText) throw new Error('Invalid response structure from Gemini API');
+
+      console.log('Raw Gemini response text:', responseText.substring(0, 500) + '...');
+
+      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!jsonMatch || !jsonMatch[1]) {
+        console.error('Could not find JSON block in response:', responseText);
+        throw new Error('Failed to extract JSON from AI response.');
+      }
+      const jsonString = jsonMatch[1];
+      console.log('Extracted JSON string:', jsonString);
+
+      return JSON.parse(jsonString);
+
+    } catch (error) {
+       if (error.message.includes("Retryable")) {
+            attempts++;
+            console.log(`AI model is overloaded or rate-limited. Retrying in ${delay / 1000}s... (Attempt ${attempts}/${maxAttempts})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+       } else {
+           throw error;
+       }
     }
   }
-
-  // If we exit the loop, it means all retries have failed.
-  throw new Error("The AI model is currently overloaded. Please try again later.");
+  throw new Error("The AI model is currently overloaded after multiple retries.");
 }
 
-async function callGemini(prompt, apiKey) {
-  const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{
-          text: prompt
-        }]
-      }],
-      generationConfig: {
-        response_mime_type: "application/json",
-        temperature: 0.2,
-        maxOutputTokens: 2048
-      }
-    })
-  });
-
-  if (!geminiResponse.ok) {
-    const errorBody = await geminiResponse.text();
-    console.error('Gemini API error:', errorBody);
-    throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
-  }
-
-  const geminiData = await geminiResponse.json();
-
-  if (geminiData.promptFeedback && geminiData.promptFeedback.blockReason) {
-    throw new Error(`The request was blocked by the AI's safety filters. Reason: ${geminiData.promptFeedback.blockReason}`);
-  }
-
-  if (geminiData.candidates && geminiData.candidates[0].content.parts && geminiData.candidates[0].content.parts[0].text) {
-      let rawText = geminiData.candidates[0].content.parts[0].text;
-      
-      const jsonStartIndex = rawText.indexOf('{');
-      const jsonEndIndex = rawText.lastIndexOf('}');
-
-      if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
-        const jsonString = rawText.substring(jsonStartIndex, jsonEndIndex + 1);
-        try {
-          return JSON.parse(jsonString);
-        } catch (e) {
-          throw new Error("Failed to parse JSON from the AI's response.");
-        }
-      }
-  }
-  
-  throw new Error("Unexpected response structure from Gemini API.");
+// --- TOOL-SPECIFIC: Type Definitions ---
+interface AuditRequest {
+    projectId: string;
+    url: string;
+    content?: string;
 }
 
-// --- Main Tool Logic ---
-const auditToolLogic = async (req, { supabaseClient, supabaseAdminClient }) => {
-  let runId = null;
+// --- TOOL-SPECIFIC: AI Prompts ---
+const getStep1Prompt = (content: string) => `
+You are an AI Visibility Auditor. Analyze the provided webpage content to determine how well an AI model like Google's Gemini or OpenAI's GPT-4 could understand it.
+**Content:**
+${content.substring(0, 8000)}
+
+**Instructions:**
+1.  Assess the clarity, structure, and semantic richness of the text.
+2.  Identify entities, key topics, and the primary intent.
+3.  Provide a score from 1-100 for "AI Understanding".
+4.  List 2-3 specific, actionable recommendations to improve AI comprehension.
+5.  List any issues found.
+
+**CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+The JSON object must follow this exact schema:
+\`\`\`json
+{
+  "aiUnderstanding": "number",
+  "onPageRecommendations": ["recommendation 1", "recommendation 2"],
+  "onPageIssues": ["issue 1", "issue 2"]
+}
+\`\`\`
+`;
+
+const getStep2Prompt = (content: string) => `
+You are a Technical SEO Analyst. Analyze the structural and technical elements of the provided webpage content.
+**Content:**
+${content.substring(0, 8000)}
+
+**Instructions:**
+1.  Evaluate the heading structure (H1, H2s, etc.), use of lists, and data formatting.
+2.  Provide a score from 1-100 for "Content Structure".
+3.  List 2-3 specific, actionable recommendations to improve content structure for crawlers.
+4.  List any issues found.
+
+**CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+The JSON object must follow this exact schema:
+\`\`\`json
+{
+  "contentStructure": "number",
+  "structureRecommendations": ["recommendation 1", "recommendation 2"],
+  "structureIssues": ["issue 1", "issue 2"]
+}
+\`\`\`
+`;
+
+const getStep3Prompt = (content: string) => `
+You are a Conversational AI Expert. Assess the provided webpage content for its readiness to be used in conversational contexts (like chatbots or voice assistants).
+**Content:**
+${content.substring(0, 8000)}
+
+**Instructions:**
+1.  Determine how likely the content is to be cited or used as a source for an AI-generated answer.
+2.  Evaluate its suitability for direct answers (like in a featured snippet).
+3.  Provide a score from 1-100 for "Citation Likelihood" and "Conversational Readiness".
+4.  List 2-3 specific recommendations to improve its readiness for conversational AI.
+5.  List any issues found.
+
+**CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+The JSON object must follow this exact schema:
+\`\`\`json
+{
+  "citationLikelihood": "number",
+  "conversationalReadiness": "number",
+  "readinessRecommendations": ["recommendation 1", "recommendation 2"],
+  "readinessIssues": ["issue 1", "issue 2"]
+}
+\`\`\`
+`;
+
+// --- TOOL-SPECIFIC: Main Logic ---
+const auditToolLogic = async (req: Request, { user, supabaseClient, supabaseAdminClient }: { user: any, supabaseClient: SupabaseClient, supabaseAdminClient: SupabaseClient }) => {
+  let runId: string | null = null;
   try {
     console.log("Audit function started.");
-    const { projectId, url, content } = await req.json();
+    const { projectId, url, content }: AuditRequest = await req.json();
     if (!projectId || !url) {
-        throw new Error("projectId and url are required.");
+        throw new Error("`projectId` and `url` are required.");
     }
-    console.log(`Received request for projectId: ${projectId}`);
+    console.log(`Received request for project: ${projectId}`);
 
-    const { data: project, error: projectError } = await supabaseClient
-      .from('projects')
-      .select('id, name')
-      .eq('id', projectId)
-      .single();
-
-    if (projectError || !project) {
-      throw new Error("Access denied or project not found.");
-    }
+    const { data: project, error: projectError } = await supabaseClient.from('projects').select('id, name').eq('id', projectId).single();
+    if (projectError || !project) throw new Error("Access denied or project not found.");
     console.log(`User has access to project: ${project.name}`);
 
-    runId = await logToolRun(supabaseAdminClient, projectId, 'ai-visibility-audit', {
-      url,
-      content: content ? 'Content provided' : 'No content provided'
-    });
-    if (!runId) throw new Error("Failed to create a run log.");
+    runId = await logToolRun(supabaseAdminClient, projectId, 'ai-visibility-audit', { url, content: content ? 'Content provided' : 'No content provided' });
     console.log(`Tool run logged with ID: ${runId}`);
 
     let pageContent = content;
     if (url && !content) {
       console.log(`Fetching content from URL: ${url}`);
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'SEOGENIX Audit Bot 1.0'
-        }
-      });
+      const response = await fetch(url, { headers: { 'User-Agent': 'SEOGENIX Audit Bot 1.0' } });
       if (!response.ok) throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
       pageContent = await response.text();
       console.log(`Successfully fetched content. Length: ${pageContent.length}`);
@@ -280,18 +304,16 @@ const auditToolLogic = async (req, { supabaseClient, supabaseAdminClient }) => {
     await updateToolRun(supabaseAdminClient, runId, 'completed', finalResult, null);
     console.log("Tool run log updated to 'completed'.");
 
-    return createSuccessResponse({
-      runId,
-      ...finalResult
-    });
+    return createSuccessResponse({ runId, ...finalResult });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
     console.error(`Audit failed: ${errorMessage}`);
     if (runId) {
       await updateToolRun(supabaseAdminClient, runId, 'error', null, errorMessage);
     }
-    return createErrorResponse(errorMessage);
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
   }
 };
 
+// --- Server ---
 Deno.serve((req) => serviceHandler(req, auditToolLogic));

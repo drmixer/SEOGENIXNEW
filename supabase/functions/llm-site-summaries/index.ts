@@ -1,28 +1,75 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Self-contained CORS headers
+// --- SHARED: CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-// Helper functions for logging
-async function logToolRun(supabase, projectId, toolName, inputPayload) {
-  if (!projectId) {
-    throw new Error("logToolRun error: projectId is required.");
-  }
-  const { data, error } = await supabase
-    .from("tool_runs")
-    .insert({
-      project_id: projectId,
-      tool_name: toolName,
-      input_payload: inputPayload,
-      status: "running",
-    })
-    .select("id")
-    .single();
+// --- SHARED: Response Helpers ---
+function createErrorResponse(message: string, status = 500, details?: any) {
+  return new Response(JSON.stringify({
+    success: false,
+    error: {
+      message,
+      details: details || undefined,
+    }
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
+function createSuccessResponse(data: object, status = 200) {
+  return new Response(JSON.stringify({
+    success: true,
+    data,
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// --- SHARED: Service Handler ---
+async function serviceHandler(req: Request, toolLogic: Function) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  try {
+    const supabaseAdminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return createErrorResponse('Missing Authorization header', 401);
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) {
+        return createErrorResponse('Invalid or expired token', 401);
+    }
+
+    return await toolLogic(req, { user, supabaseClient, supabaseAdminClient });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
+    console.error(`[ServiceHandler Error]`, err);
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
+}
+
+// --- SHARED: Database Logging Helpers ---
+async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
+  if (!projectId) throw new Error("logToolRun error: projectId is required.");
+  const { data, error } = await supabase.from("tool_runs").insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: "running" }).select("id").single();
   if (error) {
     console.error("Error logging tool run:", error);
     throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
@@ -34,126 +81,189 @@ async function logToolRun(supabase, projectId, toolName, inputPayload) {
   return data.id;
 }
 
-async function updateToolRun(supabase, runId, status, outputPayload, errorMessage) {
+async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null) {
   if (!runId) {
     console.error("updateToolRun error: runId is required.");
     return;
   }
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output_payload: errorMessage ? { error: errorMessage } : outputPayload || null,
-    error_message: errorMessage || null,
-  };
+  const update = { status, completed_at: new Date().toISOString(), output_payload: errorMessage ? { error: errorMessage } : outputPayload || null, error_message: errorMessage || null };
   const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
-  if (error) {
-    console.error(`Error updating tool run ID ${runId}:`, error);
-  }
+  if (error) console.error(`Error updating tool run ID ${runId}:`, error);
 }
 
-function generateFallbackSummary(url, summaryType) {
-    const summary = `This is a fallback ${summaryType} summary for ${url}. The main service could not be reached.`;
-    const entities = ['Fallback Entity 1', 'Fallback Entity 2'];
-    const topics = ['Fallback Topic 1', 'Fallback Topic 2'];
-    return new Response(JSON.stringify({ url, summaryType, summary, entities, topics, note: 'This is fallback data.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-}
+// --- SHARED: Robust AI Call Function ---
+async function callGeminiWithRetry(prompt: string, apiKey: string) {
+  let attempts = 0;
+  const maxAttempts = 4;
+  let delay = 1000;
 
-const llmSiteSummariesService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
-    let runId;
+  while (attempts < maxAttempts) {
     try {
-        const { projectId, url, content, summaryType } = await req.json();
-
-        runId = await logToolRun(
-            supabase,
-            projectId,
-            'llm-site-summaries',
-            { url, summaryType, contentLength: content?.length }
-        );
-
-        let pageContent = content;
-        if (url && !content) {
-            try {
-                const response = await fetch(url, { headers: { 'User-Agent': 'SEOGENIX LLM Summary Bot 1.0' } });
-                if (response.ok) pageContent = await response.text();
-            } catch (error) { console.error('Failed to fetch URL:', error); }
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 2048,
+            },
+          }),
         }
+      );
 
-        const summaryPrompts = {
-            overview: `Create a comprehensive overview summary of this website.`,
-            technical: `Generate a technical summary focusing on the website's functionality.`,
-            business: `Create a business-focused summary highlighting services and target market.`,
-            audience: `Generate an audience-focused summary describing who this website serves.`
-        };
-
-        const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-        if (!geminiApiKey) throw new Error('Gemini API key not configured');
-
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: `${summaryPrompts[summaryType]}
-URL: ${url}
-Content: ${pageContent?.substring(0, 4000) || 'No content provided'}
-Format response as:
-SUMMARY:
-[summary]
-KEY ENTITIES:
-- [Entity 1]
-- [Entity 2]
-MAIN TOPICS:
-- [Topic 1]
-- [Topic 2]` }] }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
-            })
-        });
-
-        if (!geminiResponse.ok) {
-            console.error('Gemini API error:', await geminiResponse.text());
-            return generateFallbackSummary(url, summaryType);
+      if (!geminiResponse.ok) {
+        if (geminiResponse.status === 429 || geminiResponse.status === 503) {
+            const errorText = await geminiResponse.text();
+            throw new Error(`Retryable Gemini API error: ${geminiResponse.status} ${errorText}`);
         }
+        const errorText = await geminiResponse.text();
+        console.error('Gemini API error:', geminiResponse.status, errorText);
+        throw new Error(`Gemini API failed with status ${geminiResponse.status}: ${errorText}`);
+      }
 
-        const geminiData = await geminiResponse.json();
-        const responseText = geminiData.candidates[0].content.parts[0].text;
+      const geminiData = await geminiResponse.json();
+      const candidate = geminiData.candidates?.[0];
+      if (!candidate) throw new Error('No content generated by Gemini API');
 
-        const summaryMatch = responseText.match(/SUMMARY:\s*([\s\S]*?)(?=KEY ENTITIES:|$)/i);
-        const entitiesMatch = responseText.match(/KEY ENTITIES:\s*([\s\S]*?)(?=MAIN TOPICS:|$)/i);
-        const topicsMatch = responseText.match(/MAIN TOPICS:\s*([\s\S]*?)$/i);
+      const responseText = candidate.content?.parts?.[0]?.text;
+      if (!responseText) throw new Error('Invalid response structure from Gemini API');
 
-        const summary = summaryMatch ? summaryMatch[1].trim() : responseText;
-        const entities = entitiesMatch ? entitiesMatch[1].split('\n').filter(line => line.trim().startsWith('-')).map(line => line.trim().substring(1).trim()) : [];
-        const topics = topicsMatch ? topicsMatch[1].split('\n').filter(line => line.trim().startsWith('-')).map(line => line.trim().substring(1).trim()) : [];
+      console.log('Raw Gemini response text:', responseText.substring(0, 500) + '...');
 
-        const output = { url, summaryType, summary, entities, topics };
+      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!jsonMatch || !jsonMatch[1]) {
+        console.error('Could not find JSON block in response:', responseText);
+        throw new Error('Failed to extract JSON from AI response.');
+      }
+      const jsonString = jsonMatch[1];
+      console.log('Extracted JSON string:', jsonString);
 
-        await updateToolRun(supabase, runId, 'completed', output);
+      return JSON.parse(jsonString);
 
-        return new Response(JSON.stringify({ runId, output }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-
-    } catch (err) {
-        console.error(err);
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        if (runId) {
-            await updateToolRun(supabase, runId, 'error', null, errorMessage);
-        }
-        return new Response(JSON.stringify({ error: errorMessage }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    } catch (error) {
+       if (error.message.includes("Retryable")) {
+            attempts++;
+            console.log(`AI model is overloaded or rate-limited. Retrying in ${delay / 1000}s... (Attempt ${attempts}/${maxAttempts})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+       } else {
+           throw error;
+       }
     }
+  }
+  throw new Error("The AI model is currently overloaded after multiple retries.");
 }
 
-Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+// --- TOOL-SPECIFIC: Type Definitions ---
+interface SummaryRequest {
+    projectId: string;
+    url: string;
+    content?: string;
+    summaryType: 'overview' | 'technical' | 'business' | 'audience';
+}
+
+// --- TOOL-SPECIFIC: AI Prompt Engineering ---
+const getSummaryPrompt = (request: SummaryRequest, pageContent: string): string => {
+    const { url, summaryType } = request;
+
+    const summaryPrompts = {
+        overview: `Create a comprehensive overview summary of this website.`,
+        technical: `Generate a technical summary focusing on the website's functionality, frameworks, and structure.`,
+        business: `Create a business-focused summary highlighting services, products, and target market.`,
+        audience: `Generate an audience-focused summary describing the ideal user or customer for this website.`
+    };
+
+    const jsonSchema = `{
+        "summary": "string (The detailed, well-written summary based on the requested type)",
+        "keyEntities": ["string (A list of key people, products, or company names mentioned)"],
+        "mainTopics": ["string (A list of the main topics or themes covered)"]
+    }`;
+
+    return `You are a Website Analysis Expert. Your task is to generate a specific type of summary for the given URL and content.
+
+**Context:**
+- **URL:** ${url}
+- **Summary Type Requested:** ${summaryType}
+- **Content Snippet:**
+  ${pageContent.substring(0, 8000)}
+
+**Instructions:**
+1.  Read the content and generate the requested summary type: ${summaryPrompts[summaryType]}
+2.  Extract the key entities and main topics from the content.
+3.  Ensure the summary is concise, accurate, and directly addresses the prompt.
+
+**CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+The JSON object must follow this exact schema:
+\`\`\`json
+${jsonSchema}
+\`\`\`
+
+Generate the site summary now.`;
+};
+
+// --- TOOL-SPECIFIC: Main Logic ---
+const summariesToolLogic = async (req: Request, { user, supabaseClient, supabaseAdminClient }: { user: any, supabaseClient: SupabaseClient, supabaseAdminClient: SupabaseClient }) => {
+  let runId: string | null = null;
+  try {
+    const requestBody: SummaryRequest = await req.json();
+    const { projectId, url, content, summaryType } = requestBody;
+
+    if (!projectId || !url || !summaryType) {
+      throw new Error('`projectId`, `url`, and `summaryType` are required.');
+    }
+    console.log(`Summary request for project ${projectId}, type: ${summaryType}`);
+
+    const { data: project, error: projectError } = await supabaseClient.from('projects').select('id').eq('id', projectId).single();
+    if (projectError || !project) {
+        throw new Error(`Access denied or project not found for id: ${projectId}`);
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    runId = await logToolRun(supabaseAdminClient, projectId, 'llm-site-summaries', { url, summaryType, contentLength: content?.length });
+    console.log(`Tool run logged with ID: ${runId}`);
 
-    return await llmSiteSummariesService(req, supabase);
-});
+    let pageContent = content;
+    if (url && !content) {
+        console.log(`Fetching content from URL: ${url}`);
+        const response = await fetch(url, { headers: { 'User-Agent': 'SEOGENIX Summary Bot 1.0' } });
+        if (!response.ok) throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+        pageContent = await response.text();
+        console.log(`Successfully fetched content. Length: ${pageContent.length}`);
+    }
+    if (!pageContent) throw new Error("Content is empty and could not be fetched.");
+
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey) throw new Error('Gemini API key not configured');
+
+    const prompt = getSummaryPrompt(requestBody, pageContent);
+    const summaryJson = await callGeminiWithRetry(prompt, geminiApiKey);
+
+    if (!summaryJson.summary || !summaryJson.keyEntities || !summaryJson.mainTopics) {
+      throw new Error('Generated summary content missing required fields.');
+    }
+
+    const finalOutput = {
+        ...summaryJson,
+        url,
+        summaryType,
+        generatedAt: new Date().toISOString(),
+    };
+
+    await updateToolRun(supabaseAdminClient, runId, 'completed', finalOutput, null);
+    console.log('Site summary generation complete.');
+    return createSuccessResponse({ runId, ...finalOutput });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+    console.error('LLM site summary error:', err);
+    if (runId) {
+      await updateToolRun(supabaseAdminClient, runId, 'error', null, errorMessage);
+    }
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
+};
+
+// --- Server ---
+Deno.serve((req) => serviceHandler(req, summariesToolLogic));

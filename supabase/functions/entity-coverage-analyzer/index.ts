@@ -1,176 +1,211 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// --- CORS Headers ---
+// --- SHARED: CORS Headers ---
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// --- Type Definitions ---
-interface EntityRequest {
-    url?: string;
-    content?: string;
-    industry?: string;
-    projectId: string;
+// --- SHARED: Response Helpers ---
+function createErrorResponse(message: string, status = 500, details?: any) {
+  return new Response(JSON.stringify({
+    success: false,
+    error: {
+      message,
+      details: details || undefined,
+    }
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
-interface Entity {
-    name: string;
-    type: string;
-    relevance: number;
-    importance: 'high' | 'medium' | 'low';
-    description: string;
+function createSuccessResponse(data: object, status = 200) {
+  return new Response(JSON.stringify({
+    success: true,
+    data,
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
-interface EntityAnalysisResponse {
-    coverageScore: number;
-    mentionedEntities: Entity[];
-    missingEntities: Entity[];
+// --- SHARED: Service Handler ---
+async function serviceHandler(req: Request, toolLogic: Function) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  try {
+    const supabaseAdminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) return createErrorResponse('Missing Authorization header', 401);
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return createErrorResponse('Invalid or expired token', 401);
+
+    return await toolLogic(req, { user, supabaseClient, supabaseAdminClient });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
+    console.error(`[ServiceHandler Error]`, err);
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
 }
 
-// --- Database Logging Helpers ---
-async function logToolRun({ supabase, projectId, toolName, inputPayload }: { supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object }) {
-  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging tool run:', error); return null; }
+// --- SHARED: Database Logging Helpers ---
+async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
+  if (!projectId) throw new Error("logToolRun error: projectId is required.");
+  const { data, error } = await supabase.from("tool_runs").insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: "running" }).select("id").single();
+  if (error) throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
+  if (!data?.id) throw new Error("Failed to log tool run: No data returned after insert.");
   return data.id;
 }
 
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null }) {
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output: errorMessage ? { error: errorMessage } : outputPayload || null
-  };
-  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating tool run:', error); }
+async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null) {
+  if (!runId) return;
+  const update = { status, completed_at: new Date().toISOString(), output_payload: errorMessage ? { error: errorMessage } : outputPayload || null, error_message: errorMessage || null };
+  const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
+  if (error) console.error(`Error updating tool run ID ${runId}:`, error);
 }
 
-// --- AI Prompt Engineering ---
-const getEntityAnalysisPrompt = (content: string, industry?: string): string => {
-    const jsonSchema = `
-    {
-      "coverageScore": "number (0-100, an estimated score of how well the content covers the essential entities for its topic)",
-      "mentionedEntities": [
+// --- SHARED: Robust AI Call Function ---
+async function callGeminiWithRetry(prompt: string, apiKey: string) {
+  let attempts = 0;
+  const maxAttempts = 4;
+  let delay = 1000;
+  while (attempts < maxAttempts) {
+    try {
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`,
         {
-          "name": "string (The name of the entity mentioned in the text)",
-          "type": "string (e.g., 'Person', 'Organization', 'Concept', 'Product')",
-          "relevance": "number (1-100, how relevant this entity is to the core topic)",
-          "importance": "string (enum: 'high', 'medium', 'low')",
-          "description": "string (A brief description of the entity)"
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+          }),
         }
-      ],
-      "missingEntities": [
-        {
-          "name": "string (The name of an important entity that is MISSING from the text)",
-          "type": "string (e.g., 'Person', 'Organization', 'Concept', 'Product')",
-          "relevance": "number (1-100, how relevant this entity is to the core topic)",
-          "importance": "string (enum: 'high', 'medium', 'low')",
-          "description": "string (A brief description of why this entity is important to include)"
+      );
+      if (!geminiResponse.ok) {
+        if (geminiResponse.status === 429 || geminiResponse.status === 503) {
+            throw new Error(`Retryable Gemini API error: ${geminiResponse.status}`);
         }
-      ]
+        throw new Error(`Gemini API failed with status ${geminiResponse.status}`);
+      }
+      const geminiData = await geminiResponse.json();
+      const candidate = geminiData.candidates?.[0];
+      const responseText = candidate?.content?.parts?.[0]?.text;
+      if (!responseText) throw new Error('Invalid response structure from Gemini API');
+      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!jsonMatch?.[1]) throw new Error('Failed to extract JSON from AI response.');
+      return JSON.parse(jsonMatch[1]);
+    } catch (error) {
+       if (error.message.includes("Retryable")) {
+            attempts++;
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+       } else {
+           throw error;
+       }
     }
-    `;
+  }
+  throw new Error("The AI model is currently overloaded after multiple retries.");
+}
 
-    return `
-    You are an Expert SEO and Topical Authority Analyst. Your task is to analyze a piece of content and identify the key entities it mentions, as well as crucial entities that are missing.
 
-    **Analysis Task:**
-    - **Content to Analyze:**
-      ---
-      ${content.substring(0, 15000)}
-      ---
+// --- TOOL-SPECIFIC: Type Definitions ---
+interface EntityRequest {
+    projectId: string;
+    url?: string;
+    content?: string;
+    industry?: string;
+}
+
+// --- TOOL-SPECIFIC: AI Prompt ---
+const getEntityAnalysisPrompt = (content: string, industry?: string): string => {
+    const jsonSchema = `{
+      "coverageScore": "number (0-100)",
+      "mentionedEntities": [{ "name": "string", "type": "string", "relevance": "number", "importance": "string ('high', 'medium', 'low')", "description": "string" }],
+      "missingEntities": [{ "name": "string", "type": "string", "relevance": "number", "importance": "string ('high', 'medium', 'low')", "description": "string" }]
+    }`;
+
+    return `You are an Expert SEO and Topical Authority Analyst. Analyze the content to identify key entities it mentions and crucial entities that are missing.
+    - **Content to Analyze:** ${content.substring(0, 15000)}
     - **Industry Context:** ${industry || 'General'}
 
-    **Your Instructions:**
-    1.  Read the content and identify all key entities (people, organizations, products, concepts) that are mentioned.
-    2.  Based on the topic and industry, identify important, relevant entities that are MISSING from the content.
-    3.  Estimate an overall "Entity Coverage Score" from 0-100.
-    4.  Provide a structured list of both mentioned and missing entities with the required details.
+    **Instructions:**
+    1. Identify all key entities (people, organizations, products, concepts) mentioned in the content.
+    2. Identify important, relevant entities that are MISSING from the content but should be included.
+    3. Estimate an overall "Entity Coverage Score" from 0-100.
+    4. Provide a structured list of both mentioned and missing entities.
 
-    **Output Format:**
-    You MUST provide a response in a single, valid JSON object. Do not include any text or formatting outside of the JSON object. The JSON object must strictly adhere to the following schema:
+    **CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+    The JSON object must follow this exact schema:
     \`\`\`json
     ${jsonSchema}
     \`\`\`
-
-    Now, perform your expert entity analysis.
-    `;
+    Perform your expert entity analysis now.`;
 };
 
-// --- Main Service Handler ---
-export const entityAnalyzerService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
-    let runId;
-    try {
-        const { url, content, industry, projectId }: EntityRequest = await req.json();
+// --- TOOL-SPECIFIC: Main Logic ---
+const entityAnalyzerToolLogic = async (req: Request, { user, supabaseClient, supabaseAdminClient }: { user: any, supabaseClient: SupabaseClient, supabaseAdminClient: SupabaseClient }) => {
+  let runId: string | null = null;
+  try {
+    const { projectId, url, content, industry }: EntityRequest = await req.json();
 
-        runId = await logToolRun({ supabase, projectId, toolName: 'entity-coverage-analyzer', inputPayload: { url, industry } });
-
-        let pageContent = content;
-        if (url && !content) {
-            const response = await fetch(url, { headers: { 'User-Agent': 'SEOGENIX Entity Analyzer Bot 1.0' } });
-            if (!response.ok) {
-                throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
-            }
-            pageContent = await response.text();
-        }
-
-        if (!pageContent) {
-            throw new Error('Content or URL is required for analysis.');
-        }
-
-        const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-        if (!geminiApiKey) throw new Error('Gemini API key not configured');
-
-        const prompt = getEntityAnalysisPrompt(pageContent, industry);
-
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                    response_mime_type: "application/json",
-                    temperature: 0.4,
-                    maxOutputTokens: 4096,
-                }
-            })
-        });
-
-        if (!geminiResponse.ok) {
-            throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
-        }
-
-        const geminiData = await geminiResponse.json();
-        const analysisJson: EntityAnalysisResponse = JSON.parse(geminiData.candidates[0].content.parts[0].text);
-
-        await updateToolRun({ supabase, runId, status: 'completed', outputPayload: analysisJson, errorMessage: null });
-
-        return new Response(JSON.stringify({ success: true, data: analysisJson }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-
-    } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        if (runId) {
-            await updateToolRun({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
-        }
-        const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
-        return new Response(JSON.stringify({ success: false, error: { message: errorMessage, code: errorCode } }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    if (!projectId || (!url && !content)) {
+      throw new Error('`projectId` and either `url` or `content` are required.');
     }
+    console.log(`Entity analysis for project ${projectId}`);
+
+    const { data: project, error: projectError } = await supabaseClient.from('projects').select('id').eq('id', projectId).single();
+    if (projectError || !project) throw new Error(`Access denied or project not found for id: ${projectId}`);
+
+    runId = await logToolRun(supabaseAdminClient, projectId, 'entity-coverage-analyzer', { url, industry, hasContent: !!content });
+    console.log(`Tool run logged with ID: ${runId}`);
+
+    let pageContent = content;
+    if (url && !pageContent) {
+        console.log(`Fetching content from URL: ${url}`);
+        const response = await fetch(url, { headers: { 'User-Agent': 'SEOGENIX Entity Bot 1.0' } });
+        if (!response.ok) throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+        pageContent = await response.text();
+    }
+    if (!pageContent) throw new Error("Content is empty and could not be fetched.");
+
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey) throw new Error('Gemini API key not configured');
+
+    const prompt = getEntityAnalysisPrompt(pageContent, industry);
+    const analysisJson = await callGeminiWithRetry(prompt, geminiApiKey);
+
+    if (!analysisJson.coverageScore || !analysisJson.mentionedEntities || !analysisJson.missingEntities) {
+        throw new Error('Generated entity analysis is missing required fields.');
+    }
+
+    await updateToolRun(supabaseAdminClient, runId, 'completed', analysisJson, null);
+    console.log('Entity analysis complete.');
+    return createSuccessResponse({ runId, ...analysisJson });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+    console.error('Entity analyzer error:', err);
+    if (runId) {
+      await updateToolRun(supabaseAdminClient, runId, 'error', null, errorMessage);
+    }
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
 };
 
 // --- Server ---
-Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
-    }
-    const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    return await entityAnalyzerService(req, supabase);
-});
+Deno.serve((req) => serviceHandler(req, entityAnalyzerToolLogic));

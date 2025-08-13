@@ -1,207 +1,255 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "node:crypto";
 
+// --- SHARED: CORS Headers ---
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface CompetitorDiscoveryPayload {
+// --- SHARED: Response Helpers ---
+function createErrorResponse(message: string, status = 500, details?: any) {
+  return new Response(JSON.stringify({
+    success: false,
+    error: {
+      message,
+      details: details || undefined,
+    }
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function createSuccessResponse(data: object, status = 200) {
+  return new Response(JSON.stringify({
+    success: true,
+    data,
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// --- SHARED: Service Handler ---
+async function serviceHandler(req: Request, toolLogic: Function) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  try {
+    const supabaseAdminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) return createErrorResponse('Missing Authorization header', 401);
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return createErrorResponse('Invalid or expired token', 401);
+
+    return await toolLogic(req, { user, supabaseClient, supabaseAdminClient });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
+    console.error(`[ServiceHandler Error]`, err);
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
+}
+
+// --- SHARED: Database Logging Helpers ---
+async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
+  if (!projectId) throw new Error("logToolRun error: projectId is required.");
+  const { data, error } = await supabase.from("tool_runs").insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: "running" }).select("id").single();
+  if (error) throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
+  if (!data?.id) throw new Error("Failed to log tool run: No data returned after insert.");
+  return data.id;
+}
+
+async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null) {
+  if (!runId) return;
+  const update = { status, completed_at: new Date().toISOString(), output_payload: errorMessage ? { error: errorMessage } : outputPayload || null, error_message: errorMessage || null };
+  const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
+  if (error) console.error(`Error updating tool run ID ${runId}:`, error);
+}
+
+// --- SHARED: Robust AI Call Function ---
+async function callGeminiWithRetry(prompt: string, apiKey: string) {
+  // Omitting for brevity - this is the same shared function
+  let attempts = 0;
+  const maxAttempts = 4;
+  let delay = 1000;
+  while (attempts < maxAttempts) {
+    try {
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
+          }),
+        }
+      );
+      if (!geminiResponse.ok) {
+        if (geminiResponse.status === 429 || geminiResponse.status === 503) {
+            throw new Error(`Retryable Gemini API error: ${geminiResponse.status}`);
+        }
+        throw new Error(`Gemini API failed with status ${geminiResponse.status}`);
+      }
+      const geminiData = await geminiResponse.json();
+      const candidate = geminiData.candidates?.[0];
+      const responseText = candidate?.content?.parts?.[0]?.text;
+      if (!responseText) throw new Error('Invalid response structure from Gemini API');
+      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!jsonMatch?.[1]) throw new Error('Failed to extract JSON from AI response.');
+      return JSON.parse(jsonMatch[1]);
+    } catch (error) {
+       if (error.message.includes("Retryable")) {
+            attempts++;
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+       } else {
+           throw error;
+       }
+    }
+  }
+  throw new Error("The AI model is currently overloaded after multiple retries.");
+}
+
+// --- TOOL-SPECIFIC: Type Definitions ---
+interface DiscoveryRequest {
+    projectId: string;
     industry: string;
     topic?: string;
     existingCompetitors?: string[];
     userDescription?: string;
-    projectId: string;
 }
 
-interface Competitor {
-    name: string;
-    url: string;
-    domainAuthority: number | null;
-    relevanceScore: number;
-    explanation: string;
-}
-
-// --- Database Logging Helpers ---
-async function logToolRun({ supabase, projectId, toolName, inputPayload }: { supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object }) {
-  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging tool run:', error); return null; }
-  return data.id;
-}
-
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null }) {
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output: errorMessage ? { error: errorMessage } : outputPayload || null
-  };
-  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating tool run:', error); }
-}
-
-const getRelevancePrompt = (competitors: any[], payload: CompetitorDiscoveryPayload): string => {
-    const jsonSchema = `
-    {
-      "competitors": [
-        {
-          "url": "string (The competitor's URL)",
-          "relevanceScore": "number (0-100, how relevant this competitor is based on the user's request)",
-          "explanation": "string (A brief 1-sentence explanation of why this competitor is relevant)"
-        }
-      ]
-    }
-    `;
-
-    return `
-    You are an expert Market Analyst Bot. Your task is to analyze a list of potential competitors and determine their relevance to the user's business.
-
-    **Analysis Task:**
+// --- TOOL-SPECIFIC: AI Prompt ---
+const getRelevancePrompt = (competitors: any[], payload: DiscoveryRequest): string => {
+    const jsonSchema = `{
+      "competitors": [{
+          "url": "string (The competitor's URL from the list)",
+          "relevanceScore": "number (0-100, how relevant this competitor is)",
+          "explanation": "string (A brief 1-sentence explanation of why)"
+      }]
+    }`;
+    return `You are an expert Market Analyst. Analyze the list of potential competitors and determine their relevance to the user.
     - **User's Industry:** ${payload.industry}
     - **User's Topic:** ${payload.topic || 'Not specified'}
     - **User's Description:** ${payload.userDescription || 'Not specified'}
-    - **Potential Competitors (from Google Search):**
-      ---
-      ${JSON.stringify(competitors.map(c => ({ title: c.title, link: c.link, snippet: c.snippet })), null, 2)}
-      ---
+    - **Potential Competitors (from Google Search):** ${JSON.stringify(competitors.map(c => ({ title: c.title, link: c.link, snippet: c.snippet })), null, 2)}
 
-    **Your Instructions:**
-    1.  Review the user's details and the list of potential competitors.
-    2.  For each competitor, assign a 'relevanceScore' from 0 to 100.
-    3.  Provide a brief 'explanation' for your score.
+    **Instructions:**
+    1. Review the user's details and the list of potential competitors.
+    2. For each competitor, assign a 'relevanceScore' from 0 to 100.
+    3. Provide a brief 'explanation' for your score.
 
-    **Output Format:**
-    You MUST provide a response in a single, valid JSON object. Do not include any text or formatting outside of the JSON object. The JSON object must strictly adhere to the following schema:
+    **CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+    The JSON object must follow this exact schema:
     \`\`\`json
     ${jsonSchema}
     \`\`\`
-
-    Now, perform your expert market analysis.
-    `;
+    If a competitor is not relevant, give it a low score. Analyze the list now.`;
 };
 
-export const competitorDiscoveryService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
-    let runId;
-    try {
-        const payload: CompetitorDiscoveryPayload = await req.json();
-        const { industry, topic, existingCompetitors = [], projectId } = payload;
+// --- TOOL-SPECIFIC: Main Logic ---
+const competitorDiscoveryToolLogic = async (req: Request, { user, supabaseClient, supabaseAdminClient }: { user: any, supabaseClient: SupabaseClient, supabaseAdminClient: SupabaseClient }) => {
+  let runId: string | null = null;
+  try {
+    const payload: DiscoveryRequest = await req.json();
+    const { projectId, industry, topic, existingCompetitors = [] } = payload;
 
-        runId = await logToolRun({ supabase, projectId, toolName: 'competitor-discovery', inputPayload: payload });
-
-        if (!industry && !topic) {
-            throw new Error('Either `industry` or `topic` is required.');
-        }
-
-        const googleApiKey = Deno.env.get('GOOGLE_SEARCH_API_KEY');
-        const googleCx = Deno.env.get('GOOGLE_SEARCH_ENGINE_ID');
-        const mozAccessId = Deno.env.get('MOZ_ACCESS_ID');
-        const mozSecretKey = Deno.env.get('MOZ_SECRET_KEY');
-        const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-
-        if (!googleApiKey || !googleCx || !mozAccessId || !mozSecretKey || !geminiApiKey) {
-            throw new Error('Required API keys are not configured as secrets.');
-        }
-
-        const searchQuery = `top ${industry || ''} ${topic || ''} companies`;
-        const googleUrl = `https://www.googleapis.com/customsearch/v1?key=${googleApiKey}&cx=${googleCx}&q=${encodeURIComponent(searchQuery)}`;
-
-        const googleResponse = await fetch(googleUrl);
-        if (!googleResponse.ok) throw new Error(`Google Search API failed: ${googleResponse.statusText}`);
-        const searchResults = await googleResponse.json();
-
-        const potentialCompetitors = searchResults.items
-            ?.filter((item: any) => item.link && !existingCompetitors.some(existing => item.link.includes(existing)))
-            .slice(0, 15) || [];
-
-        const relevancePrompt = getRelevancePrompt(potentialCompetitors, payload);
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: relevancePrompt }] }],
-                generationConfig: { response_mime_type: "application/json", temperature: 0.3, maxOutputTokens: 4096 }
-            })
-        });
-
-        if (!geminiResponse.ok) throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
-        const geminiData = await geminiResponse.json();
-
-        interface RelevanceInfo {
-            url: string;
-            relevanceScore: number;
-            explanation: string;
-        }
-
-        interface RelevanceAnalysis {
-            competitors: RelevanceInfo[];
-        }
-
-        const relevanceAnalysis: RelevanceAnalysis = JSON.parse(geminiData.candidates[0].content.parts[0].text);
-        const relevanceMap = new Map(relevanceAnalysis.competitors.map((c) => [c.url, c]));
-
-        const competitors: Competitor[] = [];
-        for (const competitor of potentialCompetitors) {
-            try {
-                const url = competitor.link;
-                const domain = new URL(url).hostname;
-                const expires = Math.floor(Date.now() / 1000) + 300;
-                const sig = createHmac('sha1', mozSecretKey).update(`${mozAccessId}\n${expires}`).digest('base64');
-                const mozUrl = `https://lsapi.seomoz.com/v2/url_metrics?cols=4&url=${encodeURIComponent(domain)}&AccessID=${mozAccessId}&Expires=${expires}&Signature=${sig}`;
-
-                const mozResponse = await fetch(mozUrl);
-                let domainAuthority = null;
-                if (mozResponse.ok) {
-                    const mozData = await mozResponse.json();
-                    domainAuthority = mozData?.domain_authority || null;
-                }
-
-                const relevanceInfo = relevanceMap.get(url);
-                if (relevanceInfo) {
-                    competitors.push({
-                        name: competitor.title || domain,
-                        url: url,
-                        domainAuthority: domainAuthority,
-                        relevanceScore: relevanceInfo.relevanceScore,
-                        explanation: relevanceInfo.explanation,
-                    });
-                }
-            } catch (e) {
-                if (e instanceof Error) {
-                    console.error(`Failed to process competitor URL ${competitor.link}:`, e.message);
-                }
-            }
-        }
-
-        // Sort by relevance score
-        competitors.sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-        const output = { competitorSuggestions: competitors.slice(0, 10) };
-
-        await updateToolRun({ supabase, runId, status: 'completed', outputPayload: output, errorMessage: null });
-
-        return new Response(JSON.stringify({ success: true, data: output }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        if(runId) {
-            await updateToolRun({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
-        }
-        return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    if (!projectId || (!industry && !topic)) {
+      throw new Error('`projectId` and either `industry` or `topic` are required.');
     }
+    console.log(`Competitor discovery for project ${projectId}`);
+
+    const { data: project, error: projectError } = await supabaseClient.from('projects').select('id').eq('id', projectId).single();
+    if (projectError || !project) throw new Error(`Access denied or project not found for id: ${projectId}`);
+
+    runId = await logToolRun(supabaseAdminClient, projectId, 'competitor-discovery', payload);
+    console.log(`Tool run logged with ID: ${runId}`);
+
+    const googleApiKey = Deno.env.get('GOOGLE_SEARCH_API_KEY');
+    const googleCx = Deno.env.get('GOOGLE_SEARCH_ENGINE_ID');
+    const mozAccessId = Deno.env.get('MOZ_ACCESS_ID');
+    const mozSecretKey = Deno.env.get('MOZ_SECRET_KEY');
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!googleApiKey || !googleCx || !mozAccessId || !mozSecretKey || !geminiApiKey) {
+        throw new Error('Required API keys (Google, Moz, Gemini) are not configured.');
+    }
+
+    const searchQuery = `top ${industry || ''} ${topic || ''} companies`;
+    const googleUrl = `https://www.googleapis.com/customsearch/v1?key=${googleApiKey}&cx=${googleCx}&q=${encodeURIComponent(searchQuery)}`;
+    const googleResponse = await fetch(googleUrl);
+    if (!googleResponse.ok) throw new Error(`Google Search API failed: ${googleResponse.statusText}`);
+    const searchResults = await googleResponse.json();
+
+    const potentialCompetitors = searchResults.items
+        ?.filter((item: any) => item.link && !existingCompetitors.some(existing => item.link.includes(existing)))
+        .slice(0, 15) || [];
+
+    if (potentialCompetitors.length === 0) {
+        await updateToolRun(supabaseAdminClient, runId, 'completed', { competitorSuggestions: [] }, null);
+        return createSuccessResponse({ runId, competitorSuggestions: [] });
+    }
+
+    const relevancePrompt = getRelevancePrompt(potentialCompetitors, payload);
+    const relevanceAnalysis = await callGeminiWithRetry(relevancePrompt, geminiApiKey);
+    const relevanceMap = new Map(relevanceAnalysis.competitors.map((c: any) => [c.url, c]));
+
+    const competitors = [];
+    for (const competitor of potentialCompetitors) {
+        try {
+            const url = competitor.link;
+            const relevanceInfo = relevanceMap.get(url);
+            if (!relevanceInfo || relevanceInfo.relevanceScore < 30) continue; // Skip irrelevant results
+
+            const domain = new URL(url).hostname;
+            const expires = Math.floor(Date.now() / 1000) + 300;
+            const sig = createHmac('sha1', mozSecretKey).update(`${mozAccessId}\n${expires}`).digest('base64');
+            const mozUrl = `https://lsapi.seomoz.com/v2/url_metrics?cols=4&url=${encodeURIComponent(domain)}&AccessID=${mozAccessId}&Expires=${expires}&Signature=${sig}`;
+
+            const mozResponse = await fetch(mozUrl);
+            const mozData = mozResponse.ok ? await mozResponse.json() : null;
+
+            competitors.push({
+                name: competitor.title || domain,
+                url: url,
+                domainAuthority: mozData?.domain_authority || null,
+                relevanceScore: relevanceInfo.relevanceScore,
+                explanation: relevanceInfo.explanation,
+            });
+        } catch (e) {
+            console.error(`Failed to process competitor URL ${competitor.link}:`, e.message);
+        }
+    }
+
+    competitors.sort((a, b) => b.relevanceScore - a.relevanceScore);
+    const output = { competitorSuggestions: competitors.slice(0, 10) };
+
+    await updateToolRun(supabaseAdminClient, runId, 'completed', output, null);
+    console.log('Competitor discovery complete.');
+    return createSuccessResponse({ runId, ...output });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+    console.error('Competitor discovery error:', err);
+    if (runId) {
+      await updateToolRun(supabaseAdminClient, runId, 'error', null, errorMessage);
+    }
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
 };
 
-Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
-    }
-
-    const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    return await competitorDiscoveryService(req, supabase);
-});
+// --- Server ---
+Deno.serve((req) => serviceHandler(req, competitorDiscoveryToolLogic));
