@@ -30,7 +30,7 @@ function App() {
 
 // Main content component with simplified state and effects
 function AppContent() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [userPlan, setUserPlan] = useState<'free' | 'core' | 'pro' | 'agency'>('free');
   const [loading, setLoading] = useState(true);
@@ -53,10 +53,11 @@ function AppContent() {
     if (currentUser) {
       console.log('User found, fetching profile...');
       try {
+        // FIX: Fetch the user's profile AND their associated websites in one query.
         const { data: profile, error } = await Promise.race([
           supabase
             .from('user_profiles')
-            .select('*')
+            .select('*, websites(*)') // This now includes the websites
             .eq('user_id', currentUser.id)
             .single(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
@@ -66,7 +67,7 @@ function AppContent() {
           console.error('Error fetching profile:', error);
         }
 
-        console.log('Profile fetched:', profile);
+        console.log('Profile fetched (with websites):', profile);
 
         if (profile) {
           setUserProfile(profile);
@@ -232,7 +233,7 @@ function AppContent() {
 
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('*')
+        .select('*, websites(*)')
         .eq('user_id', currentUser.id)
         .single();
       
