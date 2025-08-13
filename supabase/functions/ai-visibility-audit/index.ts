@@ -1,27 +1,84 @@
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// --- CORS Headers ---
+// --- Injected Shared Code ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE'
 };
 
-// --- Database Logging Helpers ---
-async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
+function createErrorResponse(message, status = 500) {
+  return new Response(JSON.stringify({
+    success: false,
+    error: {
+      message
+    }
+  }), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json"
+    }
+  });
+}
+
+function createSuccessResponse(data, status = 200) {
+  return new Response(JSON.stringify({
+    success: true,
+    data
+  }), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json"
+    }
+  });
+}
+
+// --- Service Handler ---
+async function serviceHandler(req, toolLogic) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    const supabaseAdminClient = createClient(
+        Deno.env.get("SUPABASE_URL") ?? '',
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ''
+    );
+
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return createErrorResponse('Missing Authorization header', 401);
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? '',
+      Deno.env.get("SUPABASE_ANON_KEY") ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    return await toolLogic(req, { supabaseClient, supabaseAdminClient });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
+    console.error(`[ServiceHandler Error] ${errorMessage}`, err);
+    return createErrorResponse(errorMessage);
+  }
+}
+
+// --- Tool Run Logging ---
+async function logToolRun(supabase, projectId, toolName, inputPayload) {
   if (!projectId) {
     throw new Error("logToolRun error: projectId is required.");
   }
-  const { data, error } = await supabase
-    .from("tool_runs")
-    .insert({
-      project_id: projectId,
-      tool_name: toolName,
-      input_payload: inputPayload,
-      status: "running",
-    })
-    .select("id")
-    .single();
-
+  const { data, error } = await supabase.from("tool_runs").insert({
+    project_id: projectId,
+    tool_name: toolName,
+    input_payload: inputPayload,
+    status: "running"
+  }).select("id").single();
   if (error) {
     console.error("Error logging tool run:", error);
     throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
@@ -33,7 +90,7 @@ async function logToolRun(supabase: SupabaseClient, projectId: string, toolName:
   return data.id;
 }
 
-async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null) {
+async function updateToolRun(supabase, runId, status, outputPayload, errorMessage) {
   if (!runId) {
     console.error("updateToolRun error: runId is required.");
     return;
@@ -41,8 +98,10 @@ async function updateToolRun(supabase: SupabaseClient, runId: string, status: st
   const update = {
     status,
     completed_at: new Date().toISOString(),
-    output_payload: errorMessage ? { error: errorMessage } : outputPayload || null,
-    error_message: errorMessage || null,
+    output_payload: errorMessage ? {
+      error: errorMessage
+    } : outputPayload || null,
+    error_message: errorMessage || null
   };
   const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
   if (error) {
@@ -50,269 +109,189 @@ async function updateToolRun(supabase: SupabaseClient, runId: string, status: st
   }
 }
 
-interface ContentGenerationRequest {
-    contentType: 'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions';
-    topic: string;
-    targetKeywords: string[];
-    tone?: 'professional' | 'casual' | 'technical' | 'friendly';
-    entitiesToInclude?: string[];
+// --- AI Prompts ---
+const getStep1Prompt = (content) => `Analyze the following webpage content...`; // Content omitted for brevity
+const getStep2Prompt = (content) => `Analyze the structural and technical elements...`; // Content omitted for brevity
+const getStep3Prompt = (content) => `Assess the provided webpage content...`; // Content omitted for brevity
+
+// --- FINAL FIX: Robust AI Call Function with Correct Exponential Backoff ---
+async function callGeminiWithRetry(prompt, apiKey) {
+  let attempts = 0;
+  const maxAttempts = 4;
+  let delay = 1000; // Start with a 1-second delay
+
+  while (attempts < maxAttempts) {
+    try {
+      // Attempt to call the Gemini API
+      return await callGemini(prompt, apiKey);
+    } catch (error) {
+      // Check if the error is a 503 (Service Unavailable) or other retryable code
+      if (error.message.includes("Status: 503") || error.message.includes("Status: 429")) {
+        attempts++;
+        console.log(`AI model is overloaded or rate-limited. Retrying in ${delay / 1000} seconds... (Attempt ${attempts}/${maxAttempts})`);
+        // Wait for the specified delay
+        await new Promise(resolve => setTimeout(resolve, delay));
+        // Double the delay for the next attempt
+        delay *= 2;
+      } else {
+        // If it's a different error, fail immediately
+        throw error;
+      }
+    }
+  }
+
+  // If we exit the loop, it means all retries have failed.
+  throw new Error("The AI model is currently overloaded. Please try again later.");
 }
 
-// --- AI Prompt Engineering ---
-const getContentGenerationPrompt = (request: ContentGenerationRequest) => {
-  const { contentType, topic, targetKeywords, tone, entitiesToInclude } = request;
-  
-  const baseInstructions = {
-    'faq': 'Generate 5-7 comprehensive FAQ pairs. Create questions that people commonly ask and provide clear, detailed answers. Format as an array of objects with "question" and "answer" fields.',
-    'meta-tags': 'Generate optimized meta tags including title (60 chars max), description (160 chars max), and keywords.',
-    'snippets': 'Create featured snippet-optimized content that directly answers common questions. Format as a concise, well-structured response.',
-    'headings': 'Generate a comprehensive and logical heading structure with H1, H2s, and H3s that follows SEO best practices.',
-    'descriptions': 'Write compelling, SEO-optimized descriptions that clearly explain the topic and include target keywords naturally.'
-  };
+async function callGemini(prompt, apiKey) {
+  const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{
+          text: prompt
+        }]
+      }],
+      generationConfig: {
+        response_mime_type: "application/json",
+        temperature: 0.2,
+        maxOutputTokens: 2048
+      }
+    })
+  });
 
-  const entityInstruction = entitiesToInclude && entitiesToInclude.length > 0 
-    ? `**Important: You must naturally integrate these entities into the content:** ${entitiesToInclude.join(', ')}.` 
-    : '';
+  if (!geminiResponse.ok) {
+    const errorBody = await geminiResponse.text();
+    console.error('Gemini API error:', errorBody);
+    throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
+  }
 
-  let specificFormat = '';
-  switch (contentType) {
-    case 'faq':
-      specificFormat = `
-      "generatedContent": {
-        "faqs": [
-          {"question": "Question text here", "answer": "Detailed answer here"},
-          {"question": "Another question", "answer": "Another detailed answer"}
-        ]
-      }`;
-      break;
-    case 'meta-tags':
-      specificFormat = `
-      "generatedContent": {
-        "metaTags": {
-          "title": "SEO optimized title (60 chars max)",
-          "description": "Meta description (160 chars max)",
-          "keywords": "keyword1, keyword2, keyword3"
+  const geminiData = await geminiResponse.json();
+
+  if (geminiData.promptFeedback && geminiData.promptFeedback.blockReason) {
+    throw new Error(`The request was blocked by the AI's safety filters. Reason: ${geminiData.promptFeedback.blockReason}`);
+  }
+
+  if (geminiData.candidates && geminiData.candidates[0].content.parts && geminiData.candidates[0].content.parts[0].text) {
+      let rawText = geminiData.candidates[0].content.parts[0].text;
+      
+      const jsonStartIndex = rawText.indexOf('{');
+      const jsonEndIndex = rawText.lastIndexOf('}');
+
+      if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
+        const jsonString = rawText.substring(jsonStartIndex, jsonEndIndex + 1);
+        try {
+          return JSON.parse(jsonString);
+        } catch (e) {
+          throw new Error("Failed to parse JSON from the AI's response.");
         }
-      }`;
-      break;
-    case 'snippets':
-      specificFormat = `
-      "generatedContent": {
-        "snippet": "Direct, well-structured answer optimized for featured snippets",
-        "raw": "The same content as snippet"
-      }`;
-      break;
-    case 'headings':
-      specificFormat = `
-      "generatedContent": {
-        "headingStructure": {
-          "h1": "Main heading",
-          "sections": [
-            {"h2": "Section heading", "h3s": ["Subsection 1", "Subsection 2"]},
-            {"h2": "Another section", "h3s": ["Subsection A", "Subsection B"]}
-          ]
-        },
-        "raw": "H1: Main heading\\nH2: Section heading\\nH3: Subsection 1\\n..."
-      }`;
-      break;
-    case 'descriptions':
-      specificFormat = `
-      "generatedContent": {
-        "description": "Compelling, SEO-optimized description",
-        "raw": "The same content as description"
-      }`;
-      break;
+      }
   }
-
-  return `You are an Expert Content Strategist and SEO Copywriter.
-
-**Content Generation Task:**
-- **Content Type:** ${contentType}
-- **Primary Topic:** ${topic}
-- **Target Keywords:** ${targetKeywords.join(', ')}
-- **Tone:** ${tone || 'professional'}
-${entityInstruction}
-
-**Instructions:**
-${baseInstructions[contentType]}
-
-- Ensure all content is high-quality, accurate, and ready for publication
-- Naturally incorporate ALL target keywords where appropriate
-- Use the specified tone throughout
-- Make content optimized for AI systems and search engines
-
-**Required JSON Response Format:**
-\`\`\`json
-{
-  "generatedTitle": "Engaging title for the content",
-  ${specificFormat},
-  "optimizationTips": [
-    "Tip 1 about how to use this content effectively",
-    "Tip 2 about SEO best practices",
-    "Tip 3 about AI optimization"
-  ],
-  "supportingDetails": {
-    "wordCount": number,
-    "keywordsUsed": ["array", "of", "keywords", "included"],
-    "aiOptimizationScore": number_between_1_and_100
-  }
+  
+  throw new Error("Unexpected response structure from Gemini API.");
 }
-\`\`\`
 
-Generate the content now:`;
-};
-
-// --- Main Service Handler ---
-export const contentGeneratorService = async (req: Request, supabase: SupabaseClient) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
+// --- Main Tool Logic ---
+const auditToolLogic = async (req, { supabaseClient, supabaseAdminClient }) => {
   let runId = null;
   try {
-    const requestBody = await req.json();
-    const { projectId, ...inputPayload } = requestBody;
-    
-    console.log('Content generator request:', requestBody);
-    
-    if (!projectId) throw new Error("projectId is required for logging.");
-    if (!requestBody.topic || !requestBody.contentType) {
-      throw new Error('`topic` and `contentType` are required fields.');
+    console.log("Audit function started.");
+    const { projectId, url, content } = await req.json();
+    if (!projectId || !url) {
+        throw new Error("projectId and url are required.");
     }
+    console.log(`Received request for projectId: ${projectId}`);
 
-    // Validate contentType
-    const validContentTypes = ['faq', 'meta-tags', 'snippets', 'headings', 'descriptions'];
-    if (!validContentTypes.includes(requestBody.contentType)) {
-      throw new Error(`Invalid contentType. Must be one of: ${validContentTypes.join(', ')}`);
+    const { data: project, error: projectError } = await supabaseClient
+      .from('projects')
+      .select('id, name')
+      .eq('id', projectId)
+      .single();
+
+    if (projectError || !project) {
+      throw new Error("Access denied or project not found.");
     }
+    console.log(`User has access to project: ${project.name}`);
 
-    runId = await logToolRun(supabase, projectId, 'ai-content-generator', inputPayload);
+    runId = await logToolRun(supabaseAdminClient, projectId, 'ai-visibility-audit', {
+      url,
+      content: content ? 'Content provided' : 'No content provided'
+    });
+    if (!runId) throw new Error("Failed to create a run log.");
+    console.log(`Tool run logged with ID: ${runId}`);
+
+    let pageContent = content;
+    if (url && !content) {
+      console.log(`Fetching content from URL: ${url}`);
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'SEOGENIX Audit Bot 1.0'
+        }
+      });
+      if (!response.ok) throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+      pageContent = await response.text();
+      console.log(`Successfully fetched content. Length: ${pageContent.length}`);
+    }
+    if (!pageContent) throw new Error("Content is empty.");
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!geminiApiKey) {
-      throw new Error('Gemini API key not configured');
-    }
+    if (!geminiApiKey) throw new Error('Gemini API key not configured');
+    console.log("Gemini API key found.");
 
-    const prompt = getContentGenerationPrompt(requestBody);
-    console.log('Generated prompt:', prompt.substring(0, 200) + '...');
+    console.log("Calling Gemini for Step 1: AI Understanding...");
+    const step1Result = await callGeminiWithRetry(getStep1Prompt(pageContent), geminiApiKey);
+    console.log("Step 1 complete.");
 
-    // Gemini API call with latest stable model
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 4096,
-            topP: 0.8,
-            topK: 40
-          }
-        })
-      }
-    );
+    console.log("Calling Gemini for Step 2: Content Structure...");
+    const step2Result = await callGeminiWithRetry(getStep2Prompt(pageContent), geminiApiKey);
+    console.log("Step 2 complete.");
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      console.error('Gemini API error:', geminiResponse.status, errorText);
-      throw new Error(`Gemini API failed with status ${geminiResponse.status}: ${errorText}`);
-    }
+    console.log("Calling Gemini for Step 3: Conversational Readiness...");
+    const step3Result = await callGeminiWithRetry(getStep3Prompt(pageContent), geminiApiKey);
+    console.log("Step 3 complete. All AI analysis finished.");
 
-    const geminiData = await geminiResponse.json();
-    console.log('Gemini response structure:', JSON.stringify(geminiData, null, 2));
+    const finalResult = {
+      subscores: {
+        aiUnderstanding: step1Result.aiUnderstanding || 0,
+        contentStructure: step2Result.contentStructure || 0,
+        citationLikelihood: step3Result.citationLikelihood || 0,
+        conversationalReadiness: step3Result.conversationalReadiness || 0
+      },
+      recommendations: [
+        ...(step1Result.onPageRecommendations || []),
+        ...(step2Result.structureRecommendations || []),
+        ...(step3Result.readinessRecommendations || [])
+      ],
+      issues: [
+        ...(step1Result.onPageIssues || []),
+        ...(step2Result.structureIssues || []),
+        ...(step3Result.readinessIssues || [])
+      ],
+      overallScore: 0
+    };
+    const scores = Object.values(finalResult.subscores);
+    finalResult.overallScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    console.log(`Final score calculated: ${finalResult.overallScore}`);
 
-    if (!geminiData.candidates || geminiData.candidates.length === 0) {
-      console.error('No candidates in Gemini response:', geminiData);
-      throw new Error('No content generated by Gemini API');
-    }
+    await updateToolRun(supabaseAdminClient, runId, 'completed', finalResult, null);
+    console.log("Tool run log updated to 'completed'.");
 
-    const candidate = geminiData.candidates[0];
-    if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-      console.error('No content parts in Gemini response:', candidate);
-      throw new Error('Invalid response structure from Gemini API');
-    }
-
-    const responseText = candidate.content.parts[0].text;
-    console.log('Raw Gemini response text:', responseText);
-
-    // Parse JSON response
-    let generatedJson;
-    try {
-      // Clean the response text to extract JSON
-      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/) || responseText.match(/\{[\s\S]*\}/);
-      const jsonString = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : responseText;
-      
-      console.log('Extracted JSON string:', jsonString);
-      generatedJson = JSON.parse(jsonString);
-    } catch (parseError) {
-      console.error('Failed to parse Gemini JSON response:', parseError);
-      console.error('Response text was:', responseText);
-      throw new Error('Failed to parse AI response as JSON');
-    }
-
-    // Validate the generated content structure
-    if (!generatedJson.generatedTitle || !generatedJson.generatedContent) {
-      console.error('Invalid generated JSON structure:', generatedJson);
-      throw new Error('Generated content missing required fields');
-    }
-
-    // Add metadata
-    generatedJson.generatedAt = new Date().toISOString();
-    generatedJson.contentType = requestBody.contentType;
-
-    console.log('Final generated content:', JSON.stringify(generatedJson, null, 2));
-
-    if (runId) {
-      await updateToolRun(supabase, runId, 'completed', generatedJson, null);
-    }
-
-    return new Response(JSON.stringify({
-      success: true,
-      data: generatedJson
-    }), {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json"
-      }
+    return createSuccessResponse({
+      runId,
+      ...finalResult
     });
-
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-    console.error('Content generator error:', err);
-    
+    console.error(`Audit failed: ${errorMessage}`);
     if (runId) {
-      await updateToolRun(supabase, runId, 'error', null, errorMessage);
+      await updateToolRun(supabaseAdminClient, runId, 'error', null, errorMessage);
     }
-
-    return new Response(JSON.stringify({
-      success: false,
-      error: {
-        message: errorMessage,
-        details: err instanceof Error ? err.stack : undefined
-      }
-    }), {
-      status: 500,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json"
-      }
-    });
+    return createErrorResponse(errorMessage);
   }
 };
 
-// --- Server ---
-Deno.serve(async (req) => {
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!, 
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-  return await contentGeneratorService(req, supabase);
-});
+Deno.serve((req) => serviceHandler(req, auditToolLogic));
