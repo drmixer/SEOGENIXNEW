@@ -128,26 +128,16 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
 
       const botMessage: Message = {
         type: 'bot',
-        content: response.response,
+        content: response.data.responseText,
         timestamp: new Date(),
-        actionSuggestions: response.actionSuggestions || []
+        actionSuggestions: response.data.suggestedFollowUps?.map((suggestion: string) => ({
+          type: 'suggestion',
+          label: suggestion,
+        })) || []
       };
 
       setMessages(prev => [...prev, botMessage]);
       scrollToBottom();
-
-      // Add proactive suggestions if any
-      if (response.proactiveSuggestions && response.proactiveSuggestions.length > 0) {
-        setTimeout(() => {
-          const suggestionMessage: Message = {
-            type: 'bot',
-            content: `💡 Suggestion: ${response.proactiveSuggestions[0]}`,
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, suggestionMessage]);
-          scrollToBottom();
-        }, 2000);
-      }
 
     } catch (error) {
       console.error('Chat error:', error);
