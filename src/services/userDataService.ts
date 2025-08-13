@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 export interface UserProfile {
   id: string;
   user_id: string;
-  websites: Array<{ url: string; name: string }>;
+  // FIX: This now reflects the structure from the 'projects' table
+  websites: Array<{ id: string; url: string; name: string }>; 
   competitors: Array<{ url: string; name: string }>;
   industry?: string;
   business_description?: string;
@@ -119,72 +120,77 @@ export const userDataService = {
       return null;
     }
     
-    try {
-      // Generate a unique request key
-      const requestKey = `profile:${userId}`;
-      
-      // Check if there's already a pending request for this profile
-      if (pendingRequests.has(requestKey) && !forceRefresh) {
-        console.log('Request already in progress for profile, returning existing promise');
-        return pendingRequests.get(requestKey);
+    const requestKey = `profile:${userId}`;
+    
+    if (pendingRequests.has(requestKey) && !forceRefresh) {
+      console.log('Request already in progress for profile, returning existing promise');
+      return pendingRequests.get(requestKey);
+    }
+    
+    const cachedData = profileCache.get(userId);
+    if (!forceRefresh && cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
+      console.log('Returning cached profile for user:', userId);
+      return cachedData.profile;
+    }
+    
+    if (forceRefresh) {
+      console.log('Forcing profile refresh for user:', userId);
+    }
+
+    // FIX: This function now fetches the profile and projects separately and combines them.
+    const profilePromise = (async () => {
+      // Step 1: Fetch the core user profile from 'user_profiles'
+      const { data: profileData, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (profileError) {
+        console.error('Error fetching user profile:', profileError);
+        throw profileError;
+      }
+
+      if (!profileData) {
+        console.log('No profile found for user:', userId);
+        return null;
+      }
+
+      // Step 2: Fetch the user's websites from the 'projects' table using 'owner_id'
+      const { data: websites, error: websitesError } = await supabase
+        .from('projects')
+        .select('id, name, url')
+        .eq('owner_id', userId);
+
+      if (websitesError) {
+        console.error('Error fetching user websites from projects:', websitesError);
+        throw websitesError;
       }
       
-      console.log('Fetching user profile for userId:', userId);
-      
-      // Check cache first
-      const cachedData = profileCache.get(userId);
-      if (!forceRefresh && cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
-        console.log('Returning cached profile for user:', userId);
-        return cachedData.profile;
-      }
-      
-      if (forceRefresh) {
-        console.log('Forcing profile refresh for user:', userId);
-      }
+      // Step 3: Combine the profile and websites into a single, complete object
+      const completeProfile = {
+        ...profileData,
+        websites: websites || []
+      };
 
-      // Create a promise for this request
-      const profilePromise = (async () => {
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        if (error) {
-          console.error('Error fetching user profile:', error);
-          throw error;
-        }
-
-        if (!data || data.length === 0) {
-          console.log('No profile found for user:', userId);
-          return null;
-        }
-
-        console.log('Successfully fetched user profile:', data[0].id);
-        
-        // Cache the result
-        profileCache.set(userId, {
-          profile: data[0],
-          timestamp: Date.now()
-        });
-        
-        return data[0];
-      })();
+      console.log('Successfully fetched complete user profile:', completeProfile.id);
       
-      // Store the promise in the pending requests map
-      pendingRequests.set(requestKey, profilePromise);
-      
-      // Clean up the pending request after it completes
-      profilePromise.finally(() => {
-        pendingRequests.delete(requestKey);
+      // Cache the combined result
+      profileCache.set(userId, {
+        profile: completeProfile as UserProfile,
+        timestamp: Date.now()
       });
       
-      return profilePromise;
-    } catch (error) {
-      console.error('Error in getUserProfile:', error);
-      throw error; // Re-throw to allow caller to handle
-    }
+      return completeProfile as UserProfile;
+    })();
+    
+    pendingRequests.set(requestKey, profilePromise);
+    
+    profilePromise.finally(() => {
+      pendingRequests.delete(requestKey);
+    });
+    
+    return profilePromise;
   },
 
   async createUserProfile(profile: Partial<UserProfile>): Promise<UserProfile | null> {
@@ -196,10 +202,9 @@ export const userDataService = {
     try {
       console.log('Creating user profile:', profile);
       
-      // First check if a profile already exists
       const { data: existingProfiles } = await supabase
         .from('user_profiles')
-        .select('*')
+        .select('user_id')
         .eq('user_id', profile.user_id as string);
         
       if (existingProfiles && existingProfiles.length > 0) {
@@ -207,6 +212,8 @@ export const userDataService = {
         return this.updateUserProfile(profile.user_id as string, profile);
       }
       
+      // Note: This only creates the profile, not the projects.
+      // The SettingsModal now handles project creation separately.
       const { data, error } = await supabase
         .from('user_profiles')
         .insert(profile)
@@ -220,11 +227,8 @@ export const userDataService = {
 
       console.log('Successfully created user profile:', data);
       
-      // Update cache
-      profileCache.set(profile.user_id as string, {
-        profile: data,
-        timestamp: Date.now()
-      });
+      // The cache will be populated by the next call to getUserProfile
+      this.clearCache(profile.user_id);
       
       return data;
     } catch (error) {
@@ -242,25 +246,14 @@ export const userDataService = {
     try {
       console.log('Updating user profile for userId:', userId, 'with updates:', updates);
       
-      // Get the profile ID first
-      const { data: profiles } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1);
-        
-      if (!profiles || profiles.length === 0) {
-        console.log('No profile found to update, creating new one');
-        return this.createUserProfile({ user_id: userId, ...updates });
-      }
-      
-      const profileId = profiles[0].id;
-      
+      // The 'websites' field is no longer stored on user_profiles, so we remove it
+      // from the updates object if it exists, to prevent errors.
+      const { websites, ...profileUpdates } = updates;
+
       const { data, error } = await supabase
         .from('user_profiles')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', profileId)
+        .update({ ...profileUpdates, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
         .select()
         .single();
 
@@ -271,11 +264,8 @@ export const userDataService = {
 
       console.log('Successfully updated user profile:', data);
       
-      // Update cache
-      profileCache.set(userId, {
-        profile: data,
-        timestamp: Date.now()
-      });
+      // FIX: Invalidate the cache by forcing a refresh, which will get the new combined profile.
+      await this.getUserProfile(userId, true);
       
       return data;
     } catch (error) {
@@ -302,7 +292,6 @@ export const userDataService = {
         throw error;
       }
 
-      // Return null if no settings found, otherwise return the first result
       return data && data.length > 0 ? data[0] : null;
     } catch (error) {
       console.error('Error fetching white-label settings:', error);
@@ -591,11 +580,9 @@ export const userDataService = {
 
       console.log('Successfully saved audit result:', data);
       
-      // Invalidate audit history cache for this user
       const cacheKey = `audit:${auditResult.user_id}`;
       auditHistoryCache.delete(cacheKey);
       
-      // Also invalidate website-specific cache if applicable
       if (auditResult.website_url) {
         const websiteCacheKey = `audit:${auditResult.user_id}:${auditResult.website_url}`;
         auditHistoryCache.delete(websiteCacheKey);
@@ -615,27 +602,22 @@ export const userDataService = {
     }
     
     try {
-      // Generate a unique request key
       const requestKey = `audit:${userId}:${limit}`;
       
-      // Check if there's already a pending request for this audit history
       if (pendingRequests.has(requestKey)) {
         console.log('Request already in progress for audit history, returning existing promise');
         return pendingRequests.get(requestKey);
       }
       
-      // Check cache first
       const cacheKey = `audit:${userId}`;
       const cachedData = auditHistoryCache.get(cacheKey);
       if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
         console.log('Returning cached audit history for user:', userId);
-        // Return a slice of the cached data based on the requested limit
         return cachedData.data.slice(0, limit);
       }
       
       console.log('Fetching audit history for userId:', userId, 'limit:', limit);
       
-      // Create a promise for this request
       const auditPromise = (async () => {
         const { data, error } = await supabase
           .from('audit_history')
@@ -651,7 +633,6 @@ export const userDataService = {
 
         console.log('Successfully fetched audit history:', data?.length || 0, 'entries');
         
-        // Cache the full result
         auditHistoryCache.set(cacheKey, {
           data: data || [],
           timestamp: Date.now()
@@ -660,10 +641,8 @@ export const userDataService = {
         return data || [];
       })();
       
-      // Store the promise in the pending requests map
       pendingRequests.set(requestKey, auditPromise);
       
-      // Clean up the pending request after it completes
       auditPromise.finally(() => {
         pendingRequests.delete(requestKey);
       });
@@ -682,27 +661,22 @@ export const userDataService = {
     }
     
     try {
-      // Generate a unique request key
       const requestKey = `audit:${userId}:${websiteUrl}:${limit}`;
       
-      // Check if there's already a pending request for this website audit history
       if (pendingRequests.has(requestKey)) {
         console.log('Request already in progress for website audit history, returning existing promise');
         return pendingRequests.get(requestKey);
       }
       
-      // Check cache first
       const cacheKey = `audit:${userId}:${websiteUrl}`;
       const cachedData = auditHistoryCache.get(cacheKey);
       if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
         console.log('Returning cached website audit history for user:', userId, 'website:', websiteUrl);
-        // Return a slice of the cached data based on the requested limit
         return cachedData.data.slice(0, limit);
       }
       
       console.log('Fetching audit history for userId:', userId, 'website:', websiteUrl, 'limit:', limit);
       
-      // Create a promise for this request
       const websiteAuditPromise = (async () => {
         const { data, error } = await supabase
           .from('audit_history')
@@ -719,7 +693,6 @@ export const userDataService = {
 
         console.log('Successfully fetched website audit history:', data?.length || 0, 'entries');
         
-        // Cache the full result
         auditHistoryCache.set(cacheKey, {
           data: data || [],
           timestamp: Date.now()
@@ -728,10 +701,8 @@ export const userDataService = {
         return data || [];
       })();
       
-      // Store the promise in the pending requests map
       pendingRequests.set(requestKey, websiteAuditPromise);
       
-      // Clean up the pending request after it completes
       websiteAuditPromise.finally(() => {
         pendingRequests.delete(requestKey);
       });
@@ -751,24 +722,19 @@ export const userDataService = {
     }
     
     try {
-      // Create a throttle key based on user_id, activity_type, and tool_id
       const throttleKey = `${activity.user_id}:${activity.activity_type}:${activity.tool_id || ''}:${activity.website_url || ''}`;
       const now = Date.now();
       
-      // Check if we've recently tracked this exact activity
       const lastTracked = activityThrottleMap.get(throttleKey);
       if (lastTracked && (now - lastTracked < ACTIVITY_THROTTLE_MS)) {
-        // Skip tracking if too recent
         console.log('Throttling activity tracking:', throttleKey);
         return;
       }
       
       console.log('Tracking activity:', activity);
       
-      // Update throttle map
       activityThrottleMap.set(throttleKey, now);
       
-      // Use a try-catch block specifically for the database operation
       try {
         const { error } = await supabase
           .from('user_activity')
@@ -779,17 +745,14 @@ export const userDataService = {
         } else {
           console.log('Successfully tracked activity');
           
-          // Invalidate activity cache for this user
           const cacheKey = `activity:${activity.user_id}`;
           activityCache.delete(cacheKey);
         }
       } catch (dbError) {
         console.error('Database error in trackActivity:', dbError);
-        // Don't rethrow - we want to fail silently for activity tracking
       }
     } catch (error) {
       console.error('Error in trackActivity:', error);
-      // Don't rethrow - we want to fail silently for activity tracking
     }
   },
 
@@ -800,27 +763,22 @@ export const userDataService = {
     }
     
     try {
-      // Generate a unique request key
       const requestKey = `activity:${userId}:${limit}`;
       
-      // Check if there's already a pending request for this activity
       if (pendingRequests.has(requestKey)) {
         console.log('Request already in progress for recent activity, returning existing promise');
         return pendingRequests.get(requestKey);
       }
       
-      // Check cache first
       const cacheKey = `activity:${userId}`;
       const cachedData = activityCache.get(cacheKey);
       if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
         console.log('Returning cached recent activity for user:', userId);
-        // Return a slice of the cached data based on the requested limit
         return cachedData.data.slice(0, limit);
       }
       
       console.log('Fetching recent activity for userId:', userId, 'limit:', limit);
       
-      // Create a promise for this request
       const activityPromise = (async () => {
         const { data, error } = await supabase
           .from('user_activity')
@@ -836,7 +794,6 @@ export const userDataService = {
 
         console.log('Successfully fetched recent activity:', data?.length || 0, 'entries');
         
-        // Cache the full result
         activityCache.set(cacheKey, {
           data: data || [],
           timestamp: Date.now()
@@ -845,10 +802,8 @@ export const userDataService = {
         return data || [];
       })();
       
-      // Store the promise in the pending requests map
       pendingRequests.set(requestKey, activityPromise);
       
-      // Clean up the pending request after it completes
       activityPromise.finally(() => {
         pendingRequests.delete(requestKey);
       });
@@ -883,7 +838,6 @@ export const userDataService = {
 
       console.log('Successfully saved report:', data);
       
-      // Invalidate reports cache for this user
       const cacheKey = `reports:${report.user_id}`;
       reportsCache.delete(cacheKey);
       
@@ -901,16 +855,13 @@ export const userDataService = {
     }
     
     try {
-      // Generate a unique request key
       const requestKey = `reports:${userId}`;
       
-      // Check if there's already a pending request for this user's reports
       if (pendingRequests.has(requestKey)) {
         console.log('Request already in progress for user reports, returning existing promise');
         return pendingRequests.get(requestKey);
       }
       
-      // Check cache first
       const cacheKey = `reports:${userId}`;
       const cachedData = reportsCache.get(cacheKey);
       if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
@@ -920,7 +871,6 @@ export const userDataService = {
       
       console.log('Fetching user reports for userId:', userId);
       
-      // Create a promise for this request
       const reportsPromise = (async () => {
         const { data, error } = await supabase
           .from('reports')
@@ -935,7 +885,6 @@ export const userDataService = {
 
         console.log('Successfully fetched user reports:', data?.length || 0, 'reports');
         
-        // Cache the result
         reportsCache.set(cacheKey, {
           data: data || [],
           timestamp: Date.now()
@@ -944,10 +893,8 @@ export const userDataService = {
         return data || [];
       })();
       
-      // Store the promise in the pending requests map
       pendingRequests.set(requestKey, reportsPromise);
       
-      // Clean up the pending request after it completes
       reportsPromise.finally(() => {
         pendingRequests.delete(requestKey);
       });
@@ -968,7 +915,6 @@ export const userDataService = {
     try {
       console.log('Deleting report:', reportId);
       
-      // First get the report to know which user it belongs to (for cache invalidation)
       const { data: reportData } = await supabase
         .from('reports')
         .select('user_id')
@@ -987,7 +933,6 @@ export const userDataService = {
 
       console.log('Successfully deleted report');
       
-      // Invalidate reports cache for this user if we found the user_id
       if (reportData?.user_id) {
         const cacheKey = `reports:${reportData.user_id}`;
         reportsCache.delete(cacheKey);
