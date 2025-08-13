@@ -4,6 +4,8 @@
   import_map = "./functions/adaptive-playbook-generator/deno.json"
 [functions.ai-content-generator]
   import_map = "./functions/ai-content-generator/deno.json"
+[functions.ai-visibility-audit]
+  import_map = "./functions/ai-visibility-audit/deno.json"
 [functions.anomaly-detection]
   import_map = "./functions/anomaly-detection/deno.json"
 [functions.citation-tracker]
@@ -24,6 +26,8 @@
   import_map = "./functions/entity-coverage-analyzer/deno.json"
 [functions.generate-report]
   import_map = "./functions/generate-report/deno.json"
+[functions.genie-chatbot]
+  import_map = "./functions/genie-chatbot/deno.json"
 [functions.lemonsqueezy-webhook]
   import_map = "./functions/lemonsqueezy-webhook/deno.json"
 [functions.llm-site-summaries]

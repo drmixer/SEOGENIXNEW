@@ -64,6 +64,21 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [toolData, setToolData] = useState<any>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
   
+  const isRunDisabled = (toolId: string | null, projectId?: string, website?: string): boolean => {
+    if (loading || !toolId) return true;
+
+    // Most tools require a project and website
+    if (!['voice', 'generator'].includes(toolId) && (!projectId || !website)) {
+      return true;
+    }
+
+    // Tool-specific validation
+    if (toolId === 'generator' && (!generatorTopic || !generatorKeywords)) return true;
+    if (toolId === 'prompts' && !promptTopic) return true;
+
+    return false;
+  };
+
   // AI Visibility Audit specific state
   const [auditScope, setAuditScope] = useState<'site' | 'page'>('site');
   const [pageUrl, setPageUrl] = useState('');
@@ -792,11 +807,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           <div className="mb-6">
             <button
               onClick={() => handleRunTool(activeToolId)}
-              disabled={loading ||
-                (!selectedProjectId && activeToolId !== 'voice') ||
-                (!selectedWebsite && activeToolId !== 'generator') ||
-                (activeToolId === 'generator' && (!generatorTopic || !generatorKeywords)) ||
-                (activeToolId === 'prompts' && !promptTopic)}
+              disabled={isRunDisabled(activeToolId, selectedProjectId, selectedWebsite)}
               className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
             >
               {loading && runningTool === activeToolId ? (
