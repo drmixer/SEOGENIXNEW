@@ -46,6 +46,44 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // --- DEFINITIVE DIAGNOSTIC TEST ---
+  // This block will run once on app load to test the database query directly.
+  useEffect(() => {
+    const runTestQuery = async () => {
+      // Give the app a moment to initialize the session
+      setTimeout(async () => {
+        console.log("%c--- STARTING DEFINITIVE TEST ---", "color: blue; font-size: 1.2em;");
+        
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+          console.error("%cTEST FAILED: Could not get a logged-in user.", "color: red; font-size: 1.1em;");
+          console.log("%c--- END OF DEFINITIVE TEST ---", "color: blue; font-size: 1.2em;");
+          return;
+        }
+        
+        const userId = user.id;
+        console.log("TEST: Checking for user ID:", userId);
+
+        console.log("TEST: Attempting to fetch directly from 'projects' table...");
+        const { data: projects, error: projectsError } = await supabase
+          .from('projects')
+          .select('id, name, url')
+          .eq('user_id', userId);
+
+        if (projectsError) {
+          console.error("%c--- TEST FAILED: The query failed with an error. ---", "color: red; font-size: 1.2em;", projectsError);
+        } else {
+          console.log("%c--- TEST SUCCEEDED: The query returned data. ---", "color: green; font-size: 1.2em;", projects);
+        }
+        console.log("%c--- END OF DEFINITIVE TEST ---", "color: blue; font-size: 1.2em;");
+      }, 2000); // 2-second delay to ensure auth is ready
+    };
+
+    runTestQuery();
+  }, []); // The empty array ensures this runs only once.
+  // --- END OF DEFINITIVE DIAGNOSTIC TEST ---
+
   const handleAuthStateChange = async (session: Session | null) => {
     const currentUser = session?.user || null;
     setUser(currentUser);
@@ -415,3 +453,4 @@ function AppContent() {
 }
 
 export default App;
+
