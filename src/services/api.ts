@@ -7,14 +7,13 @@ const apiCall = async (url: string, options: RequestInit, authRequired: boolean 
   try {
     console.log(`Making API call to: ${url}`);
     
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...((options.headers as Record<string, string>) || {})
+      ...options.headers,
     };
 
     // Only add authentication if required
     if (authRequired) {
-      // Get current user session for authentication
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
@@ -26,11 +25,9 @@ const apiCall = async (url: string, options: RequestInit, authRequired: boolean 
         throw new Error('User not authenticated. Please log in to continue.');
       }
       
-      // Add user's access token to headers
       headers['Authorization'] = `Bearer ${session.access_token}`;
     } else {
-      // For unauthenticated calls, use the anon key
-      headers['Authorization'] = `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`;
+      headers['apikey'] = import.meta.env.VITE_SUPABASE_ANON_KEY;
     }
     
     const response = await fetch(url, {
@@ -39,9 +36,11 @@ const apiCall = async (url: string, options: RequestInit, authRequired: boolean 
     });
     
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`API Error (${response.status}):`, errorText);
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        const errorBody = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        console.error(`API Error (${response.status}):`, errorBody);
+        // Use the error message from the body if available
+        const errorMessage = errorBody.error?.message || `API request failed: ${response.status} ${response.statusText}`;
+        throw new Error(errorMessage);
     }
     
     const data = await response.json();
@@ -238,8 +237,6 @@ export const apiService = {
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     userData?: any
   ) {
-    // Don't cache chat requests as they should always be unique
-    // Don't require authentication for landing page context
     const authRequired = context !== 'landing';
     
     return await apiCall(`${API_BASE_URL}/genie-chatbot`, {
@@ -462,7 +459,6 @@ export const apiService = {
     reportName: string,
     format: 'html' | 'csv' | 'json' = 'html'
   ) {
-    // Don't cache report generation as each report should be unique
     return await apiCall(`${API_BASE_URL}/generate-report`, {
       method: 'POST',
       body: JSON.stringify({ reportType, reportData, reportName, format })
@@ -560,8 +556,6 @@ export const apiService = {
             ...options
         })
     });
-    // The backend functions return the list directly in the data property
-    // To keep consistency with how the picker expects data.items
     return result.data;
   },
 
@@ -582,13 +576,12 @@ export const apiService = {
       const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
       const idKey = cmsType === 'wordpress' ? 'postId' : 'productId';
 
-      // Shopify requires the content to be in a specific format
       const bodyPayload = cmsType === 'shopify'
         ? { product: { id: itemId, body_html: content.content } }
         : { title: content.title, content: content.content };
 
       return await apiCall(`${API_BASE_URL}/${endpoint}`, {
-          method: 'POST', // Wordpress uses POST for updates, Shopify uses PUT but our function abstracts it
+          method: 'POST',
           body: JSON.stringify({
               action: 'update_content',
               [idKey]: itemId,
@@ -597,24 +590,19 @@ export const apiService = {
       });
   },
   
-  // Clear pending requests cache
   clearPendingRequests() {
     pendingApiRequests.clear();
     console.log('Cleared all pending API requests');
   },
 
-  // URL Content Fetcher
   async fetchUrlContent(url: string): Promise<{ content: string }> {
-    // This is a utility function, so we don't cache it.
-    // It does not require authentication to run.
     const result = await apiCall(`${API_BASE_URL}/url-fetcher`, {
       method: 'POST',
       body: JSON.stringify({ url })
-    }, false); // authRequired = false
+    }, false);
     return result.data;
   },
 
-  // Adaptive Playbook Generator
   async generateAdaptivePlaybook(userId: string, goal: string, focusArea: string) {
     const result = await apiCall(`${API_BASE_URL}/adaptive-playbook-generator`, {
       method: 'POST',
