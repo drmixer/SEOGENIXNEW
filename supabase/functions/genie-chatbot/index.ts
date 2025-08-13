@@ -1,5 +1,5 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { serviceHandler, createSuccessResponse, createErrorResponse } from "../_shared/service-handler.ts";
+import { serviceHandler, createSuccessResponse, createErrorResponse } from "shared/service-handler.ts";
 
 // --- Type Definitions ---
 interface ChatRequest {
