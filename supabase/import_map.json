@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "shared/logging.ts": "./functions/_shared/logging.ts"
+  }
+}
