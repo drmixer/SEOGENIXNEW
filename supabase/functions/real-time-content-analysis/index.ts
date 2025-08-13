@@ -1,191 +1,142 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Note: Intentionally not using shared logging for this high-frequency tool to avoid noise.
 
-// --- SHARED: CORS Headers ---
+// --- CORS Headers ---
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// --- SHARED: Response Helpers ---
-function createErrorResponse(message: string, status = 500, details?: any) {
-  return new Response(JSON.stringify({
-    success: false,
-    error: {
-      message,
-      details: details || undefined,
-    }
-  }), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-function createSuccessResponse(data: object, status = 200) {
-  return new Response(JSON.stringify({
-    success: true,
-    data,
-  }), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-// --- SHARED: Service Handler ---
-async function serviceHandler(req: Request, toolLogic: Function) {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-  try {
-    const supabaseAdminClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) return createErrorResponse('Missing Authorization header', 401);
-
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return createErrorResponse('Invalid or expired token', 401);
-
-    return await toolLogic(req, { user, supabaseClient, supabaseAdminClient });
-
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
-    console.error(`[ServiceHandler Error]`, err);
-    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
-  }
-}
-
-// --- SHARED: Database Logging ---
-// This tool runs on every keystroke, so we will not log it to tool_runs to avoid excessive noise.
-async function logToolRun() { return "real_time_run"; }
-async function updateToolRun() { return; }
-
-// --- SHARED: Robust AI Call Function ---
-async function callGeminiWithRetry(prompt: string, apiKey: string) {
-  let attempts = 0;
-  const maxAttempts = 4;
-  let delay = 1000;
-  while (attempts < maxAttempts) {
-    try {
-      const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
-          }),
-        }
-      );
-      if (!geminiResponse.ok) {
-        if (geminiResponse.status === 429 || geminiResponse.status === 503) {
-            throw new Error(`Retryable Gemini API error: ${geminiResponse.status}`);
-        }
-        throw new Error(`Gemini API failed with status ${geminiResponse.status}`);
-      }
-      const geminiData = await geminiResponse.json();
-      const candidate = geminiData.candidates?.[0];
-      const responseText = candidate?.content?.parts?.[0]?.text;
-      if (!responseText) throw new Error('Invalid response structure from Gemini API');
-      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
-      if (!jsonMatch?.[1]) throw new Error('Failed to extract JSON from AI response.');
-      return JSON.parse(jsonMatch[1]);
-    } catch (error) {
-       if (error.message.includes("Retryable")) {
-            attempts++;
-            await new Promise(resolve => setTimeout(resolve, delay));
-            delay *= 2;
-       } else {
-           throw error;
-       }
-    }
-  }
-  throw new Error("The AI model is currently overloaded after multiple retries.");
-}
-
-
-// --- TOOL-SPECIFIC: Type Definitions ---
+// --- Type Definitions ---
 interface AnalysisRequest {
-    projectId: string;
     content: string;
     keywords: string[];
+    projectId: string;
 }
 
-// --- TOOL-SPECIFIC: AI Prompt ---
+// --- AI Prompt Engineering ---
 const getAnalysisPrompt = (content: string, keywords: string[]): string => {
     const jsonSchema = `{
-      "aiReadabilityScore": "number (0-100)",
-      "keywordDensity": { "keyword1": "number (percentage)" },
-      "suggestions": [{
-          "type": "string ('grammar'|'clarity'|'seo'|'tone')",
-          "severity": "string ('critical'|'warning'|'suggestion')",
-          "message": "string",
-          "suggestion": "string",
-          "position": { "start": "number", "end": "number" }
-      }]
+      "aiReadabilityScore": "number (0-100, how easily an AI can parse and understand the text)",
+      "keywordDensity": {
+        "keyword1": "number (percentage, e.g., 1.5 for 1.5%)"
+      },
+      "suggestions": [
+        {
+          "type": "string (enum: 'grammar', 'clarity', 'seo', 'tone')",
+          "severity": "string (enum: 'critical', 'warning', 'suggestion')",
+          "message": "string (A brief explanation of the issue)",
+          "suggestion": "string (A concrete suggestion for how to fix it)",
+          "position": {
+            "start": "number (The starting character index of the issue)",
+            "end": "number (The ending character index of the issue)"
+          }
+        }
+      ]
     }`;
 
-    return `You are a Real-time AI Writing Assistant. Analyze the text and provide immediate, actionable feedback.
-    - **Content to Analyze:** ${content}
+    return `
+    You are a Real-time AI Writing Assistant. Your task is to analyze a piece of text as it's being written and provide immediate, actionable feedback.
+
+    **Analysis Task:**
+    - **Content to Analyze:**
+      ---
+      ${content}
+      ---
     - **Target Keywords:** ${keywords.join(', ')}
 
     **Instructions:**
-    Analyze the content for readability, keyword density, and provide specific suggestions for improvement.
+    Analyze the content and provide a readability score, keyword density analysis, and a list of specific suggestions for improvement.
 
     **CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
     The JSON object must follow this exact schema:
     \`\`\`json
     ${jsonSchema}
     \`\`\`
-    If the content is too short, return empty values.`;
+
+    Now, perform your real-time analysis. If the content is too short or empty, return a JSON object with empty values.
+    `;
 };
 
-// --- TOOL-SPECIFIC: Main Logic ---
-const realTimeAnalysisToolLogic = async (req: Request, { user, supabaseClient, supabaseAdminClient }: { user: any, supabaseClient: SupabaseClient, supabaseAdminClient: SupabaseClient }) => {
-  try {
-    const { projectId, content, keywords }: AnalysisRequest = await req.json();
-
-    if (!projectId || typeof content !== 'string') {
-      throw new Error('`projectId` and `content` (as a string) are required.');
+// --- Main Service Handler ---
+export const analysisService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders });
     }
 
-    // No need to check project access for a real-time tool that doesn't save anything to the project.
+    try {
+        const { content, keywords, projectId }: AnalysisRequest = await req.json();
 
-    if (content.length < 25) {
-        return createSuccessResponse({
-            aiReadabilityScore: 0,
-            keywordDensity: {},
-            suggestions: [],
+        if (typeof content !== 'string' || !projectId) {
+            throw new Error('`content` must be a string and `projectId` is required.');
+        }
+
+        if (content.length < 20) {
+            return new Response(JSON.stringify({
+                success: true,
+                data: {
+                    aiReadabilityScore: 0,
+                    keywordDensity: {},
+                    suggestions: [],
+                }
+            }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+        if (!geminiApiKey) throw new Error('Gemini API key not configured');
+
+        const prompt = getAnalysisPrompt(content, keywords || []);
+
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.3,
+                    maxOutputTokens: 1024,
+                }
+            })
+        });
+
+        if (!geminiResponse.ok) {
+            const errorBody = await geminiResponse.text();
+            throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}. Body: ${errorBody}`);
+        }
+
+        const geminiData = await geminiResponse.json();
+        const responseText = geminiData.candidates[0].content.parts[0].text;
+
+        const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+        if (!jsonMatch || !jsonMatch[1]) {
+            throw new Error('Failed to extract JSON from AI response.');
+        }
+        const analysisJson = JSON.parse(jsonMatch[1]);
+
+        if (!analysisJson.aiReadabilityScore === undefined || !analysisJson.keywordDensity || !analysisJson.suggestions) {
+            throw new Error('Generated analysis is missing required fields.');
+        }
+
+        return new Response(JSON.stringify({ success: true, data: analysisJson }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        // Do not log to tool_runs, but log to console for debugging
+        console.error('Real-time analysis error:', errorMessage);
+        return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
-
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!geminiApiKey) throw new Error('Gemini API key not configured');
-
-    const prompt = getAnalysisPrompt(content, keywords || []);
-    const analysisJson = await callGeminiWithRetry(prompt, geminiApiKey);
-
-    if (!analysisJson.aiReadabilityScore || !analysisJson.keywordDensity || !analysisJson.suggestions) {
-        throw new Error('Generated analysis is missing required fields.');
-    }
-
-    return createSuccessResponse(analysisJson);
-
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-    // Do not log to tool_runs, but log to console for debugging
-    console.error('Real-time analysis error:', err);
-    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
-  }
 };
 
 // --- Server ---
-Deno.serve((req) => serviceHandler(req, realTimeAnalysisToolLogic));
+Deno.serve(async (req) => {
+    const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    return await analysisService(req, supabase);
+});

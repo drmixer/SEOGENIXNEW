@@ -1,209 +1,162 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// --- SHARED: CORS Headers ---
+// Self-contained CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-// --- SHARED: Response Helpers ---
-function createErrorResponse(message: string, status = 500, details?: any) {
-  return new Response(JSON.stringify({
-    success: false,
-    error: {
-      message,
-      details: details || undefined,
-    }
-  }), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-function createSuccessResponse(data: object, status = 200) {
-  return new Response(JSON.stringify({
-    success: true,
-    data,
-  }), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-// --- SHARED: Service Handler ---
-async function serviceHandler(req: Request, toolLogic: Function) {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-  try {
-    const supabaseAdminClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return createErrorResponse('Missing Authorization header', 401);
-    }
-
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) {
-        return createErrorResponse('Invalid or expired token', 401);
-    }
-
-    return await toolLogic(req, { user, supabaseClient, supabaseAdminClient });
-
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
-    console.error(`[ServiceHandler Error]`, err);
-    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
-  }
-}
-
-// --- SHARED: Database Logging Helpers ---
-async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
-  if (!projectId) throw new Error("logToolRun error: projectId is required.");
-  const { data, error } = await supabase.from("tool_runs").insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: "running" }).select("id").single();
-  if (error) {
-    console.error("Error logging tool run:", error);
-    throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
-  }
-  if (!data || !data.id) {
-    console.error("No data or data.id returned from tool_runs insert.");
-    throw new Error("Failed to log tool run: No data returned after insert.");
-  }
+// Helper functions for logging
+async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
+  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
+  if (error) { console.error('Error logging tool run:', error); return null; }
   return data.id;
 }
 
-async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null) {
-  if (!runId) {
-    console.error("updateToolRun error: runId is required.");
-    return;
-  }
-  const update = { status, completed_at: new Date().toISOString(), output_payload: errorMessage ? { error: errorMessage } : outputPayload || null, error_message: errorMessage || null };
-  const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
-  if (error) console.error(`Error updating tool run ID ${runId}:`, error);
+async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
+  const update = {
+    status,
+    completed_at: new Date().toISOString(),
+    output: errorMessage ? { error: errorMessage } : outputPayload || null
+  };
+  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
+  if (error) { console.error('Error updating tool run:', error); }
 }
 
-// --- TOOL-SPECIFIC: Type Definitions ---
-interface AnomalyRequest {
-    projectId: string;
-    sensitivity?: 'low' | 'medium' | 'high';
-    timeframe?: '7d' | '30d' | '90d';
-}
-
-// --- TOOL-SPECIFIC: Main Logic ---
-const anomalyDetectionToolLogic = async (req: Request, { user, supabaseClient, supabaseAdminClient }: { user: any, supabaseClient: SupabaseClient, supabaseAdminClient: SupabaseClient }) => {
-  let runId: string | null = null;
-  try {
-    const { projectId, sensitivity = 'medium' }: AnomalyRequest = await req.json();
-
-    if (!projectId) {
-      throw new Error('`projectId` is required.');
-    }
-    console.log(`Anomaly detection request for project ${projectId}`);
-
-    const { data: project, error: projectError } = await supabaseClient.from('projects').select('id').eq('id', projectId).single();
-    if (projectError || !project) {
-        throw new Error(`Access denied or project not found for id: ${projectId}`);
-    }
-
-    runId = await logToolRun(supabaseAdminClient, projectId, 'anomaly-detection', { sensitivity });
-    console.log(`Tool run logged with ID: ${runId}`);
-
-    const { data: auditHistory, error: auditError } = await supabaseClient
-      .from('audit_history')
-      .select('overall_score, created_at')
-      .eq('user_id', user.id)
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
-      .limit(10); // Limit to last 10 audits for performance
-
-    if (auditError) throw new Error(`Failed to fetch audit history: ${auditError.message}`);
-
-    const { data: userActivity, error: activityError } = await supabaseClient
-      .from('user_activity')
-      .select('activity_type, created_at')
-      .eq('user_id', user.id)
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
-      .limit(1); // Only need the last activity
-
-    if (activityError) throw new Error(`Failed to fetch user activity: ${activityError.message}`);
-
-    const thresholds = {
-        scoreDrop: sensitivity === 'low' ? 20 : (sensitivity === 'medium' ? 15 : 10),
-        activityGap: sensitivity === 'low' ? 14 : (sensitivity === 'medium' ? 7 : 3),
+function calculateTrend(scores) {
+    if (scores.length < 3) return { direction: 'stable', confidence: 0, predictedValue: scores[scores.length - 1], slope: 0 };
+    const n = scores.length;
+    const x = Array.from({ length: n }, (_, i) => i);
+    const y = scores;
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+    const sumXX = x.reduce((sum, xi) => sum + xi * xi, 0);
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    const yMean = sumY / n;
+    const ssRes = y.reduce((sum, yi, i) => sum + Math.pow(yi - (slope * i + intercept), 2), 0);
+    const ssTot = y.reduce((sum, yi) => sum + Math.pow(yi - yMean, 2), 0);
+    const rSquared = 1 - ssRes / ssTot;
+    const predictedValue = slope * (n + 2) + intercept;
+    return {
+        direction: slope > 1 ? 'improving' : slope < -1 ? 'declining' : 'stable',
+        confidence: Math.max(0, Math.min(1, rSquared)),
+        predictedValue: Math.max(0, Math.min(100, predictedValue)),
+        slope
     };
+}
 
-    const anomalies: object[] = [];
-
-    // Check for significant score drops
-    if (auditHistory && auditHistory.length >= 2) {
-        const latestScore = auditHistory[0].overall_score;
-        const previousScore = auditHistory[1].overall_score;
-        const scoreDiff = latestScore - previousScore;
-
-        if (scoreDiff <= -thresholds.scoreDrop) {
-            anomalies.push({
-                id: `score_drop_${new Date(auditHistory[0].created_at).toISOString().split('T')[0]}`,
-                type: 'score_drop',
-                title: 'Significant Score Drop Detected',
-                description: `Your AI visibility score dropped by ${Math.abs(scoreDiff)} points between your last two audits.`,
-                severity: 'high',
-                data: { current: latestScore, previous: previousScore }
-            });
-        }
+function getRecommendationsForSubscore(subscore) {
+    switch(subscore){
+        case 'ai_understanding': return ['Improve content clarity and structure', 'Add more context and definitions'];
+        case 'citation_likelihood': return ['Add more factual, citable information', 'Improve content authority signals'];
+        case 'conversational_readiness': return ['Add more question-answer content', 'Use natural language patterns'];
+        case 'content_structure': return ['Improve heading hierarchy (H1-H6)', 'Add more structured data markup'];
+        default: return ['Run a comprehensive audit', 'Review recent content changes'];
     }
+}
 
-    // Check for user inactivity
-    if (userActivity && userActivity.length > 0) {
-        const lastActivityDate = new Date(userActivity[0].created_at);
-        const daysSinceLastActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24);
+const anomalyDetectionService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
+    let runId;
+    try {
+        const { projectId, userId, sensitivity = 'medium', timeframe = '30d' } = await req.json();
 
-        if (daysSinceLastActivity > thresholds.activityGap) {
-            anomalies.push({
-                id: `inactivity_${new Date().toISOString().split('T')[0]}`,
-                type: 'inactivity',
-                title: 'Unusual Inactivity Detected',
-                description: `You haven't used any optimization tools in over ${Math.floor(daysSinceLastActivity)} days.`,
-                severity: 'medium',
-                data: { days: Math.floor(daysSinceLastActivity) }
-            });
+        runId = await logToolRun({
+            supabase,
+            projectId: projectId,
+            toolName: 'anomaly-detection',
+            inputPayload: { userId, sensitivity, timeframe }
+        });
+
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) throw new Error('Authorization header required');
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user } } = await supabase.auth.getUser(token);
+        if (!user) throw new Error('Invalid authentication');
+
+        const { data: auditHistory } = await supabase.from('audit_history').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+        const { data: userActivity } = await supabase.from('user_activity').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(100);
+
+        const thresholds = {
+            scoreDrop: sensitivity === 'low' ? 15 : 10,
+            subscore: sensitivity === 'low' ? 20 : 15,
+            activityGap: sensitivity === 'low' ? 14 : 7
+        };
+
+        const anomalies = [];
+
+        if (auditHistory && auditHistory.length >= 2) {
+            for (let i = 0; i < auditHistory.length - 1; i++) {
+                const current = auditHistory[i];
+                const previous = auditHistory[i + 1];
+                const scoreDiff = current.overall_score - previous.overall_score;
+                if (scoreDiff <= -thresholds.scoreDrop) {
+                    anomalies.push({
+                        id: `score_drop_${current.id}`,
+                        type: 'score_drop',
+                        title: 'Significant Score Drop Detected',
+                        description: `Your AI visibility score dropped by ${Math.abs(scoreDiff)} points`,
+                        severity: 'high',
+                    });
+                    break;
+                }
+            }
         }
-    }
 
-    if (anomalies.length === 0) {
-        anomalies.push({
-            id: `no_anomalies_${new Date().toISOString().split('T')[0]}`,
-            type: 'no_anomalies',
-            title: 'All Clear!',
-            description: 'We haven\'t detected any significant anomalies in your project recently. Keep up the great work!',
-            severity: 'low'
+        if (userActivity && userActivity.length > 0) {
+            const lastToolUsage = userActivity.find(a => a.activity_type === 'tool_used');
+            if (lastToolUsage) {
+                const daysSinceLastTool = (Date.now() - new Date(lastToolUsage.created_at).getTime()) / (1000 * 60 * 60 * 24);
+                if (daysSinceLastTool > thresholds.activityGap) {
+                    anomalies.push({
+                        id: `inactivity_${Date.now()}`,
+                        type: 'inactivity',
+                        title: 'Unusual Inactivity Detected',
+                        description: `No optimization activity for ${Math.floor(daysSinceLastTool)} days.`,
+                        severity: 'medium',
+                    });
+                }
+            }
+        }
+
+        const output = { anomalies };
+
+        await updateToolRun({
+            supabase,
+            runId,
+            status: 'completed',
+            outputPayload: output
+        });
+
+        return new Response(JSON.stringify({ runId, output }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+
+    } catch (err) {
+        console.error(err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        if (runId) {
+            await updateToolRun({ supabase, runId, status: 'error', errorMessage: errorMessage });
+        }
+        return new Response(JSON.stringify({ error: errorMessage }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
+}
 
-    const output = { anomalies };
 
-    await updateToolRun(supabaseAdminClient, runId, 'completed', output, null);
-    console.log('Anomaly detection complete.');
-    return createSuccessResponse({ runId, ...output });
-
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-    console.error('Anomaly detection error:', err);
-    if (runId) {
-      await updateToolRun(supabaseAdminClient, runId, 'error', null, errorMessage);
+Deno.serve(async (req) => {
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders });
     }
-    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
-  }
-};
 
-// --- Server ---
-Deno.serve((req) => serviceHandler(req, anomalyDetectionToolLogic));
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    return await anomalyDetectionService(req, supabase)
+});
