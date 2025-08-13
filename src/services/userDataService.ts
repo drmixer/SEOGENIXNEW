@@ -113,7 +113,7 @@ const pendingRequests = new Map<string, Promise<any>>();
 
 export const userDataService = {
   // User Profile Management
-  async getUserProfile(userId: string): Promise<UserProfile | null> {
+  async getUserProfile(userId: string, forceRefresh = false): Promise<UserProfile | null> {
     if (!userId) {
       console.error('getUserProfile called with empty userId');
       return null;
@@ -124,7 +124,7 @@ export const userDataService = {
       const requestKey = `profile:${userId}`;
       
       // Check if there's already a pending request for this profile
-      if (pendingRequests.has(requestKey)) {
+      if (pendingRequests.has(requestKey) && !forceRefresh) {
         console.log('Request already in progress for profile, returning existing promise');
         return pendingRequests.get(requestKey);
       }
@@ -133,11 +133,15 @@ export const userDataService = {
       
       // Check cache first
       const cachedData = profileCache.get(userId);
-      if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
+      if (!forceRefresh && cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
         console.log('Returning cached profile for user:', userId);
         return cachedData.profile;
       }
       
+      if (forceRefresh) {
+        console.log('Forcing profile refresh for user:', userId);
+      }
+
       // Create a promise for this request
       const profilePromise = (async () => {
         const { data, error } = await supabase

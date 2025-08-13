@@ -377,13 +377,16 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     };
   }, []);
 
-  // Auto-select first website if none is selected
+  // Auto-select first website and project ID if none are selected
   useEffect(() => {
-    if (userProfile?.websites?.length > 0 && !selectedWebsite) {
+    if (userProfile?.websites?.length > 0) {
       const firstWebsite = userProfile.websites[0];
-      if (firstWebsite?.url && firstWebsite?.id) {
-        setSelectedWebsite(firstWebsite.url);
+      if (firstWebsite?.id && firstWebsite.id !== selectedProjectId) {
+        console.log(`Setting selectedProjectId from userProfile: ${firstWebsite.id}`);
         setSelectedProjectId(firstWebsite.id);
+      }
+      if (firstWebsite?.url && firstWebsite.url !== selectedWebsite) {
+        setSelectedWebsite(firstWebsite.url);
       }
     }
   }, [userProfile]);
