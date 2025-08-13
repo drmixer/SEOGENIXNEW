@@ -64,21 +64,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [toolData, setToolData] = useState<any>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
   
-  const isRunDisabled = (toolId: string | null, projectId?: string, website?: string): boolean => {
-    if (loading || !toolId) return true;
-
-    // Most tools require a project and website
-    if (!['voice', 'generator'].includes(toolId) && (!projectId || !website)) {
-      return true;
-    }
-
-    // Tool-specific validation
-    if (toolId === 'generator' && (!generatorTopic || !generatorKeywords)) return true;
-    if (toolId === 'prompts' && !promptTopic) return true;
-
-    return false;
-  };
-
   // AI Visibility Audit specific state
   const [auditScope, setAuditScope] = useState<'site' | 'page'>('site');
   const [pageUrl, setPageUrl] = useState('');
@@ -291,6 +276,22 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     } catch (e) {
       return url;
     }
+  };
+
+  // FIX: Moved this function here so it has access to component state
+  const isRunDisabled = (toolId: string | null, projectId?: string, website?: string): boolean => {
+    if (loading || !toolId) return true;
+
+    // Most tools require a project and website
+    if (!['voice', 'generator'].includes(toolId) && (!projectId || !website)) {
+      return true;
+    }
+
+    // Tool-specific validation
+    if (toolId === 'generator' && (!generatorTopic || !generatorKeywords)) return true;
+    if (toolId === 'prompts' && !promptTopic) return true;
+
+    return false;
   };
 
   const handleRunTool = async (toolId: string) => {
