@@ -1,7 +1,51 @@
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { serviceHandler, createSuccessResponse, createErrorResponse } from "../_shared/service-handler.ts";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// --- Type Definitions ---
+// --- Injected Shared Code ---
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+};
+
+function createErrorResponse(message: string, status: number = 500) {
+  return new Response(JSON.stringify({ success: false, error: { message } }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function createSuccessResponse(data: object, status: number = 200) {
+  return new Response(JSON.stringify({ success: true, data }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+type ToolLogic = (req: Request, supabase: SupabaseClient) => Promise<Response>;
+
+async function serviceHandler(req: Request, toolLogic: ToolLogic): Promise<Response> {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    return await toolLogic(req, supabase);
+
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
+    console.error(`[ServiceHandler Error] ${errorMessage}`, err);
+    return createErrorResponse(errorMessage);
+  }
+}
+
+// --- Original File Content ---
+
 interface ChatRequest {
     projectId?: string;
     message: string;
@@ -16,7 +60,6 @@ interface ChatResponse {
     suggestedFollowUps: string[];
 }
 
-// --- AI Prompt Engineering ---
 const getChatPrompt = (message: string, context: string, userPlan: string, conversationHistory: any[], enhancedUserData: any): string => {
     const jsonSchema = `
     {
@@ -68,8 +111,6 @@ const getChatPrompt = (message: string, context: string, userPlan: string, conve
     `;
 };
 
-
-// --- Main Service ---
 const chatbotToolLogic = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
     try {
         const { message, context, userPlan, conversationHistory = [], userData }: ChatRequest = await req.json();
@@ -78,7 +119,6 @@ const chatbotToolLogic = async (req: Request, supabase: SupabaseClient): Promise
             return createErrorResponse('`message` and `context` are required.', 400);
         }
 
-        // 1. Enhance user data if logged in
         let enhancedUserData = userData;
         const authHeader = req.headers.get('Authorization');
         if (authHeader && context === 'dashboard') {
@@ -93,7 +133,6 @@ const chatbotToolLogic = async (req: Request, supabase: SupabaseClient): Promise
             } catch (error) { console.error('Error fetching user data:', error); }
         }
 
-        // 2. Get AI Response
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
         if (!geminiApiKey) throw new Error('Gemini API key not configured');
 
