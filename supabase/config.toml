@@ -1,7 +1,7 @@
 # Supabase project configuration
 
 [functions]
-  import_map = "import_map.json"
+  import_map = "./import_map.json"
 
 # The per-function import_map settings are now removed.
 # The global setting above will apply to all functions.
