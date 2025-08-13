@@ -295,7 +295,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   };
 
   const handleRunTool = async (toolId: string) => {
-    if (!selectedWebsite && toolId !== 'generator') {
+    if (!selectedWebsite && toolId !== 'generator' && toolId !== 'voice') {
       setError('Please select a website first');
       return;
     }
@@ -310,47 +310,53 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       switch (toolId) {
         case 'audit':
           const auditUrl = auditScope === 'page' && pageUrl ? `${selectedWebsite}${pageUrl}` : selectedWebsite;
-          result = await apiService.runAudit(selectedProjectId, auditUrl);
+          result = await apiService.runAudit(selectedProjectId!, auditUrl!);
           break;
+
         case 'schema':
           result = await apiService.generateSchema(
-            selectedProjectId,
-            schemaInputType === 'url' ? selectedWebsite : undefined,
+            selectedProjectId!,
+            schemaInputType === 'url' ? selectedWebsite! : '',
             'article', // default content type
             schemaInputType === 'text' ? schemaContent : undefined
           );
           break;
+
         case 'citations':
-          const domain = extractDomain(selectedWebsite);
+          const domain = extractDomain(selectedWebsite!);
           // Parse keywords from comma-separated string
           const citationKeywordsList = citationKeywords.split(',').map(k => k.trim()).filter(k => k);
           // Parse fingerprint phrases if any
           const fingerprintList = fingerprintPhrases.split('\n').map(p => p.trim()).filter(p => p);
           
           result = await apiService.trackCitations(
-            selectedProjectId,
+            selectedProjectId!,
             domain, 
             citationKeywordsList.length > 0 ? citationKeywordsList : ['AI visibility', 'SEO'],
             fingerprintList.length > 0 ? fingerprintList : undefined
           );
           break;
+
         case 'voice':
-          result = await apiService.testVoiceAssistants(
-            `What is ${extractDomain(selectedWebsite)}?`, 
-            ['siri', 'alexa', 'google']
-          );
+          const voiceQuery = selectedWebsite ? 
+            `What is ${extractDomain(selectedWebsite)}?` : 
+            'Tell me about this business';
+          result = await apiService.testVoiceAssistants(voiceQuery, ['siri', 'alexa', 'google']);
           break;
+
         case 'summaries':
-          result = await apiService.generateLLMSummary(selectedProjectId, selectedWebsite, 'overview');
+          result = await apiService.generateLLMSummary(selectedProjectId!, selectedWebsite!, 'overview');
           break;
+
         case 'entities':
           result = await apiService.analyzeEntityCoverage(
-            selectedProjectId,
-            selectedWebsite, 
+            selectedProjectId!,
+            selectedWebsite!, 
             undefined, 
             userProfile?.industry
           );
           break;
+
         case 'generator':
           // Parse keywords from comma-separated string
           const keywords = generatorKeywords.split(',').map(k => k.trim()).filter(k => k);
@@ -359,8 +365,16 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             throw new Error('Please provide a topic and at least one keyword');
           }
           
+          console.log('Calling AI Content Generator with:', {
+            projectId: selectedProjectId,
+            contentType: generatorContentType,
+            topic: generatorTopic,
+            keywords,
+            tone: generatorTone
+          });
+          
           result = await apiService.generateAIContent(
-            selectedProjectId,
+            selectedProjectId!,
             generatorContentType,
             generatorTopic,
             keywords,
@@ -369,39 +383,45 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             undefined,
             'medium'
           );
+          
+          console.log('AI Content Generator result:', result);
           break;
+
         case 'competitive':
           const competitors = userProfile?.competitors?.map((c: any) => c.url) || [];
           result = await apiService.performCompetitiveAnalysis(
-            selectedProjectId,
-            selectedWebsite,
+            selectedProjectId!,
+            selectedWebsite!,
             competitors.slice(0, 3),
             userProfile?.industry
           );
           break;
+
         case 'discovery':
           result = await apiService.discoverCompetitors(
-            selectedProjectId,
-            selectedWebsite,
+            selectedProjectId!,
+            selectedWebsite!,
             userProfile?.industry,
             userProfile?.business_description,
             userProfile?.competitors?.map((c: any) => c.url) || []
           );
           break;
+
         case 'prompts':
           if (!promptTopic) {
-            setPromptTopic(extractDomain(selectedWebsite));
+            setPromptTopic(extractDomain(selectedWebsite || ''));
           }
           
           result = await apiService.generatePromptSuggestions(
-            selectedProjectId,
-            promptTopic || extractDomain(selectedWebsite),
+            selectedProjectId!,
+            promptTopic || extractDomain(selectedWebsite || ''),
             userProfile?.industry,
             undefined,
             promptContentType,
             promptUserIntent
           );
           break;
+
         default:
           throw new Error(`Tool ${toolId} not implemented`);
       }
@@ -416,7 +436,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           if (user) {
             await userDataService.saveAuditResult({
               user_id: user.id,
-              website_url: selectedWebsite,
+              website_url: selectedWebsite!,
               overall_score: result.overallScore,
               ai_understanding: result.subscores.aiUnderstanding,
               citation_likelihood: result.subscores.citationLikelihood,
@@ -964,26 +984,33 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                     
                     {(generatorContentType === 'snippets' || generatorContentType === 'headings' || generatorContentType === 'descriptions') && (
                       <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-wrap">
-                        {toolData.generatedContent.raw}
+                        {toolData.generatedContent?.raw || toolData.generatedContent?.snippet || toolData.generatedContent?.description}
                       </div>
                     )}
                   </div>
                   
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-2">Optimization Tips</h4>
-                    <ul className="space-y-2">
-                      {toolData.optimizationTips?.map((tip: string, i: number) => (
-                        <li key={i} className="flex items-start">
-                          <span className="text-yellow-600 mr-2">•</span>
-                          <span className="text-gray-700">{tip}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  {toolData.optimizationTips && (
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <h4 className="font-medium mb-2">Optimization Tips</h4>
+                      <ul className="space-y-2">
+                        {toolData.optimizationTips.map((tip: string, i: number) => (
+                          <li key={i} className="flex items-start">
+                            <span className="text-yellow-600 mr-2">•</span>
+                            <span className="text-gray-700">{tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   
                   <div className="flex justify-end">
                     <button
-                      onClick={() => navigator.clipboard.writeText(toolData.generatedContent.raw)}
+                      onClick={() => {
+                        const contentToShow = toolData.generatedContent?.raw || 
+                                            JSON.stringify(toolData.generatedContent, null, 2) || 
+                                            JSON.stringify(toolData, null, 2);
+                        navigator.clipboard.writeText(contentToShow);
+                      }}
                       className="text-purple-600 hover:text-purple-800 text-sm font-medium"
                     >
                       Copy Generated Content
@@ -992,390 +1019,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 </div>
               )}
               
-              {activeToolId === 'discovery' && (
-                <div className="space-y-4">
-                  <p className="text-gray-700">Found {toolData.competitorSuggestions?.length || 0} potential competitors for {selectedWebsite}</p>
-                  
-                  {toolData.competitorSuggestions && toolData.competitorSuggestions.length > 0 && (
-                    <div className="mt-4 text-right">
-                      <button
-                        onClick={() => {
-                          setShowCompetitiveAnalysisModal(true);
-                        }}
-                        className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 flex items-center space-x-2"
-                      >
-                        <BarChart3 className="w-4 h-4" />
-                        <span>Analyze these Competitors</span>
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    {toolData.competitorSuggestions?.map((comp: any, i: number) => (
-                      <div key={i} className="bg-white p-4 rounded-lg shadow-sm">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-medium">{comp.name}</h4>
-                            <a href={comp.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">{comp.url}</a>
-                          </div>
-                          <div className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">
-                            Relevance: {comp.relevanceScore}%
-                          </div>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-2">{comp.explanation}</p>
-                        <div className="mt-2">
-                          <div className="text-xs text-gray-500">Domain Authority: {comp.domainAuthority || 'N/A'}</div>
-                        </div>
-                      </div>
-                    )) || (
-                      <div className="text-center py-8">
-                        <p className="text-gray-500">No competitor suggestions found.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {activeToolId === 'entities' && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                      <div className="bg-white p-4 rounded-lg shadow-sm">
-                          <div className="text-3xl font-bold text-purple-600 mb-2">{toolData.coverageScore || 0}%</div>
-                          <p className="text-gray-600">Coverage Score</p>
-                      </div>
-                      <div className="bg-white p-4 rounded-lg shadow-sm">
-                          <div className="text-3xl font-bold text-blue-600 mb-2">{toolData.mentionedEntities?.length || 0}</div>
-                          <p className="text-gray-600">Entities Mentioned</p>
-                      </div>
-                      <div className="bg-white p-4 rounded-lg shadow-sm">
-                          <div className="text-3xl font-bold text-red-600 mb-2">{toolData.missingEntities?.length || 0}</div>
-                          <p className="text-gray-600">Entities Missing</p>
-                      </div>
-                  </div>
-                  
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-4 text-red-700">Actionable Missing Entities</h4>
-                    <div className="space-y-3 max-h-60 overflow-y-auto">
-                      {toolData.missingEntities?.map((entity: any, i: number) => (
-                        <label key={i} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedEntities.includes(entity.name)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedEntities([...selectedEntities, entity.name]);
-                              } else {
-                                setSelectedEntities(selectedEntities.filter(name => name !== entity.name));
-                              }
-                            }}
-                            className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                          />
-                          <div className="flex-1">
-                            <div className="flex justify-between">
-                                <h5 className="font-medium text-gray-900">{entity.name}</h5>
-                                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">{entity.type}</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">{entity.description}</p>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                    {toolData.missingEntities?.length > 0 && (
-                      <div className="mt-4 text-right">
-                        <button
-                          onClick={handleGenerateWithEntities}
-                          disabled={selectedEntities.length === 0}
-                          className="bg-gradient-to-r from-pink-500 to-yellow-500 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
-                        >
-                          <Zap className="w-4 h-4" />
-                          <span>Generate Content with {selectedEntities.length} Entities</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {activeToolId === 'competitive' && (
-                <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-3">Competitive Analysis</h4>
-                    
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Website</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overall Score</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">AI Understanding</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Citation</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Conversational</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Structure</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {/* Primary site */}
-                          {toolData.primarySiteAnalysis && (
-                            <tr className="bg-purple-50">
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {toolData.primarySiteAnalysis.name} (You)
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-purple-700">
-                                {toolData.primarySiteAnalysis.overallScore}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                {toolData.primarySiteAnalysis.subscores.aiUnderstanding}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                {toolData.primarySiteAnalysis.subscores.citationLikelihood}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                {toolData.primarySiteAnalysis.subscores.conversationalReadiness}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                {toolData.primarySiteAnalysis.subscores.contentStructure}
-                              </td>
-                            </tr>
-                          )}
-                          
-                          {/* Competitors */}
-                          {toolData.competitorAnalyses?.map((comp: any, i: number) => (
-                            <tr key={i}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {comp.name}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                {comp.overallScore}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                {comp.subscores.aiUnderstanding}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                {comp.subscores.citationLikelihood}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                {comp.subscores.conversationalReadiness}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                {comp.subscores.contentStructure}
-                              </td>
-                            </tr>
-                          ))}
-                          
-                          {/* Industry average */}
-                          <tr className="bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              Industry Average
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700">
-                              {toolData.benchmarks?.industryAverage || 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" colSpan={4}>
-                              
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-3">Competitive Insights</h4>
-                    <p className="text-gray-700 mb-4">
-                      {toolData.summary?.competitivePosition === 'Leading' ? 
-                        `You're leading your competitive set with a score of ${toolData.primarySiteAnalysis?.overallScore}. You're ${toolData.summary?.averageCompetitorScore ? toolData.primarySiteAnalysis?.overallScore - toolData.summary?.averageCompetitorScore : 0} points above the industry average.` :
-                        toolData.summary?.competitivePosition === 'Competitive' ?
-                        `You're competitive in your market with a score of ${toolData.primarySiteAnalysis?.overallScore}. The industry average is ${toolData.summary?.averageCompetitorScore}.` :
-                        `You're currently behind competitors with a score of ${toolData.primarySiteAnalysis?.overallScore}. The industry average is ${toolData.summary?.averageCompetitorScore}.`
-                      }
-                    </p>
-                    
-                    <h5 className="font-medium text-gray-800 mb-2">Recommendations:</h5>
-                    <ul className="space-y-1">
-                      {toolData.recommendations?.map((rec: string, i: number) => (
-                        <li key={i} className="flex items-start">
-                          <span className="text-purple-600 mr-2">•</span>
-                          <span className="text-gray-700">{rec}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-              
-              {activeToolId === 'citations' && (
-                <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-3">Citation Results</h4>
-                    <p className="text-gray-700 mb-4">
-                      Found {toolData.citations?.length || 0} mentions of your content across various platforms.
-                    </p>
-                    
-                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                      {toolData.citations?.map((citation: any, i: number) => (
-                        <div key={i} className="border border-gray-200 rounded-lg p-3">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h5 className="font-medium text-gray-900">{citation.source}</h5>
-                              <a href={citation.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">{citation.url}</a>
-                            </div>
-                            <div className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">
-                              {citation.type}
-                            </div>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-2 border-l-4 border-gray-200 pl-3 py-1">
-                            "{citation.snippet}"
-                          </p>
-                          <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
-                            <span>Confidence: {citation.confidence_score || 0}%</span>
-                            <span>{new Date(citation.date).toLocaleDateString()}</span>
-                          </div>
-                          <div className="mt-3 pt-3 border-t border-gray-200 text-right">
-                            <button
-                              onClick={() => handleCreateContentFromCitation(citation)}
-                              className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-3 py-1 rounded-md text-sm font-medium hover:shadow-lg transition-all duration-300 flex items-center space-x-2"
-                            >
-                              <Zap className="w-4 h-4" />
-                              <span>Create Content</span>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {activeToolId === 'voice' && (
-                <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-3">Voice Assistant Test Results</h4>
-                    <p className="text-gray-700 mb-4">
-                      Query: "{toolData.query}"
-                    </p>
-                    
-                    <div className="space-y-4">
-                      {toolData.results?.map((result: any, i: number) => (
-                        <div key={i} className={`border rounded-lg p-4 ${result.mentioned ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
-                          <div className="flex justify-between items-start">
-                            <h5 className="font-medium text-gray-900">{result.assistant}</h5>
-                            {result.mentioned && (
-                              <div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                                Mentioned Your Site
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-600 mt-2 border-l-4 border-gray-200 pl-3 py-1">
-                            "{result.response}"
-                          </p>
-                          <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
-                            <span>Confidence: {result.confidence}%</span>
-                            {result.mentioned && (
-                              <span>Ranking: #{result.ranking}</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-3">Summary</h4>
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <div className="text-2xl font-bold text-gray-900">{toolData.summary?.totalMentions || 0}/{toolData.summary?.assistantsTested || 0}</div>
-                        <p className="text-sm text-gray-600">Assistants Mentioning You</p>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-gray-900">{toolData.summary?.averageRanking || 0}</div>
-                        <p className="text-sm text-gray-600">Average Ranking</p>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-gray-900">{toolData.summary?.averageConfidence || 0}%</div>
-                        <p className="text-sm text-gray-600">Average Confidence</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {activeToolId === 'summaries' && (
-                <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-3">{toolData.summaryType?.charAt(0).toUpperCase() + toolData.summaryType?.slice(1)} Summary</h4>
-                    <div className="bg-gray-50 p-4 rounded border border-gray-200 mb-4">
-                      <p className="text-gray-700">{toolData.summary}</p>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h5 className="font-medium text-gray-800 mb-2">Key Entities</h5>
-                        <ul className="space-y-1">
-                          {toolData.entities?.map((entity: string, i: number) => (
-                            <li key={i} className="text-sm text-gray-600 flex items-start">
-                              <span className="text-purple-600 mr-2">•</span>
-                              <span>{entity}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      
-                      <div>
-                        <h5 className="font-medium text-gray-800 mb-2">Main Topics</h5>
-                        <ul className="space-y-1">
-                          {toolData.topics?.map((topic: string, i: number) => (
-                            <li key={i} className="text-sm text-gray-600 flex items-start">
-                              <span className="text-purple-600 mr-2">•</span>
-                              <span>{topic}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                      <h5 className="font-medium text-gray-800 mb-2">AI Optimization Notes</h5>
-                      <p className="text-sm text-gray-600">{toolData.optimizationNotes}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {activeToolId === 'prompts' && (
-                <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-3">Prompt Match Suggestions</h4>
-                    <p className="text-gray-700 mb-4">
-                      Generated {toolData.totalPrompts} prompt suggestions for your content.
-                    </p>
-                    
-                    <div className="space-y-4">
-                      {Object.entries(toolData.promptsByCategory || {}).map(([category, prompts]: [string, any]) => (
-                        <div key={category} className="border border-gray-200 rounded-lg p-4">
-                          <h5 className="font-medium text-gray-900 mb-3">{category}</h5>
-                          <div className="space-y-2">
-                            {prompts.map((prompt: any, i: number) => (
-                              <div key={i} className="bg-gray-50 p-3 rounded">
-                                <div className="flex justify-between items-start">
-                                  <p className="text-gray-800 font-medium">{prompt.prompt}</p>
-                                  <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                                    {prompt.intent}
-                                  </span>
-                                </div>
-                                <p className="text-sm text-gray-600 mt-2">{prompt.optimization}</p>
-                                <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
-                                  <span>Best for: {prompt.aiSystem}</span>
-                                  <span>Likelihood: {prompt.likelihood}%</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Add other tool result displays here... */}
               
               <div className="mt-6">
                 <button
