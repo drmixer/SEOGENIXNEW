@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 export interface UserProfile {
   id: string;
   user_id: string;
-  // FIX: This now reflects the structure from the 'projects' table
   websites: Array<{ id: string; url: string; name: string }>; 
   competitors: Array<{ url: string; name: string }>;
   industry?: string;
@@ -96,24 +95,15 @@ export interface FingerprintPhrase {
   created_at: string;
 }
 
-// Enhanced cache for user profiles to reduce database calls
 const profileCache = new Map<string, {profile: UserProfile, timestamp: number}>();
 const auditHistoryCache = new Map<string, {data: AuditHistoryEntry[], timestamp: number}>();
 const activityCache = new Map<string, {data: UserActivity[], timestamp: number}>();
 const reportsCache = new Map<string, {data: Report[], timestamp: number}>();
 
-// Longer cache TTL to reduce database calls
 const CACHE_TTL = 300000; // 5 minutes cache TTL
-
-// Activity tracking throttling
-const activityThrottleMap = new Map<string, number>();
-const ACTIVITY_THROTTLE_MS = 10000; // 10 seconds between identical activities
-
-// Request in progress tracking to prevent duplicate calls
 const pendingRequests = new Map<string, Promise<any>>();
 
 export const userDataService = {
-  // User Profile Management
   async getUserProfile(userId: string, forceRefresh = false): Promise<UserProfile | null> {
     if (!userId) {
       console.error('getUserProfile called with empty userId');
@@ -137,9 +127,7 @@ export const userDataService = {
       console.log('Forcing profile refresh for user:', userId);
     }
 
-    // FIX: This function now fetches the profile and projects separately and combines them.
     const profilePromise = (async () => {
-      // Step 1: Fetch the core user profile from 'user_profiles'
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
@@ -156,7 +144,6 @@ export const userDataService = {
         return null;
       }
 
-      // Step 2: Fetch the user's websites from the 'projects' table using 'owner_id'
       const { data: websites, error: websitesError } = await supabase
         .from('projects')
         .select('id, name, url')
@@ -167,7 +154,6 @@ export const userDataService = {
         throw websitesError;
       }
       
-      // Step 3: Combine the profile and websites into a single, complete object
       const completeProfile = {
         ...profileData,
         websites: websites || []
@@ -175,7 +161,6 @@ export const userDataService = {
 
       console.log('Successfully fetched complete user profile:', completeProfile.id);
       
-      // Cache the combined result
       profileCache.set(userId, {
         profile: completeProfile as UserProfile,
         timestamp: Date.now()
@@ -212,8 +197,6 @@ export const userDataService = {
         return this.updateUserProfile(profile.user_id as string, profile);
       }
       
-      // Note: This only creates the profile, not the projects.
-      // The SettingsModal now handles project creation separately.
       const { data, error } = await supabase
         .from('user_profiles')
         .insert(profile)
@@ -227,7 +210,6 @@ export const userDataService = {
 
       console.log('Successfully created user profile:', data);
       
-      // The cache will be populated by the next call to getUserProfile
       this.clearCache(profile.user_id);
       
       return data;
@@ -246,8 +228,6 @@ export const userDataService = {
     try {
       console.log('Updating user profile for userId:', userId, 'with updates:', updates);
       
-      // The 'websites' field is no longer stored on user_profiles, so we remove it
-      // from the updates object if it exists, to prevent errors.
       const { websites, ...profileUpdates } = updates;
 
       const { data, error } = await supabase
@@ -264,7 +244,6 @@ export const userDataService = {
 
       console.log('Successfully updated user profile:', data);
       
-      // FIX: Invalidate the cache by forcing a refresh, which will get the new combined profile.
       await this.getUserProfile(userId, true);
       
       return data;
@@ -274,7 +253,6 @@ export const userDataService = {
     }
   },
 
-  // White-label Settings
   async getWhiteLabelSettings(userId: string): Promise<WhiteLabelSettings | null> {
     if (!userId) {
       console.error('getWhiteLabelSettings called with empty userId');
@@ -324,7 +302,6 @@ export const userDataService = {
     }
   },
 
-  // CMS Integrations
   async getCMSIntegrations(userId: string): Promise<CMSIntegration[]> {
     if (!userId) {
       console.error('getCMSIntegrations called with empty userId');
@@ -409,7 +386,6 @@ export const userDataService = {
     }
   },
 
-  // Saved Citation Prompts
   async getSavedCitationPrompts(userId: string): Promise<SavedCitationPrompt[]> {
     if (!userId) {
       console.error('getSavedCitationPrompts called with empty userId');
@@ -472,7 +448,6 @@ export const userDataService = {
     }
   },
 
-  // Fingerprint Phrases
   async getFingerprintPhrases(userId: string): Promise<FingerprintPhrase[]> {
     if (!userId) {
       console.error('getFingerprintPhrases called with empty userId');
@@ -557,7 +532,6 @@ export const userDataService = {
     }
   },
 
-  // Audit History Management
   async saveAuditResult(auditResult: Partial<AuditHistoryEntry>): Promise<AuditHistoryEntry | null> {
     if (!auditResult.user_id) {
       console.error('saveAuditResult called with empty user_id');
@@ -714,7 +688,6 @@ export const userDataService = {
     }
   },
 
-  // User Activity Tracking with throttling and debouncing
   async trackActivity(activity: Partial<UserActivity>): Promise<void> {
     if (!activity.user_id) {
       console.error('trackActivity called with empty user_id');
@@ -815,7 +788,6 @@ export const userDataService = {
     }
   },
 
-  // Reports Management
   async saveReport(report: Partial<Report>): Promise<Report | null> {
     if (!report.user_id) {
       console.error('saveReport called with empty user_id');
@@ -945,16 +917,13 @@ export const userDataService = {
     }
   },
   
-  // Cache management utilities
   clearCache(userId?: string): void {
     if (userId) {
-      // Clear cache for specific user
       profileCache.delete(userId);
       auditHistoryCache.delete(`audit:${userId}`);
       activityCache.delete(`activity:${userId}`);
       reportsCache.delete(`reports:${userId}`);
       
-      // Clear any throttle entries for this user
       for (const key of activityThrottleMap.keys()) {
         if (key.startsWith(`${userId}:`)) {
           activityThrottleMap.delete(key);
@@ -963,7 +932,6 @@ export const userDataService = {
       
       console.log(`Cleared cache for user: ${userId}`);
     } else {
-      // Clear all caches
       profileCache.clear();
       auditHistoryCache.clear();
       activityCache.clear();
