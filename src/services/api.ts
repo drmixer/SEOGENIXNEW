@@ -291,7 +291,7 @@ export const apiService = {
     return entityPromise;
   },
 
-  // AI Content Generator
+  // AI Content Generator - FIXED
   async generateAIContent(
     projectId: string,
     contentType: 'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions',
@@ -311,18 +311,35 @@ export const apiService = {
       return pendingApiRequests.get(cacheKey);
     }
     
+    // Ensure targetKeywords is always an array
+    const keywordsArray = Array.isArray(targetKeywords) ? targetKeywords : [targetKeywords];
+    
     const contentPromise = apiCall(`${API_BASE_URL}/ai-content-generator`, {
       method: 'POST',
       body: JSON.stringify({ 
         projectId,
         contentType, 
         topic, 
-        targetKeywords, 
-        tone, 
+        targetKeywords: keywordsArray, 
+        tone: tone || 'professional', 
         industry, 
         targetAudience, 
-        contentLength 
+        contentLength: contentLength || 'medium'
       })
+    }).then(response => {
+      console.log('AI Content Generator Response:', response);
+      
+      // Handle the response structure correctly
+      if (response.success && response.data) {
+        return response.data;
+      } else if (response.error) {
+        throw new Error(response.error.message || 'Content generation failed');
+      } else {
+        throw new Error('Unexpected response format');
+      }
+    }).catch(error => {
+      console.error('AI Content Generator Error:', error);
+      throw error;
     });
     
     pendingApiRequests.set(cacheKey, contentPromise);
