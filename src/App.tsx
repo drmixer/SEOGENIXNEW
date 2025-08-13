@@ -46,30 +46,25 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // --- DEFINITIVE DIAGNOSTIC TEST ---
-  // This block will run once on app load to test the database query directly.
+  // This is the temporary diagnostic test.
+  // After the fix, you can remove this useEffect block.
   useEffect(() => {
     const runTestQuery = async () => {
-      // Give the app a moment to initialize the session
       setTimeout(async () => {
         console.log("%c--- STARTING DEFINITIVE TEST ---", "color: blue; font-size: 1.2em;");
-        
         const { data: { user } } = await supabase.auth.getUser();
-
         if (!user) {
           console.error("%cTEST FAILED: Could not get a logged-in user.", "color: red; font-size: 1.1em;");
           console.log("%c--- END OF DEFINITIVE TEST ---", "color: blue; font-size: 1.2em;");
           return;
         }
-        
         const userId = user.id;
         console.log("TEST: Checking for user ID:", userId);
-
-        console.log("TEST: Attempting to fetch directly from 'projects' table...");
+        console.log("TEST: Attempting to fetch directly from 'projects' table using 'owner_id'...");
         const { data: projects, error: projectsError } = await supabase
           .from('projects')
           .select('id, name, url')
-          .eq('user_id', userId);
+          .eq('owner_id', userId); // FIX: Using owner_id
 
         if (projectsError) {
           console.error("%c--- TEST FAILED: The query failed with an error. ---", "color: red; font-size: 1.2em;", projectsError);
@@ -77,12 +72,10 @@ function AppContent() {
           console.log("%c--- TEST SUCCEEDED: The query returned data. ---", "color: green; font-size: 1.2em;", projects);
         }
         console.log("%c--- END OF DEFINITIVE TEST ---", "color: blue; font-size: 1.2em;");
-      }, 2000); // 2-second delay to ensure auth is ready
+      }, 2000);
     };
-
     runTestQuery();
-  }, []); // The empty array ensures this runs only once.
-  // --- END OF DEFINITIVE DIAGNOSTIC TEST ---
+  }, []);
 
   const handleAuthStateChange = async (session: Session | null) => {
     const currentUser = session?.user || null;
@@ -91,32 +84,25 @@ function AppContent() {
     if (currentUser) {
       console.log('User found, fetching profile...');
       try {
-        // Step 1: Fetch the user profile.
         const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('user_id', currentUser.id)
           .single();
 
-        if (profileError) {
-          throw profileError;
-        }
+        if (profileError) throw profileError;
 
         if (profile) {
-          // Step 2: Fetch the user's websites from the corrected 'projects' table.
           const { data: websites, error: websitesError } = await supabase
             .from('projects')
             .select('id, name, url')
-            .eq('user_id', currentUser.id);
+            .eq('owner_id', currentUser.id); // FIX: Changed user_id to owner_id
 
-          if (websitesError) {
-            throw websitesError;
-          }
+          if (websitesError) throw websitesError;
           
-          // Step 3: Combine the profile and the websites into a single object for the dashboard.
           const completeProfile = {
             ...profile,
-            websites: websites || [] // Use the real websites, not the old jsonb field.
+            websites: websites || []
           };
           
           setUserProfile(completeProfile);
@@ -137,7 +123,6 @@ function AppContent() {
         }
       } catch (e) {
         console.error('Exception fetching profile and websites:', e);
-        // Fallback to onboarding if anything fails
         setShowOnboarding(true);
       }
     } else {
@@ -150,7 +135,6 @@ function AppContent() {
     setLoading(false);
   };
 
-  // Effect for handling auth state changes
   useEffect(() => {
     setLoading(true);
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -163,7 +147,6 @@ function AppContent() {
     };
   }, []);
 
-  // Effect for handling checkout success/cancel messages
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const checkoutSuccess = searchParams.get('checkout_success');
@@ -196,7 +179,6 @@ function AppContent() {
   const handleNavigateToDashboard = () => {
     if (user) {
       setDashboardLoading(true);
-      // Use React Router's navigate function for SPA navigation
       navigate('/dashboard');
       setTimeout(() => setDashboardLoading(false), 300);
     } else {
@@ -219,11 +201,9 @@ function AppContent() {
     setSelectedPlan(plan);
     if (user) {
       if (plan === 'free') {
-        // User is logged in and selected free plan
         setUserPlan(plan);
         setShowOnboarding(true);
       } else {
-        // For paid plans, check if LemonSqueezy is configured first
         if (!lemonsqueezyService.isConfigured()) {
           addToast({
             id: `payment-unavailable-${Date.now()}`,
@@ -236,7 +216,6 @@ function AppContent() {
           return;
         }
 
-        // For paid plans, redirect to LemonSqueezy checkout
         try {
           const checkoutUrl = await lemonsqueezyService.getCheckoutUrl(plan, user);
           if (checkoutUrl) {
@@ -265,7 +244,6 @@ function AppContent() {
         }
       }
     } else {
-      // User not logged in, show signup first
       setAuthModalMode('signup');
       setShowAuthModal(true);
     }
@@ -282,7 +260,7 @@ function AppContent() {
 
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('*, websites(*)')
+        .select('*') // This doesn't need the websites join anymore
         .eq('user_id', currentUser.id)
         .single();
       
@@ -308,7 +286,6 @@ function AppContent() {
 
   const handleSignOut = async () => {
     setLoading(true);
-    // Clean up local storage thoroughly
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('seogenix_') || key.startsWith('sb-')) {
         localStorage.removeItem(key);
@@ -327,8 +304,6 @@ function AppContent() {
         onClose: () => {}
       });
     }
-
-    // Reload the page to ensure a clean state
     window.location.reload();
   };
 
