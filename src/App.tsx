@@ -330,6 +330,7 @@ function AppContent() {
                 user={user}
                 onSignOut={handleSignOut}
                 userProfile={userProfile}
+                onProfileUpdate={setUserProfile}
                 showWalkthrough={showWalkthrough}
                 onWalkthroughComplete={() => setShowWalkthrough(false)}
               />
@@ -353,6 +354,7 @@ function AppContent() {
                 user={user}
                 onSignOut={handleSignOut}
                 userProfile={userProfile}
+                onProfileUpdate={setUserProfile}
                 showWalkthrough={showWalkthrough}
                 onWalkthroughComplete={() => setShowWalkthrough(false)}
               />
