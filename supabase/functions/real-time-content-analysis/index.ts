@@ -1,206 +1,191 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// --- CORS Headers ---
+// --- SHARED: CORS Headers ---
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// --- Type Definitions ---
+// --- SHARED: Response Helpers ---
+function createErrorResponse(message: string, status = 500, details?: any) {
+  return new Response(JSON.stringify({
+    success: false,
+    error: {
+      message,
+      details: details || undefined,
+    }
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function createSuccessResponse(data: object, status = 200) {
+  return new Response(JSON.stringify({
+    success: true,
+    data,
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// --- SHARED: Service Handler ---
+async function serviceHandler(req: Request, toolLogic: Function) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  try {
+    const supabaseAdminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) return createErrorResponse('Missing Authorization header', 401);
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return createErrorResponse('Invalid or expired token', 401);
+
+    return await toolLogic(req, { user, supabaseClient, supabaseAdminClient });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
+    console.error(`[ServiceHandler Error]`, err);
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
+}
+
+// --- SHARED: Database Logging ---
+// This tool runs on every keystroke, so we will not log it to tool_runs to avoid excessive noise.
+async function logToolRun() { return "real_time_run"; }
+async function updateToolRun() { return; }
+
+// --- SHARED: Robust AI Call Function ---
+async function callGeminiWithRetry(prompt: string, apiKey: string) {
+  let attempts = 0;
+  const maxAttempts = 4;
+  let delay = 1000;
+  while (attempts < maxAttempts) {
+    try {
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
+          }),
+        }
+      );
+      if (!geminiResponse.ok) {
+        if (geminiResponse.status === 429 || geminiResponse.status === 503) {
+            throw new Error(`Retryable Gemini API error: ${geminiResponse.status}`);
+        }
+        throw new Error(`Gemini API failed with status ${geminiResponse.status}`);
+      }
+      const geminiData = await geminiResponse.json();
+      const candidate = geminiData.candidates?.[0];
+      const responseText = candidate?.content?.parts?.[0]?.text;
+      if (!responseText) throw new Error('Invalid response structure from Gemini API');
+      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!jsonMatch?.[1]) throw new Error('Failed to extract JSON from AI response.');
+      return JSON.parse(jsonMatch[1]);
+    } catch (error) {
+       if (error.message.includes("Retryable")) {
+            attempts++;
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+       } else {
+           throw error;
+       }
+    }
+  }
+  throw new Error("The AI model is currently overloaded after multiple retries.");
+}
+
+
+// --- TOOL-SPECIFIC: Type Definitions ---
 interface AnalysisRequest {
+    projectId: string;
     content: string;
     keywords: string[];
-    projectId: string;
 }
 
-interface Suggestion {
-    type: 'grammar' | 'clarity' | 'seo' | 'tone';
-    severity: 'critical' | 'warning' | 'suggestion';
-    message: string;
-    suggestion: string;
-    position: {
-        start: number;
-        end: number;
-    };
-}
-
-interface AnalysisResponse {
-    aiReadabilityScore: number;
-    keywordDensity: { [key: string]: number };
-    suggestions: Suggestion[];
-}
-
-// --- Database Logging Helpers ---
-async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
-  if (!projectId) {
-    throw new Error("logToolRun error: projectId is required.");
-  }
-  const { data, error } = await supabase
-    .from("tool_runs")
-    .insert({
-      project_id: projectId,
-      tool_name: toolName,
-      input_payload: inputPayload,
-      status: "running",
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("Error logging tool run:", error);
-    throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
-  }
-  if (!data || !data.id) {
-    console.error("No data or data.id returned from tool_runs insert.");
-    throw new Error("Failed to log tool run: No data returned after insert.");
-  }
-  return data.id;
-}
-
-async function updateToolRun(supabase: SupabaseClient, runId: string | null, status: string, outputPayload: object | null, errorMessage: string | null) {
-  if (!runId) {
-    console.error("updateToolRun error: runId is required.");
-    return;
-  }
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output_payload: errorMessage ? { error: errorMessage } : outputPayload || null,
-    error_message: errorMessage || null,
-  };
-  const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
-  if (error) {
-    console.error(`Error updating tool run ID ${runId}:`, error);
-  }
-}
-
-// --- AI Prompt Engineering ---
+// --- TOOL-SPECIFIC: AI Prompt ---
 const getAnalysisPrompt = (content: string, keywords: string[]): string => {
-    const jsonSchema = `
-    {
-      "aiReadabilityScore": "number (0-100, how easily an AI can parse and understand the text)",
-      "keywordDensity": {
-        "keyword1": "number (percentage, e.g., 1.5 for 1.5%)"
-      },
-      "suggestions": [
-        {
-          "type": "string (enum: 'grammar', 'clarity', 'seo', 'tone')",
-          "severity": "string (enum: 'critical', 'warning', 'suggestion')",
-          "message": "string (A brief explanation of the issue)",
-          "suggestion": "string (A concrete suggestion for how to fix it)",
-          "position": {
-            "start": "number (The starting character index of the issue)",
-            "end": "number (The ending character index of the issue)"
-          }
-        }
-      ]
-    }
-    `;
+    const jsonSchema = `{
+      "aiReadabilityScore": "number (0-100)",
+      "keywordDensity": { "keyword1": "number (percentage)" },
+      "suggestions": [{
+          "type": "string ('grammar'|'clarity'|'seo'|'tone')",
+          "severity": "string ('critical'|'warning'|'suggestion')",
+          "message": "string",
+          "suggestion": "string",
+          "position": { "start": "number", "end": "number" }
+      }]
+    }`;
 
-    return `
-    You are a Real-time AI Writing Assistant. Your task is to analyze a piece of text as it's being written and provide immediate, actionable feedback.
-
-    **Analysis Task:**
-    - **Content to Analyze:**
-      ---
-      ${content}
-      ---
+    return `You are a Real-time AI Writing Assistant. Analyze the text and provide immediate, actionable feedback.
+    - **Content to Analyze:** ${content}
     - **Target Keywords:** ${keywords.join(', ')}
 
-    **Your Instructions:**
-    Analyze the content and provide a readability score, keyword density analysis, and a list of specific suggestions for improvement.
+    **Instructions:**
+    Analyze the content for readability, keyword density, and provide specific suggestions for improvement.
 
-    **Output Format:**
-    You MUST provide a response in a single, valid JSON object. Do not include any text or formatting outside of the JSON object. The JSON object must strictly adhere to the following schema:
+    **CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+    The JSON object must follow this exact schema:
     \`\`\`json
     ${jsonSchema}
     \`\`\`
-
-    Now, perform your real-time analysis. If the content is too short or empty, return a JSON object with empty values.
-    `;
+    If the content is too short, return empty values.`;
 };
 
-// --- Main Service Handler ---
-export const analysisService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+// --- TOOL-SPECIFIC: Main Logic ---
+const realTimeAnalysisToolLogic = async (req: Request, { user, supabaseClient, supabaseAdminClient }: { user: any, supabaseClient: SupabaseClient, supabaseAdminClient: SupabaseClient }) => {
+  try {
+    const { projectId, content, keywords }: AnalysisRequest = await req.json();
+
+    if (!projectId || typeof content !== 'string') {
+      throw new Error('`projectId` and `content` (as a string) are required.');
     }
 
-    let runId;
-    try {
-        const { content, keywords, projectId }: AnalysisRequest = await req.json();
+    // No need to check project access for a real-time tool that doesn't save anything to the project.
 
-        runId = await logToolRun(supabase, projectId, 'real-time-content-analysis', { keywords });
-
-        if (typeof content !== 'string') {
-            throw new Error('`content` must be a string.');
-        }
-
-        // Handle cases with very short content without calling the AI
-        if (content.length < 20) {
-            return new Response(JSON.stringify({
-                success: true,
-                data: {
-                    aiReadabilityScore: 0,
-                    keywordDensity: {},
-                    suggestions: [],
-                }
-            }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-
-        const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-        if (!geminiApiKey) throw new Error('Gemini API key not configured');
-
-        const prompt = getAnalysisPrompt(content, keywords || []);
-
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                    response_mime_type: "application/json",
-                    temperature: 0.3,
-                    maxOutputTokens: 1024,
-                }
-            })
-        });
-
-        if (!geminiResponse.ok) {
-            throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
-        }
-
-        const geminiData = await geminiResponse.json();
-        const analysisJson: AnalysisResponse = JSON.parse(geminiData.candidates[0].content.parts[0].text);
-
-        await updateToolRun(supabase, runId, 'completed', analysisJson, null);
-
-        return new Response(JSON.stringify({ success: true, data: analysisJson }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-
-    } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        if (runId) {
-            await updateToolRun(supabase, runId, 'error', null, errorMessage);
-        }
-        const errorCode = err instanceof Error ? err.name : 'UNKNOWN_ERROR';
-        return new Response(JSON.stringify({ success: false, error: { message: errorMessage, code: errorCode } }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (content.length < 25) {
+        return createSuccessResponse({
+            aiReadabilityScore: 0,
+            keywordDensity: {},
+            suggestions: [],
         });
     }
+
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey) throw new Error('Gemini API key not configured');
+
+    const prompt = getAnalysisPrompt(content, keywords || []);
+    const analysisJson = await callGeminiWithRetry(prompt, geminiApiKey);
+
+    if (!analysisJson.aiReadabilityScore || !analysisJson.keywordDensity || !analysisJson.suggestions) {
+        throw new Error('Generated analysis is missing required fields.');
+    }
+
+    return createSuccessResponse(analysisJson);
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+    // Do not log to tool_runs, but log to console for debugging
+    console.error('Real-time analysis error:', err);
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
 };
 
 // --- Server ---
-Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
-    }
-    const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    return await analysisService(req, supabase);
-});
+Deno.serve((req) => serviceHandler(req, realTimeAnalysisToolLogic));

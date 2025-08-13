@@ -1,123 +1,289 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// --- CORS Headers ---
+// --- SHARED: CORS Headers ---
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// --- Type Definitions ---
+// --- SHARED: Response Helpers ---
+function createErrorResponse(message: string, status = 500, details?: any) {
+  return new Response(JSON.stringify({
+    success: false,
+    error: {
+      message,
+      details: details || undefined,
+    }
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function createSuccessResponse(data: object, status = 200) {
+  return new Response(JSON.stringify({
+    success: true,
+    data,
+  }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// --- SHARED: Service Handler ---
+async function serviceHandler(req: Request, toolLogic: Function) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  try {
+    const supabaseAdminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return createErrorResponse('Missing Authorization header', 401);
+    }
+
+    // Auth with user's token
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    // Check for user session
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) {
+        return createErrorResponse('Invalid or expired token', 401);
+    }
+
+    return await toolLogic(req, { user, supabaseClient, supabaseAdminClient });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown server error occurred.';
+    console.error(`[ServiceHandler Error]`, err);
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
+}
+
+// --- SHARED: Database Logging Helpers ---
+async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object) {
+  if (!projectId) {
+    throw new Error("logToolRun error: projectId is required.");
+  }
+  const { data, error } = await supabase
+    .from("tool_runs")
+    .insert({
+      project_id: projectId,
+      tool_name: toolName,
+      input_payload: inputPayload,
+      status: "running",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("Error logging tool run:", error);
+    throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
+  }
+  if (!data || !data.id) {
+    console.error("No data or data.id returned from tool_runs insert.");
+    throw new Error("Failed to log tool run: No data returned after insert.");
+  }
+  return data.id;
+}
+
+async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null) {
+  if (!runId) {
+    console.error("updateToolRun error: runId is required.");
+    return;
+  }
+  const update = {
+    status,
+    completed_at: new Date().toISOString(),
+    output_payload: errorMessage ? { error: errorMessage } : outputPayload || null,
+    error_message: errorMessage || null,
+  };
+  const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
+  if (error) {
+    console.error(`Error updating tool run ID ${runId}:`, error);
+  }
+}
+
+// --- SHARED: Robust AI Call Function ---
+async function callGeminiWithRetry(prompt: string, apiKey: string) {
+  let attempts = 0;
+  const maxAttempts = 4;
+  let delay = 1000;
+
+  while (attempts < maxAttempts) {
+    try {
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.5,
+              maxOutputTokens: 4096,
+            },
+          }),
+        }
+      );
+
+      if (!geminiResponse.ok) {
+        if (geminiResponse.status === 429 || geminiResponse.status === 503) {
+            const errorText = await geminiResponse.text();
+            throw new Error(`Retryable Gemini API error: ${geminiResponse.status} ${errorText}`);
+        }
+        const errorText = await geminiResponse.text();
+        console.error('Gemini API error:', geminiResponse.status, errorText);
+        throw new Error(`Gemini API failed with status ${geminiResponse.status}: ${errorText}`);
+      }
+
+      const geminiData = await geminiResponse.json();
+      const candidate = geminiData.candidates?.[0];
+      if (!candidate) throw new Error('No content generated by Gemini API');
+
+      const responseText = candidate.content?.parts?.[0]?.text;
+      if (!responseText) throw new Error('Invalid response structure from Gemini API');
+
+      console.log('Raw Gemini response text:', responseText.substring(0, 500) + '...');
+
+      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!jsonMatch || !jsonMatch[1]) {
+        console.error('Could not find JSON block in response:', responseText);
+        throw new Error('Failed to extract JSON from AI response.');
+      }
+      const jsonString = jsonMatch[1];
+      console.log('Extracted JSON string:', jsonString);
+
+      return JSON.parse(jsonString);
+
+    } catch (error) {
+       if (error.message.includes("Retryable")) {
+            attempts++;
+            console.log(`AI model is overloaded or rate-limited. Retrying in ${delay / 1000}s... (Attempt ${attempts}/${maxAttempts})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+       } else {
+           throw error;
+       }
+    }
+  }
+  throw new Error("The AI model is currently overloaded after multiple retries.");
+}
+
+
+// --- TOOL-SPECIFIC: Type Definitions ---
 interface PlaybookRequest {
-    userId: string;
+    projectId: string;
     goal: 'increase-traffic' | 'improve-rankings' | 'boost-engagement';
     focusArea: 'on-page-seo' | 'content-quality' | 'technical-seo' | 'citations';
-    projectId: string;
 }
 
-// --- Database Helpers ---
+// --- TOOL-SPECIFIC: Database Helpers ---
 async function getUserData(supabase: SupabaseClient, userId: string) {
-    const { data: profile } = await supabase.from('user_profiles').select('business_description, website_url, target_audience').eq('user_id', userId).single();
-    const { data: auditHistory } = await supabase.from('audit_history').select('score, created_at, recommendations').eq('user_id', userId).order('created_at', { ascending: false }).limit(5);
-    const { data: activity } = await supabase.from('user_activity').select('activity_type, activity_data, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10);
-    return { profile, auditHistory, activity };
+    console.log(`Fetching user data for user ID: ${userId}`);
+    const { data: profile, error: profileError } = await supabase.from('user_profiles').select('business_description, website_url, target_audience').eq('id', userId).single();
+    if (profileError) console.error('Error fetching profile:', profileError.message);
+
+    const { data: auditHistory, error: auditError } = await supabase.from('audit_history').select('score, created_at, recommendations').eq('user_id', userId).order('created_at', { ascending: false }).limit(5);
+    if (auditError) console.error('Error fetching audit history:', auditError.message);
+
+    console.log('User data fetched successfully.');
+    return { profile, auditHistory };
 }
 
-async function logToolRun({ supabase, projectId, toolName, inputPayload }: { supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: any }) {
-    const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-    if (error) { console.error('Error logging tool run:', error); return null; }
-    return data.id;
-}
-
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }: { supabase: SupabaseClient, runId: string | null, status: string, outputPayload: any, errorMessage: string | null }) {
-    if (!runId) return;
-    const update = {
-        status,
-        completed_at: new Date().toISOString(),
-        output_payload: errorMessage ? { error: errorMessage } : outputPayload,
-        error_message: errorMessage,
-    };
-    const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-    if (error) { console.error('Error updating tool run:', error); }
-}
-
-// --- AI Prompt Engineering ---
+// --- TOOL-SPECIFIC: AI Prompt Engineering ---
 const getPlaybookPrompt = (request: PlaybookRequest, userData: any): string => {
     const { goal, focusArea } = request;
-    const jsonSchema = `{ "playbookTitle": "string", "executiveSummary": "string", "steps": [{ "stepNumber": "number", "title": "string", "description": "string", "rationale": "string", "action_type": "string" }] }`;
-    return `
-    You are an Expert SEO Strategist and AI Coach...
-    **User Goal:** ${goal}
-    **User Focus Area:** ${focusArea}
-    **User Data:**
-    ${JSON.stringify(userData, null, 2)}
-    ...
-    You MUST provide a response in a single, valid JSON object...
-    \`\`\`json
-    ${jsonSchema}
-    \`\`\`
-    Now, create the personalized playbook.
-    `;
+    const { profile, auditHistory } = userData;
+    const jsonSchema = `{ "playbookTitle": "string", "executiveSummary": "string", "steps": [{ "stepNumber": "number", "title": "string", "description": "string", "rationale": "string", "actionItems": ["action item 1", "action item 2"], "kpis": ["KPI 1", "KPI 2"] }] }`;
+
+    return `You are an Expert SEO Strategist and AI Coach. Your task is to generate a personalized SEO playbook.
+
+**Context:**
+- **User's Goal:** ${goal}
+- **User's Focus Area:** ${focusArea}
+- **User's Business:** ${profile?.business_description || 'Not provided'}
+- **User's Website:** ${profile?.website_url || 'Not provided'}
+- **User's Target Audience:** ${profile?.target_audience || 'Not provided'}
+- **Recent Audit History:** ${auditHistory?.length > 0 ? JSON.stringify(auditHistory, null, 2) : 'No recent audits found.'}
+
+**Instructions:**
+1. Analyze all the provided context.
+2. Create a detailed, actionable playbook with 5-7 steps.
+3. Each step must have a clear title, description, rationale, scannable action items, and measurable KPIs.
+4. The tone should be encouraging, expert, and clear.
+
+**CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+The JSON object must follow this exact schema:
+\`\`\`json
+${jsonSchema}
+\`\`\`
+
+Generate the personalized playbook now.`;
 };
 
-// --- Main Service Handler ---
-export const playbookGeneratorService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+// --- TOOL-SPECIFIC: Main Logic ---
+const playbookGeneratorToolLogic = async (req: Request, { user, supabaseClient, supabaseAdminClient }: { user: any, supabaseClient: SupabaseClient, supabaseAdminClient: SupabaseClient }) => {
+  let runId: string | null = null;
+  try {
+    const requestBody: PlaybookRequest = await req.json();
+    const { projectId, ...inputPayload } = requestBody;
+
+    console.log('Playbook generator request for project:', projectId);
+
+    if (!projectId || !requestBody.goal || !requestBody.focusArea) {
+      throw new Error('`projectId`, `goal`, and `focusArea` are required.');
     }
 
-    let runId: string | null = null;
-    try {
-        const requestBody: PlaybookRequest = await req.json();
-        const { projectId, userId, goal, focusArea } = requestBody;
-
-        runId = await logToolRun({ supabase, projectId, toolName: 'adaptive-playbook-generator', inputPayload: { userId, goal, focusArea } });
-
-        const userData = await getUserData(supabase, userId);
-        if (!userData.profile) throw new Error("User profile not found.");
-
-        const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-        if (!geminiApiKey) throw new Error('Gemini API key not configured');
-
-        const prompt = getPlaybookPrompt(requestBody, userData);
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { response_mime_type: "application/json", temperature: 0.5, maxOutputTokens: 4096 }
-            })
-        });
-
-        if (!geminiResponse.ok) throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
-
-        const geminiData = await geminiResponse.json();
-        const playbookJson = JSON.parse(geminiData.candidates[0].content.parts[0].text);
-
-        if (runId) {
-            await updateToolRun({ supabase, runId, status: 'completed', outputPayload: playbookJson, errorMessage: null });
-        }
-
-        return new Response(JSON.stringify({ success: true, data: playbookJson }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-
-    } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        if (runId) {
-            await updateToolRun({ supabase, runId, status: 'error', outputPayload: null, errorMessage });
-        }
-        return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    const { data: project, error: projectError } = await supabaseClient.from('projects').select('id').eq('id', projectId).single();
+    if (projectError || !project) {
+        throw new Error(`Access denied or project not found for id: ${projectId}`);
     }
+
+    runId = await logToolRun(supabaseAdminClient, projectId, 'adaptive-playbook-generator', inputPayload);
+    console.log(`Tool run logged with ID: ${runId}`);
+
+    const userData = await getUserData(supabaseClient, user.id);
+    if (!userData.profile) {
+        console.warn(`User profile not found for user ${user.id}. Playbook will be less personalized.`);
+    }
+
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey) throw new Error('Gemini API key not configured');
+
+    const prompt = getPlaybookPrompt(requestBody, userData);
+    const playbookJson = await callGeminiWithRetry(prompt, geminiApiKey);
+
+    if (!playbookJson.playbookTitle || !playbookJson.steps) {
+      throw new Error('Generated playbook content missing required fields');
+    }
+
+    const finalOutput = {
+        ...playbookJson,
+        generatedAt: new Date().toISOString(),
+    };
+
+    await updateToolRun(supabaseAdminClient, runId, 'completed', finalOutput, null);
+    console.log('Playbook generation complete.');
+    return createSuccessResponse({ runId, ...finalOutput });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+    console.error('Playbook generator error:', err);
+    if (runId) {
+      await updateToolRun(supabaseAdminClient, runId, 'error', null, errorMessage);
+    }
+    return createErrorResponse(errorMessage, 500, err instanceof Error ? err.stack : undefined);
+  }
 };
 
 // --- Server ---
-Deno.serve(async (req) => {
-    const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    return await playbookGeneratorService(req, supabase);
-});
+Deno.serve((req) => serviceHandler(req, playbookGeneratorToolLogic));
