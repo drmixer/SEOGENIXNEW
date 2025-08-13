@@ -70,34 +70,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
   const handleSave = async () => {
     setLoading(true);
     try {
-      // Process websites: create projects for new websites
+      // Step 1: Process and save websites, creating projects if necessary
       const processedWebsites = await Promise.all(
         formData.websites
           .filter(w => w.url.trim() && w.name.trim())
           .map(async (website) => {
-            if (website.id) {
-              // Existing website, just return it
-              return website;
-            } else {
-              // New website, create a project
-              console.log(`Creating new project for website: ${website.name}`);
-              const { data: newProject, error } = await supabase
-                .from('projects')
-                .insert({ name: website.name, owner_id: user.id })
-                .select('id')
-                .single();
+            if (website.id) return website;
 
-              if (error) {
-                console.error('Error creating project:', error);
-                throw new Error(`Failed to create project for ${website.name}: ${error.message}`);
-              }
+            console.log(`Creating new project for website: ${website.name}`);
+            const { data: newProject, error } = await supabase
+              .from('projects')
+              .insert({ name: website.name, owner_id: user.id })
+              .select('id')
+              .single();
 
-              console.log(`New project created with ID: ${newProject.id}`);
-              return { url: website.url, name: website.name, id: newProject.id };
-            }
+            if (error) throw new Error(`Failed to create project for ${website.name}: ${error.message}`);
+
+            console.log("Saved project with ID:", newProject.id);
+            return { url: website.url, name: website.name, id: newProject.id };
           })
       );
 
+      // Step 2: Update the user profile with all changes
       const updates = {
         industry: formData.industry,
         business_description: formData.businessDescription,
@@ -105,26 +99,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
         competitors: formData.competitors.filter(c => c.url.trim() && c.name.trim()),
         goals: formData.goals
       };
+      await userDataService.updateUserProfile(user.id, updates);
 
-      const updatedProfile = await userDataService.updateUserProfile(user.id, updates);
-      
-      if (updatedProfile) {
-        onProfileUpdate(updatedProfile);
-        
-        // Track settings update
-        await userDataService.trackActivity({
-          user_id: user.id,
-          activity_type: 'settings_updated',
-          activity_data: { 
-            updatedFields: Object.keys(updates),
-            websitesCount: updates.websites.length,
-            competitorsCount: updates.competitors.length,
-            goalsCount: updates.goals.length
-          }
-        });
-        
-        onClose();
+      // Step 3: Force a fresh fetch of the profile from the backend
+      console.log("Forcing a fresh fetch of the user profile from backend...");
+      const freshProfile = await userDataService.getUserProfile(user.id, true);
+      console.log("Fetched profile:", freshProfile);
+
+      // Step 4: Update the global state with the fresh profile
+      if (freshProfile) {
+        onProfileUpdate(freshProfile);
       }
+
+      onClose();
+
     } catch (error) {
       console.error('Error updating profile:', error);
       alert(`Failed to update settings. Please try again. ${error instanceof Error ? error.message : ''}`);
