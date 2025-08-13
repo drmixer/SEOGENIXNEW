@@ -16,7 +16,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
   const [formData, setFormData] = useState({
     industry: userProfile?.industry || '',
     businessDescription: userProfile?.business_description || '',
-    websites: userProfile?.websites || [{ url: '', name: '' }],
+    websites: userProfile?.websites || [{ url: '', name: '', id: null }],
     competitors: userProfile?.competitors || [{ url: '', name: '' }],
     goals: userProfile?.goals || []
   });
@@ -70,10 +70,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
   const handleSave = async () => {
     setLoading(true);
     try {
+      // Process websites: create projects for new websites
+      const processedWebsites = await Promise.all(
+        formData.websites
+          .filter(w => w.url.trim() && w.name.trim())
+          .map(async (website) => {
+            if (website.id) {
+              // Existing website, just return it
+              return website;
+            } else {
+              // New website, create a project
+              console.log(`Creating new project for website: ${website.name}`);
+              const { data: newProject, error } = await supabase
+                .from('projects')
+                .insert({ name: website.name, owner_id: user.id })
+                .select('id')
+                .single();
+
+              if (error) {
+                console.error('Error creating project:', error);
+                throw new Error(`Failed to create project for ${website.name}: ${error.message}`);
+              }
+
+              console.log(`New project created with ID: ${newProject.id}`);
+              return { url: website.url, name: website.name, id: newProject.id };
+            }
+          })
+      );
+
       const updates = {
         industry: formData.industry,
         business_description: formData.businessDescription,
-        websites: formData.websites.filter(w => w.url.trim() && w.name.trim()),
+        websites: processedWebsites,
         competitors: formData.competitors.filter(c => c.url.trim() && c.name.trim()),
         goals: formData.goals
       };
@@ -99,7 +127,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
       }
     } catch (error) {
       console.error('Error updating profile:', error);
-      alert('Failed to update settings. Please try again.');
+      alert(`Failed to update settings. Please try again. ${error instanceof Error ? error.message : ''}`);
     } finally {
       setLoading(false);
     }
@@ -108,7 +136,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
   const addWebsite = () => {
     setFormData({
       ...formData,
-      websites: [...formData.websites, { url: '', name: '' }]
+      websites: [...formData.websites, { url: '', name: '', id: null }]
     });
   };
 
