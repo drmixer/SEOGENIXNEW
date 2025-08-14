@@ -4,6 +4,9 @@ export async function logToolRun(supabase: SupabaseClient, projectId: string, to
   if (!projectId) {
     throw new Error("logToolRun error: projectId is required.");
   }
+  
+  console.log(`Logging tool run: ${toolName} for project: ${projectId}`);
+  
   const { data, error } = await supabase
     .from("tool_runs")
     .insert({
@@ -11,6 +14,7 @@ export async function logToolRun(supabase: SupabaseClient, projectId: string, to
       tool_name: toolName,
       input_payload: inputPayload,
       status: "running",
+      created_at: new Date().toISOString()
     })
     .select("id")
     .single();
@@ -19,10 +23,13 @@ export async function logToolRun(supabase: SupabaseClient, projectId: string, to
     console.error("Error logging tool run:", error);
     throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
   }
+  
   if (!data || !data.id) {
     console.error("No data or data.id returned from tool_runs insert.");
     throw new Error("Failed to log tool run: No data returned after insert.");
   }
+  
+  console.log(`Tool run logged with ID: ${data.id}`);
   return data.id;
 }
 
@@ -32,7 +39,9 @@ export async function updateToolRun(supabase: SupabaseClient, runId: string, sta
     return;
   }
 
-  // A bug existed in some tools where they tried to write to `output`. The correct field is `output_payload`.
+  console.log(`Updating tool run ${runId} with status: ${status}`);
+
+  // CRITICAL FIX: Use the correct field name 'output_payload' not 'output'
   const update = {
     status,
     completed_at: new Date().toISOString(),
@@ -43,5 +52,7 @@ export async function updateToolRun(supabase: SupabaseClient, runId: string, sta
   const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
   if (error) {
     console.error(`Error updating tool run ID ${runId}:`, error);
+  } else {
+    console.log(`Tool run ${runId} updated successfully`);
   }
 }
