@@ -36,16 +36,39 @@ const apiCall = async (url: string, options: RequestInit, authRequired: boolean 
     });
     
     if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
-        console.error(`API Error (${response.status}):`, errorBody);
-        // Use the error message from the body if available
-        const errorMessage = errorBody.error?.message || `API request failed: ${response.status} ${response.statusText}`;
-        throw new Error(errorMessage);
+      const errorBody = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+      console.error(`API Error (${response.status}):`, errorBody);
+      
+      // Handle different error response formats from edge functions
+      let errorMessage = 'API request failed';
+      
+      if (errorBody.error) {
+        if (typeof errorBody.error === 'string') {
+          errorMessage = errorBody.error;
+        } else if (errorBody.error.message) {
+          errorMessage = errorBody.error.message;
+        } else if (errorBody.error.details) {
+          errorMessage = errorBody.error.details;
+        }
+      } else if (errorBody.message) {
+        errorMessage = errorBody.message;
+      } else {
+        errorMessage = `${response.status} ${response.statusText}`;
+      }
+      
+      throw new Error(errorMessage);
     }
     
     const data = await response.json();
     console.log(`API response from ${url}:`, data);
-    return data;
+    
+    // Handle different response formats from edge functions
+    if (data.success === false) {
+      throw new Error(data.error?.message || 'API returned error');
+    }
+    
+    // Some functions return { success: true, data: ... }, others return direct data
+    return data.success ? data.data : data;
   } catch (error) {
     console.error(`API call failed for ${url}:`, error);
     throw error;
@@ -69,8 +92,19 @@ export interface AuditResult {
     conversationalReadiness: number;
     contentStructure: number;
   };
-  recommendations: string[];
-  issues: string[];
+  recommendations: Array<{
+    title: string;
+    description: string;
+    action_type?: string;
+  }>;
+  issues: Array<{
+    title: string;
+    description: string;
+    category: string;
+    priority: string;
+    suggestion: string;
+    learnMore: string;
+  }>;
 }
 
 export interface Citation {
@@ -103,6 +137,12 @@ export const apiService = {
     const auditPromise = apiCall(`${API_BASE_URL}/ai-visibility-audit`, {
       method: 'POST',
       body: JSON.stringify({ projectId, url, content })
+    }).then(response => {
+      // Handle the response structure correctly - some functions return { output: ... }
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, auditPromise);
@@ -126,6 +166,11 @@ export const apiService = {
     const insightsPromise = apiCall(`${API_BASE_URL}/enhanced-audit-insights`, {
       method: 'POST',
       body: JSON.stringify({ url, content, previousScore })
+    }).then(response => {
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, insightsPromise);
@@ -149,6 +194,12 @@ export const apiService = {
     const schemaPromise = apiCall(`${API_BASE_URL}/schema-generator`, {
       method: 'POST',
       body: JSON.stringify({ projectId, url, contentType, content })
+    }).then(response => {
+      // Handle the response structure correctly
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, schemaPromise);
@@ -172,6 +223,11 @@ export const apiService = {
     const citationsPromise = apiCall(`${API_BASE_URL}/citation-tracker`, {
       method: 'POST',
       body: JSON.stringify({ projectId, domain, keywords, fingerprintPhrases })
+    }).then(response => {
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, citationsPromise);
@@ -195,6 +251,11 @@ export const apiService = {
     const optimizePromise = apiCall(`${API_BASE_URL}/content-optimizer`, {
       method: 'POST',
       body: JSON.stringify({ content, targetKeywords, contentType })
+    }).then(response => {
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, optimizePromise);
@@ -218,6 +279,12 @@ export const apiService = {
     const voicePromise = apiCall(`${API_BASE_URL}/voice-assistant-tester`, {
       method: 'POST',
       body: JSON.stringify({ query, assistants })
+    }).then(response => {
+      // Handle the response structure correctly
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, voicePromise);
@@ -237,12 +304,18 @@ export const apiService = {
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     userData?: any
   ) {
-    const authRequired = context !== 'landing';
+    const authRequired = context === 'dashboard';
     
-    return await apiCall(`${API_BASE_URL}/genie-chatbot`, {
+    const response = await apiCall(`${API_BASE_URL}/genie-chatbot`, {
       method: 'POST',
       body: JSON.stringify({ message, context, userPlan, conversationHistory, userData })
     }, authRequired);
+    
+    // Handle the response structure correctly
+    if (response.data) {
+      return response.data;
+    }
+    return response;
   },
 
   // LLM Site Summaries
@@ -280,6 +353,11 @@ export const apiService = {
     const entityPromise = apiCall(`${API_BASE_URL}/entity-coverage-analyzer`, {
       method: 'POST',
       body: JSON.stringify({ projectId, url, content, industry, competitors })
+    }).then(response => {
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, entityPromise);
@@ -328,15 +406,7 @@ export const apiService = {
       })
     }).then(response => {
       console.log('AI Content Generator Response:', response);
-      
-      // Handle the response structure correctly
-      if (response.success && response.data) {
-        return response.data;
-      } else if (response.error) {
-        throw new Error(response.error.message || 'Content generation failed');
-      } else {
-        throw new Error('Unexpected response format');
-      }
+      return response;
     }).catch(error => {
       console.error('AI Content Generator Error:', error);
       throw error;
@@ -372,6 +442,11 @@ export const apiService = {
     const promptsPromise = apiCall(`${API_BASE_URL}/prompt-match-suggestions`, {
       method: 'POST',
       body: JSON.stringify({ projectId, topic, industry, targetAudience, contentType, userIntent })
+    }).then(response => {
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, promptsPromise);
@@ -403,6 +478,11 @@ export const apiService = {
     const analysisPromise = apiCall(`${API_BASE_URL}/competitive-analysis`, {
       method: 'POST',
       body: JSON.stringify({ projectId, primaryUrl, competitorUrls, industry, analysisType })
+    }).then(response => {
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, analysisPromise);
@@ -435,6 +515,11 @@ export const apiService = {
     const discoveryPromise = apiCall(`${API_BASE_URL}/competitor-discovery`, {
       method: 'POST',
       body: JSON.stringify({ projectId, url, industry, businessDescription, existingCompetitors, analysisDepth })
+    }).then(response => {
+      if (response.output) {
+        return response.output;
+      }
+      return response;
     });
     
     pendingApiRequests.set(cacheKey, discoveryPromise);
@@ -617,7 +702,7 @@ export const apiService = {
       method: 'POST',
       body: JSON.stringify({ url })
     }, false);
-    return result.data;
+    return result.data || result;
   },
 
   async generateAdaptivePlaybook(userId: string, goal: string, focusArea: string) {
@@ -625,13 +710,13 @@ export const apiService = {
       method: 'POST',
       body: JSON.stringify({ userId, goal, focusArea })
     });
-    return result.data;
+    return result.data || result;
   },
 
   async getConnectedIntegrations(): Promise<Array<{ id: string; cms_type: 'wordpress' | 'shopify'; cms_name: string; site_url: string }>> {
     const result = await apiCall(`${API_BASE_URL}/get-integrations`, {
       method: 'GET',
     });
-    return result.data;
+    return result.data || result;
   }
 };
