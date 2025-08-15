@@ -13,7 +13,8 @@ import {
   ArrowRight,
   AlertTriangle,
   Loader,
-  CheckCircle
+  CheckCircle,
+  Radar
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import CompetitiveAnalysisModal from './CompetitiveAnalysisModal';
@@ -124,7 +125,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       description: 'Comprehensive analysis of how well your content is structured for AI systems',
       icon: FileText,
       color: 'from-blue-500 to-blue-600',
-      planRequired: 'core',
+      planRequired: 'free', // Changed from 'core' to allow free users to test
       isPopular: true
     },
     {
@@ -204,7 +205,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       id: 'discovery',
       name: 'Competitor Discovery',
       description: 'Find competitors you might not be aware of',
-      icon: Search,
+      icon: Radar,
       color: 'from-purple-500 to-purple-600',
       planRequired: 'core',
       isNew: true
@@ -433,17 +434,17 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       if (toolId === 'audit') {
         try {
           const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
+          if (user && result) {
             await userDataService.saveAuditResult({
               user_id: user.id,
               website_url: selectedWebsite!,
               overall_score: result.overallScore,
-              ai_understanding: result.subscores.aiUnderstanding,
-              citation_likelihood: result.subscores.citationLikelihood,
-              conversational_readiness: result.subscores.conversationalReadiness,
-              content_structure: result.subscores.contentStructure,
-              recommendations: result.recommendations,
-              issues: result.issues.map((issue: any) => issue.title), // Storing titles for now
+              ai_understanding: result.subscores?.aiUnderstanding || 0,
+              citation_likelihood: result.subscores?.citationLikelihood || 0,
+              conversational_readiness: result.subscores?.conversationalReadiness || 0,
+              content_structure: result.subscores?.contentStructure || 0,
+              recommendations: result.recommendations?.map((r: any) => r.title || r) || [],
+              issues: result.issues?.map((issue: any) => issue.title || issue) || [],
               audit_data: result
             });
           }
@@ -479,14 +480,15 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
     } catch (error) {
       console.error(`Error running ${toolId}:`, error);
-      setError(`Failed to run ${toolId}. Please try again. ${error instanceof Error ? error.message : ''}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(`Failed to run ${toolId}. ${errorMessage}`);
       
       // Notify parent of failure
       if (onToolComplete) {
         onToolComplete(
           tools.find(t => t.id === toolId)?.name || toolId,
           false,
-          error instanceof Error ? error.message : 'Unknown error'
+          errorMessage
         );
       }
     } finally {
@@ -914,38 +916,98 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {toolData.strengths && toolData.strengths.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">What's Working Well:</h4>
+                      <div className="bg-green-50 p-4 rounded-lg">
+                        <ul className="text-sm text-green-800 space-y-2">
+                          {toolData.strengths.map((strength: string, index: number) => (
+                            <li key={index} className="flex items-start space-x-2">
+                              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <span>{strength}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {toolData.keyInsights && toolData.keyInsights.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Key Insights:</h4>
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <ul className="text-sm text-blue-800 space-y-2">
+                          {toolData.keyInsights.map((insight: string, index: number) => (
+                            <li key={index} className="flex items-start space-x-2">
+                              <span className="text-blue-600 mr-2">💡</span>
+                              <span>{insight}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               
               {activeToolId === 'schema' && (
                 <div className="space-y-4">
                   <div>
-                    <h4 className="font-medium text-gray-900">Suggested Schema Type:</h4>
-                    <p className="text-lg text-purple-600 font-semibold">{toolData.suggestedType}</p>
+                    <h4 className="font-medium text-gray-900">Generated Schema Markup:</h4>
                   </div>
-                  {toolData.validationWarnings && toolData.validationWarnings.length > 0 && (
-                    <div className="bg-yellow-50 p-4 rounded-lg">
-                      <h4 className="font-medium text-yellow-900 mb-2">Validation Warnings:</h4>
-                      <ul className="text-sm text-yellow-800 space-y-2">
-                        {toolData.validationWarnings.map((warning: any, index: number) => (
-                          <li key={index} className="flex items-start space-x-2">
-                            <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
-                            <span><strong>{warning.field}:</strong> {warning.message}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                   <div className="bg-gray-800 text-green-400 p-4 rounded-lg overflow-x-auto mb-4">
                     <pre className="text-sm">{toolData.schema}</pre>
                   </div>
                   <p className="text-gray-700 mb-2">{toolData.instructions}</p>
                   <button
-                    onClick={() => navigator.clipboard.writeText(toolData.implementation)}
+                    onClick={() => navigator.clipboard.writeText(toolData.implementation || toolData.schema)}
                     className="text-purple-600 hover:text-purple-800 text-sm font-medium"
                   >
                     Copy Implementation Code
                   </button>
+                </div>
+              )}
+
+              {activeToolId === 'voice' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg text-center">
+                      <div className="text-xl font-bold text-blue-600">{toolData.summary?.totalMentions || 0}</div>
+                      <div className="text-sm text-blue-800">Mentions</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg text-center">
+                      <div className="text-xl font-bold text-green-600">{toolData.summary?.averageRanking || 0}</div>
+                      <div className="text-sm text-green-800">Avg Ranking</div>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg text-center">
+                      <div className="text-xl font-bold text-purple-600">{toolData.summary?.averageConfidence || 0}%</div>
+                      <div className="text-sm text-purple-800">Confidence</div>
+                    </div>
+                  </div>
+                  
+                  {toolData.results && toolData.results.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="font-medium text-gray-900">Assistant Responses:</h4>
+                      {toolData.results.map((voiceResult: any, index: number) => (
+                        <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-gray-900">{voiceResult.assistant}</span>
+                            <span className={`text-sm px-2 py-1 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                              {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-2">{voiceResult.response}</p>
+                          <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                            <span>Confidence: {voiceResult.confidence}%</span>
+                            {voiceResult.mentioned && (
+                              <span>Ranking: #{voiceResult.ranking}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -1018,8 +1080,15 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                   </div>
                 </div>
               )}
-              
-              {/* Add other tool result displays here... */}
+
+              {/* Display results for other tools */}
+              {!['audit', 'schema', 'voice', 'generator'].includes(activeToolId) && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <pre className="text-sm text-gray-700 overflow-x-auto whitespace-pre-wrap">
+                    {JSON.stringify(toolData, null, 2)}
+                  </pre>
+                </div>
+              )}
               
               <div className="mt-6">
                 <button
@@ -1137,7 +1206,7 @@ const IssueCard = ({ issue }: { issue: any }) => {
         </button>
       </div>
       <p className="text-gray-600 mt-3">{issue.suggestion}</p>
-      {isExpanded && (
+      {isExpanded && issue.learnMore && (
         <div className="mt-4 p-3 bg-gray-50 rounded-lg">
           <h6 className="font-semibold text-gray-700">Why it matters</h6>
           <p className="text-sm text-gray-600 mt-1">{issue.learnMore}</p>
