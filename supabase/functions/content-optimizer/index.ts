@@ -1,67 +1,12 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolRun, updateToolRun } from '../_shared/logging.ts';
 
 // --- CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
-
-// --- Inline Logging Functions ---
-async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object): Promise<string> {
-  if (!projectId) {
-    throw new Error("logToolRun error: projectId is required.");
-  }
-  
-  console.log(`Logging tool run: ${toolName} for project: ${projectId}`);
-  
-  const { data, error } = await supabase
-    .from("tool_runs")
-    .insert({
-      project_id: projectId,
-      tool_name: toolName,
-      input_payload: inputPayload,
-      status: "running",
-      created_at: new Date().toISOString()
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("Error logging tool run:", error);
-    throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
-  }
-  
-  if (!data || !data.id) {
-    console.error("No data or data.id returned from tool_runs insert.");
-    throw new Error("Failed to log tool run: No data returned after insert.");
-  }
-  
-  console.log(`Tool run logged with ID: ${data.id}`);
-  return data.id;
-}
-
-async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null): Promise<void> {
-  if (!runId) {
-    console.error("updateToolRun error: runId is required.");
-    return;
-  }
-
-  console.log(`Updating tool run ${runId} with status: ${status}`);
-
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output_payload: errorMessage ? { error: errorMessage } : outputPayload || null,
-    error_message: errorMessage || null,
-  };
-
-  const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
-  if (error) {
-    console.error(`Error updating tool run ID ${runId}:`, error);
-  } else {
-    console.log(`Tool run ${runId} updated successfully`);
-  }
-}
 
 // --- Type Definitions ---
 interface OptimizerRequest {
@@ -69,36 +14,46 @@ interface OptimizerRequest {
     content: string;
     targetKeywords: string[];
     contentType: 'blog post' | 'landing page' | 'product description';
+    tone?: 'professional' | 'casual' | 'witty' | 'authoritative';
 }
 
 // --- AI Prompt Engineering ---
 const getOptimizerPrompt = (request: OptimizerRequest): string => {
-    const { content, targetKeywords, contentType } = request;
+    const { content, targetKeywords, contentType, tone } = request;
     const jsonSchema = `{
-        "optimizedContent": "string (The fully rewritten, optimized content)",
+        "optimizedContent": "string (The fully rewritten, optimized content, adhering to the requested tone)",
         "analysis": {
-            "originalScore": "number (0-100, your estimated SEO score of the original text)",
-            "optimizedScore": "number (0-100, your estimated SEO score of the new text)",
-            "improvements": ["string (A list of the key improvements you made)"]
+            "originalScore": "number (0-100, estimated AI-readiness score of the original text)",
+            "optimizedScore": "number (0-100, estimated AI-readiness score of the new text)",
+            "improvements": [
+                {
+                    "area": "string (e.g., 'Clarity', 'Keyword Integration', 'Structure', 'Engagement')",
+                    "change": "string (Description of the specific improvement made)",
+                    "before": "string (Example from original text)",
+                    "after": "string (Example from new text)"
+                }
+            ]
         }
     }`;
 
-    return `You are an expert SEO Content Editor. Your task is to analyze and rewrite a piece of content to improve its SEO performance and AI visibility.
+    return `You are an expert SEO Content Editor and AI Optimization specialist. Your task is to rewrite a piece of content to maximize its SEO performance, readability, and AI visibility.
 
-    **Context:**
+    **Optimization Context:**
     - **Content Type:** ${contentType}
-    - **Target Keywords:** ${targetKeywords.join(', ')}
-    - **Original Content:**
-      ---
-      ${content.substring(0, 12000)}
-      ---
+    - **Primary Target Keywords:** ${targetKeywords.join(', ')}
+    - **Desired Tone:** ${tone || 'neutral (match original)'}
+
+    **Original Content (Analyze and Rewrite This):**
+    ---
+    ${content.substring(0, 12000)}
+    ---
 
     **Instructions:**
-    1.  Thoroughly analyze the original content.
-    2.  Rewrite the content to be more engaging, clear, and optimized for the target keywords.
-    3.  Naturally integrate the keywords. Do not "stuff" them.
-    4.  Improve the structure, headings, and overall flow.
-    5.  Provide an analysis comparing the original to the optimized version.
+    1.  **Full Rewrite:** Completely rewrite the original content. Do not just make minor edits.
+    2.  **Keyword Optimization:** Seamlessly integrate the target keywords. Prioritize natural language over keyword density.
+    3.  **Structural Improvement:** Enhance the structure with clear headings (H2, H3), lists, and short paragraphs for better scannability by both humans and AI.
+    4.  **Tone Application:** Rewrite the text in the specified '${tone || 'neutral'}' tone.
+    5.  **Actionable Analysis:** Provide a detailed analysis of the improvements you made, comparing the original to the optimized version with specific examples.
 
     **CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
     The JSON object must follow this exact schema:
@@ -106,66 +61,101 @@ const getOptimizerPrompt = (request: OptimizerRequest): string => {
     ${jsonSchema}
     \`\`\`
 
-    Rewrite and analyze the content now.`;
+    Perform the comprehensive content optimization now.`;
 };
 
+// --- Fallback Generator ---
+function generateFallbackOutput(originalContent: string, message: string): any {
+    console.warn(`Generating fallback for content optimizer: ${message}`);
+    return {
+        optimizedContent: originalContent,
+        analysis: {
+            originalScore: 0,
+            optimizedScore: 0,
+            improvements: []
+        },
+        note: `Optimization failed: ${message}. The original content is returned.`
+    };
+}
+
 // --- Main Service Handler ---
-export const optimizerService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
+const optimizerService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
 
     let runId: string | null = null;
+    let requestBody: OptimizerRequest;
+
     try {
-        const requestBody: OptimizerRequest = await req.json();
+        requestBody = await req.json();
         const { projectId, content, targetKeywords, contentType } = requestBody;
 
         if (!projectId || !content || !targetKeywords || !contentType) {
             throw new Error('`projectId`, `content`, `targetKeywords`, and `contentType` are required.');
         }
 
-        runId = await logToolRun(supabase, projectId, 'content-optimizer', { contentType, targetKeywords, contentLength: content.length });
+        runId = await logToolRun(supabase, projectId, 'content-optimizer', {
+            contentType,
+            targetKeywords,
+            contentLength: content.length,
+            tone: requestBody.tone
+        });
 
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-        if (!geminiApiKey) throw new Error('Gemini API key not configured');
+        if (!geminiApiKey) {
+            throw new Error('GEMINI_API_KEY is not configured in environment secrets.');
+        }
 
         const prompt = getOptimizerPrompt(requestBody);
 
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${geminiApiKey}`, {
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    temperature: 0.5,
-                    maxOutputTokens: 4096,
+                    temperature: 0.6,
+                    maxOutputTokens: 8192,
                 }
             })
         });
 
         if (!geminiResponse.ok) {
             const errorBody = await geminiResponse.text();
-            throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}. Body: ${errorBody}`);
+            console.error("Gemini API Error:", errorBody);
+            throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}`);
         }
 
         const geminiData = await geminiResponse.json();
+
+        if (!geminiData.candidates || geminiData.candidates.length === 0) {
+            throw new Error('No content received from the AI model.');
+        }
+
         const responseText = geminiData.candidates[0].content.parts[0].text;
 
         const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
         if (!jsonMatch || !jsonMatch[1]) {
-            throw new Error('Failed to extract JSON from AI response.');
+            console.error("Failed to extract JSON from AI response:", responseText);
+            throw new Error('Could not parse the structure of the AI response.');
         }
-        const analysisJson = JSON.parse(jsonMatch[1]);
+
+        let analysisJson;
+        try {
+            analysisJson = JSON.parse(jsonMatch[1]);
+        } catch(e) {
+            console.error("Invalid JSON from AI:", e.message);
+            throw new Error("The AI returned invalid JSON and the result could not be parsed.");
+        }
 
         if (!analysisJson.optimizedContent || !analysisJson.analysis?.optimizedScore) {
-            throw new Error('Generated content from AI is missing required fields.');
+            throw new Error('The AI-generated content is missing required fields.');
         }
 
-        const output = { ...analysisJson, originalContent: content, targetKeywords };
+        const output = { ...analysisJson, originalContent: requestBody.content, targetKeywords: requestBody.targetKeywords };
 
-        if (runId) {
-            await updateToolRun(supabase, runId, 'completed', output, null);
-        }
+        await updateToolRun(supabase, runId, 'completed', output, null);
 
         return new Response(JSON.stringify({ success: true, data: { runId, ...output } }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -173,11 +163,22 @@ export const optimizerService = async (req: Request, supabase: SupabaseClient): 
 
     } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        if (runId) {
-            await updateToolRun(supabase, runId, 'error', null, errorMessage);
+        console.error("Content Optimizer Error:", errorMessage);
+
+        // Use a fallback if we have the content, otherwise just fail
+        if (runId && requestBody?.content) {
+            const fallbackOutput = generateFallbackOutput(requestBody.content, errorMessage);
+            await updateToolRun(supabase, runId, 'error', fallbackOutput, errorMessage);
+            return new Response(JSON.stringify({ success: true, data: fallbackOutput, runId }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
         }
 
-        return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
+        if (runId) {
+             await updateToolRun(supabase, runId, 'error', null, errorMessage);
+        }
+
+        return new Response(JSON.stringify({ success: false, error: { message: errorMessage }, runId }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

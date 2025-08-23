@@ -1,153 +1,162 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolRun, updateToolRun } from '../_shared/logging.ts';
 
-// Self-contained CORS headers
+// --- CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-// Helper functions for logging
-async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
-  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging tool run:', error); return null; }
-  return data.id;
+// --- Type Definitions ---
+interface InsightsRequest {
+    projectId: string;
+    auditRunId: string; // The ID of the ai_visibility_audit run
 }
 
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output: errorMessage ? { error: errorMessage } : outputPayload || null
-  };
-  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating tool run:', error); }
+// --- AI Prompt Engineering ---
+const getInsightsPrompt = (auditResult: any): string => {
+    const { url, overallScore, subscores, content } = auditResult;
+
+    const jsonSchema = `{
+      "deepDiveAnalysis": [
+        {
+          "subscoreName": "string (e.g., 'aiUnderstanding')",
+          "score": "number (The score for this component)",
+          "reasoning": "string (A detailed explanation for why this score was given, citing specific examples from the content)",
+          "actionableAdvice": "string (A concrete next step the user can take to improve this specific score)"
+        }
+      ],
+      "problematicSentences": [
+        {
+          "sentence": "string (The exact problematic sentence from the content)",
+          "issue": "string (A clear description of the problem, e.g., 'ambiguous language', 'complex structure')",
+          "suggestion": "string (A rewritten version of the sentence that fixes the issue)"
+        }
+      ]
+    }`;
+
+    return `You are a Senior AI SEO Analyst. Your task is to provide a deep-dive analysis of a previous AI Visibility Audit.
+
+    **Original Audit Data:**
+    - **URL:** ${url}
+    - **Overall Score:** ${overallScore}
+    - **Subscores:** ${JSON.stringify(subscores, null, 2)}
+    - **Content Snippet:**
+      ---
+      ${content ? content.substring(0, 8000) : 'No content available.'}
+      ---
+
+    **Analysis Instructions:**
+    1.  **Analyze Subscores:** For each subscore provided (aiUnderstanding, citationLikelihood, conversationalReadiness, contentStructure), provide a detailed 'reasoning' for the score. Your reasoning must be specific and reference the provided content. Then, provide a single, highly 'actionableAdvice' for improving that score.
+    2.  **Identify Problematic Sentences:** Scan the content and identify 3-5 sentences that are most problematic for AI comprehension. These could be overly complex, ambiguous, or poorly structured.
+    3.  **Provide Suggestions:** For each problematic sentence, explain the 'issue' and provide a 'suggestion' for how to rewrite it clearly.
+
+    **CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+    The JSON object must follow this exact schema:
+    \`\`\`json
+    ${jsonSchema}
+    \`\`\`
+    Perform your deep-dive analysis now.`;
+};
+
+// --- Fallback Generator ---
+function generateFallbackOutput(message: string): any {
+    return {
+        deepDiveAnalysis: [],
+        problematicSentences: [],
+        note: `Enhanced insights could not be generated: ${message}`
+    };
 }
 
+// --- Main Service Handler ---
 const enhancedAuditInsightsService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
-    let runId;
-    try {
-        const { projectId, url, content, previousScore } = await req.json();
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders });
+    }
 
-        runId = await logToolRun({
-            supabase,
-            projectId: projectId,
-            toolName: 'enhanced-audit-insights',
-            inputPayload: { url, previousScore, contentLength: content?.length }
-        });
+    let runId: string | null = null;
+    let requestBody: InsightsRequest;
+    try {
+        requestBody = await req.json();
+        const { projectId, auditRunId } = requestBody;
+
+        if (!projectId || !auditRunId) {
+            throw new Error('`projectId` and `auditRunId` are required.');
+        }
+
+        runId = await logToolRun(supabase, projectId, 'enhanced-audit-insights', { auditRunId });
+
+        // Fetch the original audit data
+        const { data: auditRun, error: auditError } = await supabase
+            .from('tool_runs')
+            .select('input_payload, output_payload')
+            .eq('id', auditRunId)
+            .single();
+
+        if (auditError || !auditRun) {
+            throw new Error(`Failed to fetch original audit run (ID: ${auditRunId}): ${auditError?.message || 'Not found'}`);
+        }
+
+        const auditResult = { ...auditRun.input_payload, ...auditRun.output_payload };
+        if (!auditResult.overallScore || !auditResult.subscores) {
+            throw new Error("The provided audit run does not contain the necessary score data.");
+        }
 
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-        if (!geminiApiKey) throw new Error('Gemini API key not configured');
+        if (!geminiApiKey) throw new Error('GEMINI_API_KEY is not configured.');
 
-        const sentenceAnalysisResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
+        const prompt = getInsightsPrompt(auditResult);
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: `Perform sentence-level analysis of this content for AI visibility issues.
-Content: ${content.substring(0, 4000)}
-For each problematic sentence, identify:
-- Specific AI comprehension issues
-- Ambiguous references or unclear context
-- Complex sentence structures
-Format each analysis as:
-SENTENCE: [exact sentence text]
-ISSUES: [issue1] | [issue2]
-SUGGESTIONS: [suggestion1] | [suggestion2]` }] }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
             })
         });
 
-        const scoreExplanationResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: `Provide detailed explanations for each AI visibility score component.
-Content: ${content.substring(0, 4000)}
-${previousScore ? `Previous Score: ${previousScore}` : ''}
-Explain why the score is what it is, specific issues, and actions to improve for:
-- AI Understanding, Citation Likelihood, Conversational Readiness, Content Structure
-Format as:
-COMPONENT: [component name]
-SCORE: [0-100]
-REASONING: [detailed explanation]` }] }],
-                generationConfig: { temperature: 0.2, maxOutputTokens: 1536 }
-            })
-        });
+        if (!geminiResponse.ok) throw new Error(`Gemini API failed: ${await geminiResponse.text()}`);
 
-        if (!sentenceAnalysisResponse.ok || !scoreExplanationResponse.ok) {
-            throw new Error('Failed to get enhanced analysis from Gemini API');
-        }
+        const geminiData = await geminiResponse.json();
+        const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!responseText) throw new Error("No response text from Gemini.");
 
-        const sentenceData = await sentenceAnalysisResponse.json();
-        const scoreData = await scoreExplanationResponse.json();
-        const sentenceAnalysisText = sentenceData.candidates[0].content.parts[0].text;
-        const scoreExplanationText = scoreData.candidates[0].content.parts[0].text;
+        const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+        if (!jsonMatch || !jsonMatch[1]) throw new Error('Could not extract JSON from AI response.');
 
-        const sentenceAnalyses = [];
-        const sentenceSections = sentenceAnalysisText.split('SENTENCE:').slice(1);
-        for (const section of sentenceSections) {
-            const sentenceMatch = section.match(/^([^\n]+)/);
-            const issuesMatch = section.match(/ISSUES:\s*(.*)/i);
-            const suggestionsMatch = section.match(/SUGGESTIONS:\s*(.*)/i);
-            if (sentenceMatch && issuesMatch && suggestionsMatch) {
-                sentenceAnalyses.push({
-                    sentence: sentenceMatch[1].trim(),
-                    issues: issuesMatch[1].split('|').map(i => i.trim()),
-                    suggestions: suggestionsMatch[1].split('|').map(s => s.trim()),
-                });
-            }
-        }
+        const output = JSON.parse(jsonMatch[1]);
 
-        const scoreExplanations = [];
-        const scoreSections = scoreExplanationText.split('COMPONENT:').slice(1);
-        for (const section of scoreSections) {
-            const componentMatch = section.match(/^([^\n]+)/);
-            const scoreMatch = section.match(/SCORE:\s*(\d+)/i);
-            const reasoningMatch = section.match(/REASONING:\s*(.*?)(?=ISSUES:|$)/is);
-            if (componentMatch && scoreMatch && reasoningMatch) {
-                scoreExplanations.push({
-                    component: componentMatch[1].trim(),
-                    score: parseInt(scoreMatch[1]),
-                    reasoning: reasoningMatch[1].trim(),
-                });
-            }
-        }
+        await updateToolRun(supabase, runId, 'completed', output, null);
 
-        const output = { enhancedInsights: { sentenceAnalyses, scoreExplanations } };
-
-        await updateToolRun({
-            supabase,
-            runId,
-            status: 'completed',
-            outputPayload: output
-        });
-
-        return new Response(JSON.stringify({ runId, output }), {
+        return new Response(JSON.stringify({ success: true, data: output, runId }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
 
-    } catch (err) {
-        console.error(err);
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        console.error("Enhanced Audit Insights Error:", errorMessage);
+
         if (runId) {
-            await updateToolRun({ supabase, runId, status: 'error', errorMessage: errorMessage });
+            const fallbackOutput = generateFallbackOutput(errorMessage);
+            await updateToolRun(supabase, runId, 'error', fallbackOutput, errorMessage);
+            return new Response(JSON.stringify({ success: true, data: { ...fallbackOutput, runId } }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
         }
-        return new Response(JSON.stringify({ error: errorMessage }), {
+
+        return new Response(JSON.stringify({ success: false, error: { message: errorMessage }, runId }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
 }
 
-Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
-    }
-
+// --- Server ---
+Deno.serve(async (req: Request) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
     return await enhancedAuditInsightsService(req, supabase);
 });
