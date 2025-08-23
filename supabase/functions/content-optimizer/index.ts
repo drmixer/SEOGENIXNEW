@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logToolRun, updateToolRun } from '../_shared/logging.ts';
+import { logToolRun, updateToolRun } from 'shared/logging.ts';
 
 // --- CORS Headers ---
 const corsHeaders = {
