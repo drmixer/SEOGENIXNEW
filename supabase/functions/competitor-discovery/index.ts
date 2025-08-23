@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "https://deno.land/std@0.224.0/node/crypto.ts";
-import { logToolRun, updateToolRun } from "../_shared/logging.ts";
+import { logToolRun, updateToolRun } from "shared/logging.ts";
 
 // --- CORS Headers ---
 const corsHeaders = {
