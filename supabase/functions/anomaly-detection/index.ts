@@ -1,162 +1,171 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolRun, updateToolRun } from '../_shared/logging.ts';
 
-// Self-contained CORS headers
+// --- CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-// Helper functions for logging
-async function logToolRun({ supabase, projectId, toolName, inputPayload }) {
-  const { data, error } = await supabase.from('tool_runs').insert({ project_id: projectId, tool_name: toolName, input_payload: inputPayload, status: 'running' }).select('id').single();
-  if (error) { console.error('Error logging tool run:', error); return null; }
-  return data.id;
+// --- Type Definitions ---
+interface AnomalyRequest {
+    projectId: string;
+    userId: string;
+    timeframeDays?: number;
 }
 
-async function updateToolRun({ supabase, runId, status, outputPayload, errorMessage }) {
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output: errorMessage ? { error: errorMessage } : outputPayload || null
-  };
-  const { error } = await supabase.from('tool_runs').update(update).eq('id', runId);
-  if (error) { console.error('Error updating tool run:', error); }
-}
+// --- AI Prompt Engineering ---
+const getAnomalyDetectionPrompt = (data: any): string => {
+    const jsonSchema = `{
+        "anomalies": [{
+            "type": "string (e.g., 'sudden_score_drop', 'ranking_decay', 'stagnant_content')",
+            "title": "string (A concise title for the anomaly)",
+            "description": "string (A detailed, data-supported description of what was detected)",
+            "severity": "string ('low' | 'medium' | 'high')",
+            "hypothesis": "string (A likely reason for this anomaly based on the data)",
+            "recommendedAction": {
+                "step": "string (A clear, actionable next step for the user)",
+                "tool": "string (The suggested tool to use: 'ai-visibility-audit', 'content-optimizer', etc.)",
+                "defaultInput": "string (A sensible default input for the tool, e.g., a URL)"
+            }
+        }]
+    }`;
 
-function calculateTrend(scores) {
-    if (scores.length < 3) return { direction: 'stable', confidence: 0, predictedValue: scores[scores.length - 1], slope: 0 };
-    const n = scores.length;
-    const x = Array.from({ length: n }, (_, i) => i);
-    const y = scores;
-    const sumX = x.reduce((a, b) => a + b, 0);
-    const sumY = y.reduce((a, b) => a + b, 0);
-    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
-    const sumXX = x.reduce((sum, xi) => sum + xi * xi, 0);
-    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
-    const yMean = sumY / n;
-    const ssRes = y.reduce((sum, yi, i) => sum + Math.pow(yi - (slope * i + intercept), 2), 0);
-    const ssTot = y.reduce((sum, yi) => sum + Math.pow(yi - yMean, 2), 0);
-    const rSquared = 1 - ssRes / ssTot;
-    const predictedValue = slope * (n + 2) + intercept;
+    return `You are an expert Data Scientist specializing in SEO analytics. Your task is to analyze a time-series dataset of a user's website performance and identify any significant anomalies.
+
+    **User Data Snapshot (Time-series data):**
+    ${JSON.stringify(data, null, 2)}
+
+    **Analysis Instructions:**
+    1.  **Identify Anomalies:** Look for statistically significant deviations from trends, such as:
+        -   Sudden drops in the overall 'ai_visibility_score'.
+        -   Consistent decay in a specific sub-score (e.g., 'citation_likelihood').
+        -   Stagnation or lack of improvement despite tool usage.
+        -   Correlation between a content change and a performance drop.
+    2.  **Formulate a Hypothesis:** For each anomaly, provide a plausible hypothesis explaining *why* it might have occurred, using the provided data.
+    3.  **Recommend Action:** Suggest a single, clear, and actionable next step for the user. This must include a recommended tool and a default input for that tool.
+    4.  **Assess Severity:** Assign a severity level (low, medium, high) to each anomaly.
+    5.  If no significant anomalies are found, return an empty "anomalies" array.
+
+    **CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+    The JSON object must follow this exact schema:
+    \`\`\`json
+    ${jsonSchema}
+    \`\`\`
+    Perform your analysis now.`;
+};
+
+// --- Fallback Generator ---
+function generateFallbackOutput(message: string): any {
     return {
-        direction: slope > 1 ? 'improving' : slope < -1 ? 'declining' : 'stable',
-        confidence: Math.max(0, Math.min(1, rSquared)),
-        predictedValue: Math.max(0, Math.min(100, predictedValue)),
-        slope
+        anomalies: [],
+        note: `Anomaly detection could not be run: ${message}`
     };
 }
 
-function getRecommendationsForSubscore(subscore) {
-    switch(subscore){
-        case 'ai_understanding': return ['Improve content clarity and structure', 'Add more context and definitions'];
-        case 'citation_likelihood': return ['Add more factual, citable information', 'Improve content authority signals'];
-        case 'conversational_readiness': return ['Add more question-answer content', 'Use natural language patterns'];
-        case 'content_structure': return ['Improve heading hierarchy (H1-H6)', 'Add more structured data markup'];
-        default: return ['Run a comprehensive audit', 'Review recent content changes'];
-    }
-}
-
+// --- Main Service Handler ---
 const anomalyDetectionService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
-    let runId;
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders });
+    }
+
+    let runId: string | null = null;
+    let requestBody: AnomalyRequest;
+
     try {
-        const { projectId, userId, sensitivity = 'medium', timeframe = '30d' } = await req.json();
+        requestBody = await req.json();
+        const { projectId, userId, timeframeDays = 30 } = requestBody;
 
-        runId = await logToolRun({
-            supabase,
-            projectId: projectId,
-            toolName: 'anomaly-detection',
-            inputPayload: { userId, sensitivity, timeframe }
-        });
-
-        const authHeader = req.headers.get('Authorization');
-        if (!authHeader) throw new Error('Authorization header required');
-        const token = authHeader.replace('Bearer ', '');
-        const { data: { user } } = await supabase.auth.getUser(token);
-        if (!user) throw new Error('Invalid authentication');
-
-        const { data: auditHistory } = await supabase.from('audit_history').select('*').eq('user_id', userId).order('created_at', { ascending: false });
-        const { data: userActivity } = await supabase.from('user_activity').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(100);
-
-        const thresholds = {
-            scoreDrop: sensitivity === 'low' ? 15 : 10,
-            subscore: sensitivity === 'low' ? 20 : 15,
-            activityGap: sensitivity === 'low' ? 14 : 7
-        };
-
-        const anomalies = [];
-
-        if (auditHistory && auditHistory.length >= 2) {
-            for (let i = 0; i < auditHistory.length - 1; i++) {
-                const current = auditHistory[i];
-                const previous = auditHistory[i + 1];
-                const scoreDiff = current.overall_score - previous.overall_score;
-                if (scoreDiff <= -thresholds.scoreDrop) {
-                    anomalies.push({
-                        id: `score_drop_${current.id}`,
-                        type: 'score_drop',
-                        title: 'Significant Score Drop Detected',
-                        description: `Your AI visibility score dropped by ${Math.abs(scoreDiff)} points`,
-                        severity: 'high',
-                    });
-                    break;
-                }
-            }
+        if (!projectId || !userId) {
+            throw new Error('`projectId` and `userId` are required.');
         }
 
-        if (userActivity && userActivity.length > 0) {
-            const lastToolUsage = userActivity.find(a => a.activity_type === 'tool_used');
-            if (lastToolUsage) {
-                const daysSinceLastTool = (Date.now() - new Date(lastToolUsage.created_at).getTime()) / (1000 * 60 * 60 * 24);
-                if (daysSinceLastTool > thresholds.activityGap) {
-                    anomalies.push({
-                        id: `inactivity_${Date.now()}`,
-                        type: 'inactivity',
-                        title: 'Unusual Inactivity Detected',
-                        description: `No optimization activity for ${Math.floor(daysSinceLastTool)} days.`,
-                        severity: 'medium',
-                    });
-                }
-            }
+        runId = await logToolRun(supabase, projectId, 'anomaly-detection', { userId, timeframeDays });
+
+        // Fetch historical data for the user
+        const fromDate = new Date(Date.now() - timeframeDays * 24 * 60 * 60 * 1000).toISOString();
+        const { data: toolRuns, error } = await supabase
+            .from('tool_runs')
+            .select('tool_name, created_at, status, output_payload, input_payload')
+            .eq('project_id', projectId)
+            .gte('created_at', fromDate)
+            .order('created_at', { ascending: true });
+
+        if (error) throw new Error(`Failed to fetch tool run history: ${error.message}`);
+        if (!toolRuns || toolRuns.length < 5) {
+            // Not enough data for meaningful analysis
+            const output = { anomalies: [], note: "Not enough data for anomaly detection. Use the tools more to enable this feature." };
+            await updateToolRun(supabase, runId, 'completed', output, null);
+            return new Response(JSON.stringify({ success: true, data: output, runId }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        const output = { anomalies };
+        // Basic data processing for the AI
+        const processedData = toolRuns
+            .filter(run => run.tool_name === 'ai-visibility-audit' && run.status === 'completed' && run.output_payload?.overallScore)
+            .map(run => ({
+                date: run.created_at,
+                ai_visibility_score: run.output_payload.overallScore,
+                subscores: run.output_payload.subscores,
+                url_audited: run.input_payload.url,
+            }));
 
-        await updateToolRun({
-            supabase,
-            runId,
-            status: 'completed',
-            outputPayload: output
+        const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+        if (!geminiApiKey) throw new Error('GEMINI_API_KEY is not configured.');
+
+        const prompt = getAnomalyDetectionPrompt({ history: processedData });
+
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
+            })
         });
 
-        return new Response(JSON.stringify({ runId, output }), {
+        if (!geminiResponse.ok) {
+            throw new Error(`Gemini API request failed with status ${geminiResponse.status}`);
+        }
+
+        const geminiData = await geminiResponse.json();
+        const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!responseText) throw new Error("No response text from Gemini.");
+
+        const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+        if (!jsonMatch || !jsonMatch[1]) throw new Error("Could not extract JSON from AI response.");
+
+        const output = JSON.parse(jsonMatch[1]);
+
+        await updateToolRun(supabase, runId, 'completed', output, null);
+
+        return new Response(JSON.stringify({ success: true, data: output, runId }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
 
-    } catch (err) {
-        console.error(err);
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        console.error("Anomaly Detection Error:", errorMessage);
+
         if (runId) {
-            await updateToolRun({ supabase, runId, status: 'error', errorMessage: errorMessage });
+            const fallbackOutput = generateFallbackOutput(errorMessage);
+            await updateToolRun(supabase, runId, 'error', fallbackOutput, errorMessage);
+            return new Response(JSON.stringify({ success: true, data: { ...fallbackOutput, runId } }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
         }
-        return new Response(JSON.stringify({ error: errorMessage }), {
+
+        return new Response(JSON.stringify({ success: false, error: { message: errorMessage }, runId }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
 }
 
-
-Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
-    }
-
+Deno.serve(async (req: Request) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    return await anomalyDetectionService(req, supabase)
+    return await anomalyDetectionService(req, supabase);
 });

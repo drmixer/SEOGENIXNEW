@@ -1,123 +1,57 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolRun, updateToolRun } from '../_shared/logging.ts';
 
 // --- CORS Headers ---
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
-
-// --- Inline Logging Functions ---
-async function logToolRun(supabase: SupabaseClient, projectId: string, toolName: string, inputPayload: object): Promise<string> {
-  if (!projectId) {
-    throw new Error("logToolRun error: projectId is required.");
-  }
-  
-  console.log(`Logging tool run: ${toolName} for project: ${projectId}`);
-  
-  const { data, error } = await supabase
-    .from("tool_runs")
-    .insert({
-      project_id: projectId,
-      tool_name: toolName,
-      input_payload: inputPayload,
-      status: "running",
-      created_at: new Date().toISOString()
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("Error logging tool run:", error);
-    throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
-  }
-  
-  if (!data || !data.id) {
-    console.error("No data or data.id returned from tool_runs insert.");
-    throw new Error("Failed to log tool run: No data returned after insert.");
-  }
-  
-  console.log(`Tool run logged with ID: ${data.id}`);
-  return data.id;
-}
-
-async function updateToolRun(supabase: SupabaseClient, runId: string, status: string, outputPayload: object | null, errorMessage: string | null): Promise<void> {
-  if (!runId) {
-    console.error("updateToolRun error: runId is required.");
-    return;
-  }
-
-  console.log(`Updating tool run ${runId} with status: ${status}`);
-
-  const update = {
-    status,
-    completed_at: new Date().toISOString(),
-    output_payload: errorMessage ? { error: errorMessage } : outputPayload || null,
-    error_message: errorMessage || null,
-  };
-
-  const { error } = await supabase.from("tool_runs").update(update).eq("id", runId);
-  if (error) {
-    console.error(`Error updating tool run ID ${runId}:`, error);
-  } else {
-    console.log(`Tool run ${runId} updated successfully`);
-  }
-}
 
 // --- Type Definitions ---
 interface CitationRequest {
+    projectId: string;
     domain: string;
     keywords: string[];
-    projectId: string;
+    sources: ('reddit' | 'google_news')[];
 }
 
-interface Citation {
+interface RawSearchResult {
     source: string;
     url: string;
+    title: string;
     snippet: string;
-    date: string;
-    type: 'reddit';
-    confidence_score: number;
-}
-
-interface RedditPost {
-    kind: string;
-    data: {
-        title: string;
-        selftext: string;
-        url: string;
-        permalink: string;
-        created_utc: number;
-        subreddit_name_prefixed: string;
-    };
+    date_utc: number;
 }
 
 // --- AI Prompt Engineering ---
-const getAnalysisPrompt = (posts: RedditPost[], domain: string): string => {
+const getAnalysisPrompt = (results: RawSearchResult[], domain: string): string => {
     const jsonSchema = `{
-      "citations": [
-        {
-          "source": "string (The subreddit, e.g., 'r/technology')",
-          "url": "string (The full URL to the Reddit post)",
-          "snippet": "string (A 1-2 sentence quote of the mention)",
+      "citations": [{
+          "source": "string (The platform where the mention was found, e.g., 'Reddit')",
+          "url": "string (The full URL to the mention)",
+          "title": "string (The title of the article or post)",
+          "snippet": "string (A 1-2 sentence quote of the specific mention)",
           "date": "string (The ISO 8601 timestamp of the post)",
-          "type": "reddit",
-          "confidence_score": "number (0-100, confidence of a genuine citation)"
-        }
-      ]
+          "sentiment": "string ('positive' | 'negative' | 'neutral')",
+          "citationType": "string ('review' | 'link' | 'discussion' | 'passing_mention')",
+          "confidenceScore": "number (0-100, your confidence that this is a genuine, relevant citation)"
+      }]
     }`;
 
-    return `
-    You are an expert Data Extraction Bot. Analyze the provided Reddit posts to find genuine mentions of the domain "${domain}".
+    return `You are an expert Brand Analyst. Your task is to analyze a list of search results and identify genuine citations or mentions of the domain "${domain}".
 
-    **Instructions:**
-    1.  Read through each post and identify genuine mentions of the tracked domain.
-    2.  For each genuine citation, extract the required information.
-    3.  The 'url' should be the full Reddit URL (https://www.reddit.com + permalink).
-    4.  If no relevant citations are found, return an empty "citations" array.
+    **Analysis Instructions:**
+    1.  **Filter for Relevance:** Scrutinize each result. Is it a real mention or just a coincidental keyword match? Discard irrelevant results.
+    2.  **Extract Key Information:** For each genuine citation, extract the required data fields.
+    3.  **Analyze Sentiment:** Determine the sentiment of the mention (positive, negative, or neutral).
+    4.  **Categorize Citation Type:** Classify the type of mention (e.g., is it a product review, a simple link, a discussion, or just a passing mention?).
+    5.  **Assign Confidence:** Provide a confidence score (0-100) based on how relevant and direct the citation is.
+    6.  If no relevant citations are found, return an empty "citations" array.
 
-    **Raw Reddit Search Results (JSON):**
+    **Raw Search Results (JSON):**
     ---
-    ${JSON.stringify(posts.slice(0, 25), null, 2)}
+    ${JSON.stringify(results.slice(0, 50), null, 2)}
     ---
 
     **CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
@@ -125,102 +59,112 @@ const getAnalysisPrompt = (posts: RedditPost[], domain: string): string => {
     \`\`\`json
     ${jsonSchema}
     \`\`\`
-    Now, perform your expert data extraction.
-    `;
+    Now, perform your expert analysis and data extraction.`;
 };
 
+// --- Data Fetching ---
+async function searchReddit(domain: string, keywords: string[], userAgent: string): Promise<RawSearchResult[]> {
+    const clientId = Deno.env.get('REDDIT_CLIENT_ID');
+    const clientSecret = Deno.env.get('REDDIT_CLIENT_SECRET');
+    if (!clientId || !clientSecret) throw new Error('Reddit API credentials are not configured.');
+
+    const tokenResponse = await fetch('https://www.reddit.com/api/v1/access_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`, 'User-Agent': userAgent },
+        body: 'grant_type=client_credentials',
+    });
+    if (!tokenResponse.ok) throw new Error(`Failed to get Reddit token: ${await tokenResponse.text()}`);
+    const { access_token } = await tokenResponse.json();
+
+    const searchQuery = `${domain} OR "${keywords.join('" OR "')}"`;
+    const searchUrl = `https://oauth.reddit.com/search?q=${encodeURIComponent(searchQuery)}&sort=new&limit=50`;
+    const response = await fetch(searchUrl, { headers: { 'Authorization': `Bearer ${access_token}`, 'User-Agent': userAgent } });
+    if (!response.ok) throw new Error(`Reddit API search failed: ${await response.text()}`);
+    const searchData = await response.json();
+
+    return (searchData.data.children || []).map((post: any) => ({
+        source: `Reddit (${post.data.subreddit_name_prefixed})`,
+        url: `https://www.reddit.com${post.data.permalink}`,
+        title: post.data.title,
+        snippet: post.data.selftext.substring(0, 500),
+        date_utc: post.data.created_utc,
+    }));
+}
+
 // --- Main Service Handler ---
-export const citationTrackerService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
+const citationTrackerService = async (req: Request, supabase: SupabaseClient): Promise<Response> => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
 
     let runId: string | null = null;
     try {
-        const { projectId, domain, keywords }: CitationRequest = await req.json();
+        const requestBody: CitationRequest = await req.json();
+        const { projectId, domain, keywords, sources } = requestBody;
 
-        if (!domain || !keywords || keywords.length === 0) {
-            throw new Error('`domain` and `keywords` are required.');
+        if (!projectId || !domain || !keywords || keywords.length === 0 || !sources || sources.length === 0) {
+            throw new Error('`projectId`, `domain`, `keywords`, and `sources` are required.');
         }
 
-        runId = await logToolRun(supabase, projectId, 'citation-tracker', { domain, keywords });
+        runId = await logToolRun(supabase, projectId, 'citation-tracker', requestBody);
 
-        const clientId = Deno.env.get('REDDIT_CLIENT_ID');
-        const clientSecret = Deno.env.get('REDDIT_CLIENT_SECRET');
-        const userAgent = Deno.env.get('REDDIT_USER_AGENT');
-        if (!clientId || !clientSecret || !userAgent) {
-            throw new Error('Reddit API credentials are not configured as secrets.');
+        const userAgent = Deno.env.get('REDDIT_USER_AGENT') || 'SEOGENIX-Bot/1.0';
+
+        let allResults: RawSearchResult[] = [];
+        if (sources.includes('reddit')) {
+            try {
+                const redditResults = await searchReddit(domain, keywords, userAgent);
+                allResults = allResults.concat(redditResults);
+            } catch (e) {
+                console.error("Reddit search failed:", e.message); // Log and continue
+            }
         }
+        // Future sources like 'google_news' would be added here.
 
-        const tokenResponse = await fetch('https://www.reddit.com/api/v1/access_token', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-                'User-Agent': userAgent,
-            },
-            body: 'grant_type=client_credentials',
-        });
-        if (!tokenResponse.ok) throw new Error(`Failed to get Reddit access token: ${tokenResponse.statusText}`);
-        const tokenData = await tokenResponse.json();
-        const accessToken = tokenData.access_token;
-
-        const searchQuery = `${domain} OR "${keywords.join('" OR "')}"`;
-        const searchUrl = `https://oauth.reddit.com/search?q=${encodeURIComponent(searchQuery)}&sort=new&limit=50`;
-        const searchResponse = await fetch(searchUrl, {
-            headers: { 'Authorization': `Bearer ${accessToken}`, 'User-Agent': userAgent }
-        });
-        if (!searchResponse.ok) throw new Error(`Reddit API search failed: ${searchResponse.statusText}`);
-        const searchData = await searchResponse.json();
-        const posts: RedditPost[] = searchData.data.children || [];
-
-        if (posts.length === 0) {
-            await updateToolRun(supabase, runId, 'completed', { citations: [] }, null);
-            return new Response(JSON.stringify({ success: true, data: { citations: [] } }), {
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+        if (allResults.length === 0) {
+            const output = { citations: [], note: "No potential mentions found in the selected sources." };
+            await updateToolRun(supabase, runId, 'completed', output, null);
+            return new Response(JSON.stringify({ success: true, data: output }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-        if (!geminiApiKey) throw new Error('Gemini API key not configured');
+        if (!geminiApiKey) throw new Error('GEMINI_API_KEY is not configured.');
 
-        const prompt = getAnalysisPrompt(posts, domain);
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey}`, {
+        const prompt = getAnalysisPrompt(allResults, domain);
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
+                generationConfig: { temperature: 0.2, maxOutputTokens: 8192 }
             })
         });
-        if (!geminiResponse.ok) {
-             const errorBody = await geminiResponse.text();
-            throw new Error(`The AI model failed to process the request. Status: ${geminiResponse.status}. Body: ${errorBody}`);
-        }
+
+        if (!geminiResponse.ok) throw new Error(`Gemini API failed: ${await geminiResponse.text()}`);
 
         const geminiData = await geminiResponse.json();
-        const responseText = geminiData.candidates[0].content.parts[0].text;
+        const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!responseText) throw new Error("No response text from Gemini.");
 
         const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
-        if (!jsonMatch || !jsonMatch[1]) {
-            throw new Error('Failed to extract JSON from AI response.');
-        }
-        const finalData: { citations: Citation[] } = JSON.parse(jsonMatch[1]);
+        if (!jsonMatch || !jsonMatch[1]) throw new Error('Could not extract JSON from AI response.');
 
-        if (runId) {
-            await updateToolRun(supabase, runId, 'completed', finalData, null);
-        }
+        const finalData = JSON.parse(jsonMatch[1]);
+        finalData.citations.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-        return new Response(JSON.stringify({ success: true, data: finalData }), {
+        await updateToolRun(supabase, runId, 'completed', finalData, null);
+
+        return new Response(JSON.stringify({ success: true, data: finalData, runId }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
 
     } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        console.error("Citation Tracker Error:", errorMessage);
         if (runId) {
-            await updateToolRun(supabase, runId, 'error', null, errorMessage);
+            await updateToolRun(supabase, runId, 'error', { citations: [], note: `An error occurred: ${errorMessage}` }, errorMessage);
         }
-        return new Response(JSON.stringify({ success: false, error: { message: errorMessage } }), {
+        return new Response(JSON.stringify({ success: false, error: { message: errorMessage }, runId }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
