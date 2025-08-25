@@ -111,7 +111,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
             title: 'Subscore Anomaly Detected',
             message: `${problematicArea?.replace('_', ' ')} score dropped significantly by ${Math.abs(largestDrop)} points. This may indicate a specific technical issue.`,
             severity: 'high',
-            actionUrl: 'optimizer',
+            actionUrl: 'content-optimizer',
             actionLabel: 'Fix Content Issues',
             data: { problematicArea, change: largestDrop },
             createdAt: latest.created_at,
