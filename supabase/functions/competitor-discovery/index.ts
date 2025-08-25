@@ -58,33 +58,42 @@ const getRelevancePrompt = (competitors, payload)=>{
         {
           "url": "string (The competitor's URL from the list)",
           "relevanceScore": "number (0-100, how relevant this competitor is)",
-          "explanation": "string (A brief 1-sentence explanation of why)"
+          "explanation": "string (A brief 1-sentence explanation of why)",
+          "competitorType": "string (Enum: 'direct', 'indirect', 'aspirational', 'product')"
         }
       ]
     }`;
-  return `You are an expert Market Analyst. Analyze the list of potential competitors and determine their relevance to the user.
+  return `You are an expert Market Analyst specializing in niche markets. Your task is to analyze a list of potential competitors and determine their true relevance to the user's business.
 
-**User's Industry:** ${payload.industry}
-**User's Topic:** ${payload.topic || 'Not specified'}
-**User's Description:** ${payload.userDescription || 'Not specified'}
-**Potential Competitors (from Google Search):** ${JSON.stringify(competitors.map((c)=>({
+**User's Business Profile:**
+- **Industry:** ${payload.industry}
+- **Primary Topic/Service:** ${payload.topic || 'Not specified'}
+- **Description:** ${payload.userDescription || 'Not specified'}
+
+**List of Potential Competitors (from Google Search):**
+${JSON.stringify(competitors.map((c)=>({
       title: c.title,
       link: c.link,
       snippet: c.snippet
     })), null, 2)}
 
-**Instructions:**
-1. Review the user's details and the list of potential competitors.
-2. For each competitor, assign a 'relevanceScore' from 0 to 100.
-3. Provide a brief 'explanation' for your score.
+**Analysis Instructions:**
+1.  **Prioritize Niche Players:** Favor specialized businesses over large, general-purpose websites (like news sites or encyclopedias). A small, focused blog in the same niche is more relevant than a Forbes article.
+2.  **Score Relevance (0-100):** For each competitor, assign a 'relevanceScore'. A score of 80+ indicates a direct competitor in the same niche. A score of 40-79 indicates an indirect or shoulder-niche competitor. Below 40 is likely irrelevant.
+3.  **Classify Competitor Type:** Assign a 'competitorType' from the following:
+    *   'direct': Offers very similar products/services to the same target audience.
+    *   'indirect': Solves the same problem for the same audience but with a different solution.
+    *   'aspirational': A major, well-known leader in the industry that the user might look up to.
+    *   'product': A specific product that competes, rather than the entire company.
+4.  **Provide a Concise Explanation:** Briefly explain your reasoning for the score and classification in one sentence.
 
-**CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
+**CRITICAL: Your response MUST be a single, valid JSON object enclosed in a \`\`\`json markdown block.**
 The JSON object must follow this exact schema:
 \`\`\`json
 ${jsonSchema}
 \`\`\`
 
-If a competitor is not relevant, give it a low score. Analyze the list now.`;
+Analyze the list now, focusing on identifying true, niche competitors.`;
 };
 // --- Main Service Handler ---
 export const competitorDiscoveryService = async (req, supabase)=>{
@@ -112,8 +121,8 @@ export const competitorDiscoveryService = async (req, supabase)=>{
     if (!googleApiKey || !googleCx || !mozAccessId || !mozSecretKey || !geminiApiKey) {
       throw new Error('Required API keys are not configured as secrets.');
     }
-    // Search for potential competitors
-    const searchQuery = `top ${industry || ''} ${topic || ''} companies`;
+    // Refine search query for more niche results
+    const searchQuery = `"${industry || ''}" "${topic || ''}" niche competitors OR alternatives`;
     const googleUrl = `https://www.googleapis.com/customsearch/v1?key=${googleApiKey}&cx=${googleCx}&q=${encodeURIComponent(searchQuery)}`;
     const googleResponse = await fetch(googleUrl);
     if (!googleResponse.ok) {
@@ -121,7 +130,16 @@ export const competitorDiscoveryService = async (req, supabase)=>{
       throw new Error(`Google Search API failed: ${googleResponse.status} ${errorText}`);
     }
     const searchResults = await googleResponse.json();
-    const potentialCompetitors = searchResults.items?.filter((item)=>item.link && !existingCompetitors.some((existing)=>item.link.includes(existing))).slice(0, 15) || [];
+
+    // Filter out irrelevant domains and existing competitors
+    const blocklist = ['wikipedia.org', 'forbes.com', 'investopedia.com', 'bloomberg.com', 'businessinsider.com', 'techcrunch.com', 'medium.com', 'youtube.com', 'facebook.com', 'twitter.com', 'linkedin.com'];
+    const potentialCompetitors = searchResults.items?.filter(item => {
+      if (!item.link) return false;
+      const domain = new URL(item.link).hostname.replace('www.', '');
+      if (blocklist.includes(domain)) return false;
+      if (existingCompetitors.some(existing => domain.includes(new URL(existing).hostname.replace('www.','')))) return false;
+      return true;
+    }).slice(0, 15) || [];
     if (potentialCompetitors.length === 0) {
       const emptyResult = {
         competitorSuggestions: []
@@ -209,6 +227,7 @@ export const competitorDiscoveryService = async (req, supabase)=>{
           domainAuthority: domainAuthority,
           relevanceScore: relevanceInfo.relevanceScore,
           explanation: relevanceInfo.explanation,
+          type: relevanceInfo.competitorType || 'direct', // Add type from AI analysis
           analyzedAt: new Date().toISOString()
         });
       } catch (e) {

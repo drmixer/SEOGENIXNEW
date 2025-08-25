@@ -826,7 +826,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <>
                 <VisibilityScore userPlan={userPlan} selectedWebsite={selectedWebsite} />
                 <ToolsGrid 
-                  userPlan={userPlan} 
+                  userPlan={isDevelopment ? 'agency' : userPlan}
                   onToolRun={handleToolRun} 
                   selectedWebsite={selectedWebsite}
                   selectedProjectId={selectedProjectId}
@@ -864,7 +864,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 
                 {/* Tools Preview */}
                 <ToolsGrid 
-                  userPlan={userPlan} 
+                  userPlan={isDevelopment ? 'agency' : userPlan}
                   onToolRun={handleToolRun} 
                   showPreview={true}
                   selectedWebsite={selectedWebsite}
@@ -932,7 +932,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       
       default:
         return <ToolsGrid 
-          userPlan={userPlan} 
+          userPlan={isDevelopment ? 'agency' : userPlan}
           onToolRun={handleToolRun} 
           selectedTool={activeSection}
           selectedWebsite={selectedWebsite}

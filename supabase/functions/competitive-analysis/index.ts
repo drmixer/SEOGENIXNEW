@@ -193,7 +193,13 @@ const competitiveAnalysisService = async (req, supabase)=>{
     const primarySiteAnalysis = successfulAnalyses.find((a)=>a.url === primaryUrl);
     const competitorAnalyses = successfulAnalyses.filter((a)=>a.url !== primaryUrl);
     const averageCompetitorScore = competitorAnalyses.length > 0 ? Math.round(competitorAnalyses.reduce((sum, c)=>sum + c.overallScore, 0) / competitorAnalyses.length) : 0;
+
+    // Sort all sites by score to determine ranking
+    const allRankedSites = successfulAnalyses.sort((a, b) => (b.overallScore || 0) - (a.overallScore || 0));
+    const primarySiteRank = allRankedSites.findIndex(a => a.url === primaryUrl) + 1;
+
     const summary = {
+      ranking: primarySiteRank > 0 ? primarySiteRank : 'N/A',
       primarySiteScore: primarySiteAnalysis?.overallScore || 0,
       averageCompetitorScore,
       totalSitesAnalyzed: successfulAnalyses.length,

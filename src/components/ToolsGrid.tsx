@@ -186,8 +186,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       isNew: true
     },
     {
-      id: 'editor',
-      name: 'Content Editor',
+      id: 'content-optimizer',
+      name: 'Content Optimizer',
       description: 'Real-time analysis and suggestions for your content',
       icon: TrendingUp,
       color: 'from-orange-500 to-orange-600',
