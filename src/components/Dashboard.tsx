@@ -3,6 +3,7 @@ import DashboardHeader from './DashboardHeader';
 import Sidebar from './Sidebar';
 import VisibilityScore from './VisibilityScore';
 import ToolsGrid from './ToolsGrid';
+import ToolModal from './ToolModal';
 import HistoricalPerformance from './HistoricalPerformance';
 import ReportGenerator from './ReportGenerator';
 import ContentEditor from './ContentEditor';
@@ -46,7 +47,15 @@ interface ActionableInsight {
   learnMoreLink?: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, user, onSignOut, userProfile, showWalkthrough, onWalkthroughComplete }) => {
+const Dashboard: React.FC<DashboardProps> = ({ 
+  userPlan, 
+  onNavigateToLanding, 
+  user, 
+  onSignOut, 
+  userProfile, 
+  showWalkthrough, 
+  onWalkthroughComplete 
+}) => {
   const [showChatbot, setShowChatbot] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
   const [hasRunTools, setHasRunTools] = useState(false);
@@ -67,6 +76,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
   const [userGoals, setUserGoals] = useState<string[]>([]);
   const [goalProgress, setGoalProgress] = useState<Record<string, number>>({});
   const [toolContext, setToolContext] = useState<any>(null);
+  
+  // Modal state for individual tools
+  const [showToolModal, setShowToolModal] = useState(false);
+  const [modalToolId, setModalToolId] = useState<string>('');
+  const [modalToolName, setModalToolName] = useState<string>('');
   
   // Use refs to prevent duplicate fetches and track component mount state
   const profileFetchedRef = useRef(false);
@@ -492,6 +506,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
     setActiveSection(toolId);
   };
 
+  // Handle tool run from ToolsGrid - this can either open modal or navigate
+  const handleToolRun = (toolId?: string, toolName?: string, useModal = false) => {
+    if (toolId && toolName && useModal) {
+      // Open tool in modal
+      setModalToolId(toolId);
+      setModalToolName(toolName);
+      setShowToolModal(true);
+    } else {
+      // Mark that tools have been run for overview section
+      localStorage.setItem('seogenix_tools_run', 'true');
+      setHasRunTools(true);
+    }
+  };
+
   // Handle tool completion with toast notification
   const handleToolComplete = (toolName: string, success: boolean, message?: string) => {
     if (success) {
@@ -799,7 +827,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                 <VisibilityScore userPlan={userPlan} selectedWebsite={selectedWebsite} />
                 <ToolsGrid 
                   userPlan={userPlan} 
-                  onToolRun={() => setHasRunTools(true)} 
+                  onToolRun={handleToolRun} 
                   selectedWebsite={selectedWebsite}
                   selectedProjectId={selectedProjectId}
                   userProfile={userProfile}
@@ -837,7 +865,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
                 {/* Tools Preview */}
                 <ToolsGrid 
                   userPlan={userPlan} 
-                  onToolRun={() => setHasRunTools(true)} 
+                  onToolRun={handleToolRun} 
                   showPreview={true}
                   selectedWebsite={selectedWebsite}
                   selectedProjectId={selectedProjectId}
@@ -905,7 +933,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
       default:
         return <ToolsGrid 
           userPlan={userPlan} 
-          onToolRun={() => setHasRunTools(true)} 
+          onToolRun={handleToolRun} 
           selectedTool={activeSection}
           selectedWebsite={selectedWebsite}
           selectedProjectId={selectedProjectId}
@@ -975,6 +1003,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
             // Clear any remaining immediate walkthrough flags
             localStorage.removeItem('seogenix_immediate_walkthrough');
           }}
+        />
+      )}
+
+      {/* Tool Modal */}
+      {showToolModal && (
+        <ToolModal
+          isOpen={showToolModal}
+          onClose={() => setShowToolModal(false)}
+          toolId={modalToolId}
+          toolName={modalToolName}
+          selectedWebsite={selectedWebsite}
+          selectedProjectId={selectedProjectId}
+          userProfile={userProfile}
+          onComplete={handleToolComplete}
         />
       )}
 
@@ -1073,5 +1115,3 @@ const Dashboard: React.FC<DashboardProps> = ({ userPlan, onNavigateToLanding, us
 };
 
 export default Dashboard;
-
-
