@@ -291,13 +291,14 @@ const ToolModal: React.FC<ToolModalProps> = ({
       }
 
       switch (toolId) {
-        case 'audit':
+        case 'audit': {
           const auditUrl = formData.auditScope === 'page' && formData.pageUrl ? 
             `${websiteUrl}${formData.pageUrl}` : websiteUrl;
           result = await apiService.runAudit(selectedProjectId, auditUrl);
           break;
+        }
 
-        case 'schema':
+        case 'schema': {
           result = await apiService.generateSchema(
             selectedProjectId,
             formData.inputType === 'url' ? websiteUrl : '',
@@ -305,30 +306,34 @@ const ToolModal: React.FC<ToolModalProps> = ({
             formData.inputType === 'text' ? formData.content : undefined
           );
           break;
+        }
 
-        case 'citations':
+        case 'citations': {
           const domain = websiteUrl.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
           const keywords = formData.keywords ? 
             formData.keywords.split(',').map((k: string) => k.trim()) : 
             [domain, 'AI visibility', 'SEO'];
           result = await apiService.trackCitations(selectedProjectId, domain, keywords);
           break;
+        }
 
-        case 'voice':
+        case 'voice': {
           const voiceQuery = formData.query || `What is ${websiteUrl}?`;
           const assistants = formData.assistants || ['siri', 'alexa', 'google'];
           result = await apiService.testVoiceAssistants(voiceQuery, assistants);
           break;
+        }
 
-        case 'summaries':
+        case 'summaries': {
           result = await apiService.generateLLMSummary(
             selectedProjectId, 
             websiteUrl, 
             formData.summaryType || 'overview'
           );
           break;
+        }
 
-        case 'entities':
+        case 'entities': {
           result = await apiService.analyzeEntityCoverage(
             selectedProjectId,
             websiteUrl, 
@@ -337,8 +342,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
             userProfile?.competitors?.map((c: any) => c.url) || []
           );
           break;
+        }
 
-        case 'generator':
+        case 'generator': {
           const generatorKeywords = formData.keywords ? 
             formData.keywords.split(',').map((k: string) => k.trim()) : 
             ['AI', 'SEO', 'optimization'];
@@ -357,8 +363,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
             formData.audience || 'Business owners and marketers'
           );
           break;
+        }
 
-        case 'prompts':
+        case 'prompts': {
           result = await apiService.generatePromptSuggestions(
             selectedProjectId,
             formData.topic || userProfile?.industry || 'Technology',
@@ -368,8 +375,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
             formData.intent || 'informational'
           );
           break;
+        }
 
-        case 'competitive':
+        case 'competitive': {
           const competitors = formData.selectedCompetitors || 
                            userProfile?.competitors?.map((c: any) => c.url) || 
                            (formData.competitors ? formData.competitors.split(',').map((c: string) => c.trim()) : []);
@@ -381,8 +389,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
             formData.analysisType || 'detailed'
           );
           break;
+        }
 
-        case 'discovery':
+        case 'discovery': {
           result = await apiService.discoverCompetitors(
             selectedProjectId,
             websiteUrl,
@@ -392,8 +401,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
             formData.analysisDepth || 'comprehensive'
           );
           break;
+        }
 
-        case 'content-optimizer':
+        case 'content-optimizer': {
           const keywords = formData.keywords ?
             formData.keywords.split(',').map((k: string) => k.trim()) :
             [];
@@ -403,6 +413,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
             formData.contentType || 'article'
           );
           break;
+        }
 
         default:
           throw new Error('Unknown tool');
