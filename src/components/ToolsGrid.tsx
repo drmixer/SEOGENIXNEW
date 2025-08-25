@@ -14,7 +14,11 @@ import {
   AlertTriangle,
   Loader,
   CheckCircle,
-  Radar
+  Radar,
+  Copy,
+  ExternalLink,
+  Star,
+  TrendingDown
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import CompetitiveAnalysisModal from './CompetitiveAnalysisModal';
@@ -91,6 +95,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   // Entity to Content specific state
   const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
 
+  // Voice Assistant specific state
+  const [voiceQuery, setVoiceQuery] = useState('');
+  const [selectedAssistants, setSelectedAssistants] = useState<string[]>(['siri', 'alexa', 'google']);
+
   // Update active tool when selectedTool changes
   useEffect(() => {
     if (selectedTool) {
@@ -125,7 +133,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       description: 'Comprehensive analysis of how well your content is structured for AI systems',
       icon: FileText,
       color: 'from-blue-500 to-blue-600',
-      planRequired: 'free', // Changed from 'core' to allow free users to test
+      planRequired: 'free',
       isPopular: true
     },
     {
@@ -214,9 +222,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
   // Filter tools based on user plan
   const availableTools = tools.filter(tool => {
-    // Remove the optimizer tool as it's redundant with the editor
-    if (tool.id === 'optimizer') return false;
-    
     const planHierarchy = { free: 0, core: 1, pro: 2, agency: 3 };
     const userLevel = planHierarchy[userPlan];
     const requiredLevel = planHierarchy[tool.planRequired];
@@ -227,10 +232,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     if (toolId === 'competitive') {
       setShowCompetitiveAnalysisModal(true);
     } else if (showPreview) {
-      // In preview mode, just notify parent
       onToolRun();
     } else {
-      // In normal mode, set active tool
       setActiveToolId(toolId);
       setToolData(null);
       setError(null);
@@ -245,29 +248,12 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         const domain = extractDomain(selectedWebsite);
         setPromptTopic(domain);
       }
+
+      if (toolId === 'voice' && selectedWebsite) {
+        const domain = extractDomain(selectedWebsite);
+        setVoiceQuery(`What is ${domain}?`);
+      }
     }
-  };
-
-  const handleFixItClick = (recommendation: any) => {
-    if (recommendation.action_type === 'content-optimizer') {
-      onSwitchTool('editor', { url: selectedWebsite });
-    }
-  };
-
-  const handleGenerateWithEntities = () => {
-    onSwitchTool('generator', {
-      entitiesToInclude: selectedEntities,
-      topic: `Content about ${extractDomain(selectedWebsite || '')} that includes key entities`,
-      targetKeywords: selectedEntities,
-    });
-  };
-
-  const handleCreateContentFromCitation = (citation: any) => {
-    onSwitchTool('generator', {
-      citation,
-      topic: `Responding to a mention on ${citation.source}`,
-      targetKeywords: citation.snippet.split(' ').slice(0, 5).join(', '), // Use first 5 words as keywords
-    });
   };
 
   const extractDomain = (url: string): string => {
@@ -279,7 +265,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     }
   };
 
-  // FIX: Moved this function here so it has access to component state
   const isRunDisabled = (toolId: string | null, projectId?: string, website?: string): boolean => {
     if (loading || !toolId) return true;
 
@@ -291,6 +276,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     // Tool-specific validation
     if (toolId === 'generator' && (!generatorTopic || !generatorKeywords)) return true;
     if (toolId === 'prompts' && !promptTopic) return true;
+    if (toolId === 'voice' && !voiceQuery) return true;
 
     return false;
   };
@@ -318,16 +304,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           result = await apiService.generateSchema(
             selectedProjectId!,
             schemaInputType === 'url' ? selectedWebsite! : '',
-            'article', // default content type
+            'article',
             schemaInputType === 'text' ? schemaContent : undefined
           );
           break;
 
         case 'citations':
           const domain = extractDomain(selectedWebsite!);
-          // Parse keywords from comma-separated string
           const citationKeywordsList = citationKeywords.split(',').map(k => k.trim()).filter(k => k);
-          // Parse fingerprint phrases if any
           const fingerprintList = fingerprintPhrases.split('\n').map(p => p.trim()).filter(p => p);
           
           result = await apiService.trackCitations(
@@ -339,10 +323,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           break;
 
         case 'voice':
-          const voiceQuery = selectedWebsite ? 
-            `What is ${extractDomain(selectedWebsite)}?` : 
-            'Tell me about this business';
-          result = await apiService.testVoiceAssistants(voiceQuery, ['siri', 'alexa', 'google']);
+          result = await apiService.testVoiceAssistants(voiceQuery, selectedAssistants);
           break;
 
         case 'summaries':
@@ -359,20 +340,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           break;
 
         case 'generator':
-          // Parse keywords from comma-separated string
           const keywords = generatorKeywords.split(',').map(k => k.trim()).filter(k => k);
           
           if (!generatorTopic || keywords.length === 0) {
             throw new Error('Please provide a topic and at least one keyword');
           }
-          
-          console.log('Calling AI Content Generator with:', {
-            projectId: selectedProjectId,
-            contentType: generatorContentType,
-            topic: generatorTopic,
-            keywords,
-            tone: generatorTone
-          });
           
           result = await apiService.generateAIContent(
             selectedProjectId!,
@@ -384,8 +356,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             undefined,
             'medium'
           );
-          
-          console.log('AI Content Generator result:', result);
           break;
 
         case 'competitive':
@@ -427,25 +397,33 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           throw new Error(`Tool ${toolId} not implemented`);
       }
 
-      setToolData(result);
+      // Ensure result has proper structure
+      if (!result) {
+        throw new Error('No result returned from API');
+      }
+
+      // Normalize result structure to handle different API response formats
+      const normalizedResult = normalizeResult(toolId, result);
+      
+      setToolData(normalizedResult);
       onToolRun();
 
       // Save audit result to history
       if (toolId === 'audit') {
         try {
           const { data: { user } } = await supabase.auth.getUser();
-          if (user && result) {
+          if (user && normalizedResult) {
             await userDataService.saveAuditResult({
               user_id: user.id,
               website_url: selectedWebsite!,
-              overall_score: result.overallScore,
-              ai_understanding: result.subscores?.aiUnderstanding || 0,
-              citation_likelihood: result.subscores?.citationLikelihood || 0,
-              conversational_readiness: result.subscores?.conversationalReadiness || 0,
-              content_structure: result.subscores?.contentStructure || 0,
-              recommendations: result.recommendations?.map((r: any) => r.title || r) || [],
-              issues: result.issues?.map((issue: any) => issue.title || issue) || [],
-              audit_data: result
+              overall_score: normalizedResult.overallScore || 0,
+              ai_understanding: normalizedResult.subscores?.aiUnderstanding || 0,
+              citation_likelihood: normalizedResult.subscores?.citationLikelihood || 0,
+              conversational_readiness: normalizedResult.subscores?.conversationalReadiness || 0,
+              content_structure: normalizedResult.subscores?.contentStructure || 0,
+              recommendations: normalizedResult.recommendations?.map((r: any) => r.title || r) || [],
+              issues: normalizedResult.issues?.map((issue: any) => issue.title || issue) || [],
+              audit_data: normalizedResult
             });
           }
         } catch (error) {
@@ -460,7 +438,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           await userDataService.trackActivity({
             user_id: user.id,
             activity_type: 'tool_used',
-            activity_data: { result },
+            activity_data: { toolId, result: normalizedResult },
             tool_id: toolId,
             website_url: selectedWebsite
           });
@@ -495,6 +473,150 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       setLoading(false);
       setRunningTool(null);
     }
+  };
+
+  // Normalize different result structures into consistent format
+  const normalizeResult = (toolId: string, result: any): any => {
+    if (!result) return null;
+
+    // Handle wrapped results
+    if (result.data && typeof result.data === 'object') {
+      result = result.data;
+    }
+
+    // Handle success wrapper
+    if (result.success && result.data) {
+      result = result.data;
+    }
+
+    // Tool-specific normalization
+    switch (toolId) {
+      case 'audit':
+        return {
+          overallScore: result.overallScore || result.overall_score || 0,
+          subscores: {
+            aiUnderstanding: result.subscores?.aiUnderstanding || result.ai_understanding || 0,
+            citationLikelihood: result.subscores?.citationLikelihood || result.citation_likelihood || 0,
+            conversationalReadiness: result.subscores?.conversationalReadiness || result.conversational_readiness || 0,
+            contentStructure: result.subscores?.contentStructure || result.content_structure || 0
+          },
+          recommendations: result.recommendations || [],
+          issues: result.issues || [],
+          strengths: result.strengths || [],
+          keyInsights: result.keyInsights || result.key_insights || [],
+          auditedAt: result.auditedAt || result.audited_at || new Date().toISOString(),
+          url: result.url || selectedWebsite
+        };
+
+      case 'schema':
+        return {
+          schema: result.schema || result.schemaMarkup || result.markup || JSON.stringify(result, null, 2),
+          implementation: result.implementation || result.implementationCode || '',
+          instructions: result.instructions || 'Add this schema markup to your HTML head section.',
+          schemaType: result.schemaType || result.type || 'Article'
+        };
+
+      case 'citations':
+        return {
+          total: result.total || result.totalCitations || (result.citations ? result.citations.length : 0),
+          citations: result.citations || result.results || [],
+          sources: result.sources || { llm: 0, traditional: 0 },
+          confidenceBreakdown: result.confidenceBreakdown || { high: 0, medium: 0, low: 0 },
+          timeframe: result.timeframe || '30 days',
+          keywords: result.keywords || []
+        };
+
+      case 'voice':
+        return {
+          results: result.results || result.assistantResults || [],
+          summary: {
+            totalMentions: result.summary?.totalMentions || 0,
+            averageRanking: result.summary?.averageRanking || 0,
+            averageConfidence: result.summary?.averageConfidence || 0
+          },
+          query: result.query || voiceQuery
+        };
+
+      case 'summaries':
+        return {
+          summary: result.summary || result.generatedSummary || 'Summary generated successfully',
+          entities: result.entities || result.keyEntities || [],
+          topics: result.topics || result.mainTopics || [],
+          wordCount: result.wordCount || result.word_count || 0,
+          readability: result.readability || 'Medium'
+        };
+
+      case 'entities':
+        return {
+          coverageScore: result.coverageScore || result.coverage_score || 0,
+          mentionedCount: result.mentionedCount || result.mentioned_count || 0,
+          missingCount: result.missingCount || result.missing_count || 0,
+          missingEntities: result.missingEntities || result.missing_entities || [],
+          mentionedEntities: result.mentionedEntities || result.mentioned_entities || [],
+          recommendations: result.recommendations || []
+        };
+
+      case 'generator':
+        return {
+          generatedContent: result.generatedContent || result.content || result,
+          optimizationTips: result.optimizationTips || result.tips || [],
+          wordCount: result.wordCount || 0,
+          generatedAt: result.generatedAt || new Date().toISOString(),
+          contentType: generatorContentType
+        };
+
+      case 'prompts':
+        return {
+          promptSuggestions: result.promptSuggestions || result.prompts || result.suggestions || [],
+          totalPrompts: result.totalPrompts || (result.promptSuggestions ? result.promptSuggestions.length : 0),
+          averageLikelihood: result.averageLikelihood || 0,
+          statistics: result.statistics || { highLikelihoodPrompts: 0 }
+        };
+
+      case 'competitive':
+        return {
+          summary: {
+            ranking: result.summary?.ranking || result.ranking || 'N/A',
+            primarySiteScore: result.summary?.primarySiteScore || result.yourScore || 0,
+            averageCompetitorScore: result.summary?.averageCompetitorScore || result.competitorAverage || 0
+          },
+          competitorAnalyses: result.competitorAnalyses || result.competitors || [],
+          insights: result.insights || []
+        };
+
+      case 'discovery':
+        return {
+          competitorSuggestions: result.competitorSuggestions || result.suggestions || result.competitors || [],
+          totalSuggestions: result.totalSuggestions || (result.competitorSuggestions ? result.competitorSuggestions.length : 0),
+          averageRelevance: result.averageRelevance || 0,
+          competitiveIntensity: result.competitiveIntensity || 'Medium'
+        };
+
+      default:
+        return result;
+    }
+  };
+
+  const handleFixItClick = (recommendation: any) => {
+    if (recommendation.action_type === 'content-optimizer') {
+      onSwitchTool('editor', { url: selectedWebsite });
+    }
+  };
+
+  const handleGenerateWithEntities = () => {
+    onSwitchTool('generator', {
+      entitiesToInclude: selectedEntities,
+      topic: `Content about ${extractDomain(selectedWebsite || '')} that includes key entities`,
+      targetKeywords: selectedEntities,
+    });
+  };
+
+  const handleCreateContentFromCitation = (citation: any) => {
+    onSwitchTool('generator', {
+      citation,
+      topic: `Responding to a mention on ${citation.source}`,
+      targetKeywords: citation.snippet.split(' ').slice(0, 5).join(', '),
+    });
   };
 
   // If in preview mode, just show the grid
@@ -592,7 +714,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             </div>
           )}
 
-          {/* AI Visibility Audit Tool Form */}
+          {/* Tool Configuration Forms */}
           {activeToolId === 'audit' && (
             <div className="mb-6 space-y-4">
               <div>
@@ -632,7 +754,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                     placeholder="e.g., /blog/my-post"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
-                   <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-1 text-sm text-gray-500">
                     Enter a specific page path relative to your selected site.
                   </p>
                 </div>
@@ -640,7 +762,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             </div>
           )}
 
-          {/* Schema Generator Tool Form */}
           {activeToolId === 'schema' && (
             <div className="mb-6 space-y-4">
               <div>
@@ -669,7 +790,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             </div>
           )}
 
-          {/* Generator Tool Form */}
           {activeToolId === 'generator' && (
             <div className="mb-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -734,7 +854,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             </div>
           )}
 
-          {/* Citation Tracker Tool Form */}
           {activeToolId === 'citations' && (
             <div className="mb-6 space-y-4">
               <div>
@@ -771,7 +890,49 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             </div>
           )}
 
-          {/* Prompt Match Suggestions Tool Form */}
+          {activeToolId === 'voice' && (
+            <div className="mb-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Voice Query
+                </label>
+                <input
+                  type="text"
+                  value={voiceQuery}
+                  onChange={(e) => setVoiceQuery(e.target.value)}
+                  placeholder="What is your business about?"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  Enter the question users might ask voice assistants about your business
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Voice Assistants</label>
+                <div className="space-y-2">
+                  {['siri', 'alexa', 'google'].map(assistant => (
+                    <label key={assistant} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedAssistants.includes(assistant)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedAssistants([...selectedAssistants, assistant]);
+                          } else {
+                            setSelectedAssistants(selectedAssistants.filter(a => a !== assistant));
+                          }
+                        }}
+                        className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 capitalize">{assistant}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeToolId === 'prompts' && (
             <div className="mb-6 space-y-4">
               <div>
@@ -857,238 +1018,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
               <h3 className="font-medium text-gray-900 mb-4">Results</h3>
               
-              {/* Display tool-specific results */}
-              {activeToolId === 'audit' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-blue-50 p-4 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-blue-600">{toolData.overallScore}</div>
-                      <div className="text-sm text-blue-800">Overall Score</div>
-                    </div>
-                    <div className="bg-teal-50 p-4 rounded-lg text-center">
-                      <div className="text-xl font-bold text-teal-600">{toolData.subscores?.aiUnderstanding}</div>
-                      <div className="text-sm text-teal-800">AI Understanding</div>
-                    </div>
-                    <div className="bg-purple-50 p-4 rounded-lg text-center">
-                      <div className="text-xl font-bold text-purple-600">{toolData.subscores?.citationLikelihood}</div>
-                      <div className="text-sm text-purple-800">Citation Likelihood</div>
-                    </div>
-                    <div className="bg-indigo-50 p-4 rounded-lg text-center">
-                      <div className="text-xl font-bold text-indigo-600">{toolData.subscores?.conversationalReadiness}</div>
-                      <div className="text-sm text-indigo-800">Conversational</div>
-                    </div>
-                  </div>
-
-                  {toolData.recommendations && toolData.recommendations.length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Key Recommendations:</h4>
-                      <div className="space-y-3">
-                        {toolData.recommendations.map((rec: { title: string, description: string, action_type?: string }, index: number) => (
-                          <div key={index} className="bg-green-50 p-4 rounded-lg flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-start space-x-2">
-                                <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                                <span className="font-medium text-green-900">{rec.title}</span>
-                              </div>
-                              <p className="text-sm text-green-800 ml-6">{rec.description}</p>
-                            </div>
-                            {rec.action_type === 'content-optimizer' && (
-                              <button
-                                onClick={() => handleFixItClick(rec)}
-                                className="ml-4 px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
-                              >
-                                Fix it
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {toolData.issues && toolData.issues.length > 0 && (
-                    <div className="space-y-4">
-                      <h4 className="font-medium text-gray-900">Issues Found:</h4>
-                      <div className="space-y-3">
-                        {toolData.issues.map((issue: any, index: number) => (
-                          <IssueCard key={index} issue={issue} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {toolData.strengths && toolData.strengths.length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">What's Working Well:</h4>
-                      <div className="bg-green-50 p-4 rounded-lg">
-                        <ul className="text-sm text-green-800 space-y-2">
-                          {toolData.strengths.map((strength: string, index: number) => (
-                            <li key={index} className="flex items-start space-x-2">
-                              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                              <span>{strength}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-
-                  {toolData.keyInsights && toolData.keyInsights.length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Key Insights:</h4>
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <ul className="text-sm text-blue-800 space-y-2">
-                          {toolData.keyInsights.map((insight: string, index: number) => (
-                            <li key={index} className="flex items-start space-x-2">
-                              <span className="text-blue-600 mr-2">💡</span>
-                              <span>{insight}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {activeToolId === 'schema' && (
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium text-gray-900">Generated Schema Markup:</h4>
-                  </div>
-                  <div className="bg-gray-800 text-green-400 p-4 rounded-lg overflow-x-auto mb-4">
-                    <pre className="text-sm">{toolData.schema}</pre>
-                  </div>
-                  <p className="text-gray-700 mb-2">{toolData.instructions}</p>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(toolData.implementation || toolData.schema)}
-                    className="text-purple-600 hover:text-purple-800 text-sm font-medium"
-                  >
-                    Copy Implementation Code
-                  </button>
-                </div>
-              )}
-
-              {activeToolId === 'voice' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-blue-50 p-4 rounded-lg text-center">
-                      <div className="text-xl font-bold text-blue-600">{toolData.summary?.totalMentions || 0}</div>
-                      <div className="text-sm text-blue-800">Mentions</div>
-                    </div>
-                    <div className="bg-green-50 p-4 rounded-lg text-center">
-                      <div className="text-xl font-bold text-green-600">{toolData.summary?.averageRanking || 0}</div>
-                      <div className="text-sm text-green-800">Avg Ranking</div>
-                    </div>
-                    <div className="bg-purple-50 p-4 rounded-lg text-center">
-                      <div className="text-xl font-bold text-purple-600">{toolData.summary?.averageConfidence || 0}%</div>
-                      <div className="text-sm text-purple-800">Confidence</div>
-                    </div>
-                  </div>
-                  
-                  {toolData.results && toolData.results.length > 0 && (
-                    <div className="space-y-4">
-                      <h4 className="font-medium text-gray-900">Assistant Responses:</h4>
-                      {toolData.results.map((voiceResult: any, index: number) => (
-                        <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-gray-900">{voiceResult.assistant}</span>
-                            <span className={`text-sm px-2 py-1 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                              {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-2">{voiceResult.response}</p>
-                          <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                            <span>Confidence: {voiceResult.confidence}%</span>
-                            {voiceResult.mentioned && (
-                              <span>Ranking: #{voiceResult.ranking}</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {activeToolId === 'generator' && (
-                <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <h4 className="font-medium mb-4">Generated {generatorContentType.replace('-', ' ')} Content</h4>
-                    
-                    {generatorContentType === 'faq' && toolData.generatedContent?.faqs && (
-                      <div className="space-y-4">
-                        {toolData.generatedContent.faqs.map((faq: any, i: number) => (
-                          <div key={i} className="border-l-4 border-yellow-400 pl-4 py-1">
-                            <h5 className="font-medium text-gray-900">{faq.question}</h5>
-                            <p className="text-gray-700 mt-1">{faq.answer}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {generatorContentType === 'meta-tags' && toolData.generatedContent?.metaTags && (
-                      <div className="space-y-3">
-                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                          <div className="font-medium text-sm text-gray-500">Title Tag</div>
-                          <div className="text-gray-800">{toolData.generatedContent.metaTags.title}</div>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                          <div className="font-medium text-sm text-gray-500">Meta Description</div>
-                          <div className="text-gray-800">{toolData.generatedContent.metaTags.description}</div>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                          <div className="font-medium text-sm text-gray-500">Keywords</div>
-                          <div className="text-gray-800">{toolData.generatedContent.metaTags.keywords}</div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {(generatorContentType === 'snippets' || generatorContentType === 'headings' || generatorContentType === 'descriptions') && (
-                      <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-wrap">
-                        {toolData.generatedContent?.raw || toolData.generatedContent?.snippet || toolData.generatedContent?.description}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {toolData.optimizationTips && (
-                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                      <h4 className="font-medium mb-2">Optimization Tips</h4>
-                      <ul className="space-y-2">
-                        {toolData.optimizationTips.map((tip: string, i: number) => (
-                          <li key={i} className="flex items-start">
-                            <span className="text-yellow-600 mr-2">•</span>
-                            <span className="text-gray-700">{tip}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => {
-                        const contentToShow = toolData.generatedContent?.raw || 
-                                            JSON.stringify(toolData.generatedContent, null, 2) || 
-                                            JSON.stringify(toolData, null, 2);
-                        navigator.clipboard.writeText(contentToShow);
-                      }}
-                      className="text-purple-600 hover:text-purple-800 text-sm font-medium"
-                    >
-                      Copy Generated Content
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Display results for other tools */}
-              {!['audit', 'schema', 'voice', 'generator'].includes(activeToolId) && (
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <pre className="text-sm text-gray-700 overflow-x-auto whitespace-pre-wrap">
-                    {JSON.stringify(toolData, null, 2)}
-                  </pre>
-                </div>
-              )}
+              {/* Tool-specific results rendering */}
+              <ToolResultsDisplay 
+                toolId={activeToolId} 
+                data={toolData} 
+                onFixItClick={handleFixItClick}
+                onGenerateWithEntities={handleGenerateWithEntities}
+                onCreateContentFromCitation={handleCreateContentFromCitation}
+              />
               
               <div className="mt-6">
                 <button
@@ -1168,7 +1105,652 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   );
 };
 
-export default ToolsGrid;
+// Separate component for rendering tool results
+const ToolResultsDisplay: React.FC<{
+  toolId: string;
+  data: any;
+  onFixItClick: (recommendation: any) => void;
+  onGenerateWithEntities: () => void;
+  onCreateContentFromCitation: (citation: any) => void;
+}> = ({ toolId, data, onFixItClick, onGenerateWithEntities, onCreateContentFromCitation }) => {
+  
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  switch (toolId) {
+    case 'audit':
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="text-2xl font-bold text-blue-600">{data.overallScore || 0}</div>
+              <div className="text-sm text-blue-800">Overall Score</div>
+            </div>
+            <div className="bg-teal-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-teal-600">{data.subscores?.aiUnderstanding || 0}</div>
+              <div className="text-sm text-teal-800">AI Understanding</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-purple-600">{data.subscores?.citationLikelihood || 0}</div>
+              <div className="text-sm text-purple-800">Citation Likelihood</div>
+            </div>
+            <div className="bg-indigo-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-indigo-600">{data.subscores?.conversationalReadiness || 0}</div>
+              <div className="text-sm text-indigo-800">Conversational</div>
+            </div>
+          </div>
+
+          {data.recommendations && data.recommendations.length > 0 && (
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">Key Recommendations:</h4>
+              <div className="space-y-3">
+                {data.recommendations.map((rec: any, index: number) => (
+                  <div key={index} className="bg-green-50 p-4 rounded-lg flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-start space-x-2">
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <span className="font-medium text-green-900">{rec.title || rec}</span>
+                      </div>
+                      {rec.description && (
+                        <p className="text-sm text-green-800 ml-6">{rec.description}</p>
+                      )}
+                    </div>
+                    {rec.action_type === 'content-optimizer' && (
+                      <button
+                        onClick={() => onFixItClick(rec)}
+                        className="ml-4 px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
+                      >
+                        Fix it
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {data.issues && data.issues.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">Issues Found:</h4>
+              <div className="space-y-3">
+                {data.issues.map((issue: any, index: number) => (
+                  <IssueCard key={index} issue={issue} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {data.strengths && data.strengths.length > 0 && (
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">What's Working Well:</h4>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <ul className="text-sm text-green-800 space-y-2">
+                  {data.strengths.map((strength: string, index: number) => (
+                    <li key={index} className="flex items-start space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                      <span>{strength}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {data.keyInsights && data.keyInsights.length > 0 && (
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">Key Insights:</h4>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <ul className="text-sm text-blue-800 space-y-2">
+                  {data.keyInsights.map((insight: string, index: number) => (
+                    <li key={index} className="flex items-start space-x-2">
+                      <span className="text-blue-600 mr-2">💡</span>
+                      <span>{insight}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+      
+    case 'schema':
+      return (
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium text-gray-900">Generated Schema Markup</h4>
+              <button
+                onClick={() => copyToClipboard(data.schema)}
+                className="text-blue-600 hover:text-blue-700 p-1 rounded"
+                title="Copy to clipboard"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="bg-gray-800 text-green-400 p-4 rounded-lg overflow-x-auto mb-4">
+              <pre className="text-sm">{data.schema}</pre>
+            </div>
+            <p className="text-gray-700 mb-2">{data.instructions}</p>
+            {data.implementation && (
+              <button
+                onClick={() => copyToClipboard(data.implementation)}
+                className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+              >
+                Copy Implementation Code
+              </button>
+            )}
+          </div>
+        </div>
+      );
+
+    case 'citations':
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-blue-600">{data.total || 0}</div>
+              <div className="text-sm text-blue-800">Total Citations</div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-green-600">{data.confidenceBreakdown?.high || 0}</div>
+              <div className="text-sm text-green-800">High Confidence</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-purple-600">{data.sources?.llm || 0}</div>
+              <div className="text-sm text-purple-800">LLM Mentions</div>
+            </div>
+          </div>
+          
+          {data.citations && data.citations.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">Recent Citations:</h4>
+              {data.citations.slice(0, 5).map((citation: any, index: number) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-900">{citation.source || `Source ${index + 1}`}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {citation.type || 'LLM'}
+                      </span>
+                      <button
+                        onClick={() => onCreateContentFromCitation(citation)}
+                        className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition-colors"
+                      >
+                        Create Response
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">{citation.snippet || citation.text || 'No snippet available'}</p>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-xs text-gray-500">
+                      {citation.date ? new Date(citation.date).toLocaleDateString() : 'Recent'}
+                    </span>
+                    {citation.url && (
+                      <a 
+                        href={citation.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1"
+                      >
+                        <span>View Source</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+
+    case 'voice':
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-blue-600">{data.summary?.totalMentions || 0}</div>
+              <div className="text-sm text-blue-800">Mentions</div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-green-600">{data.summary?.averageRanking || 0}</div>
+              <div className="text-sm text-green-800">Avg Ranking</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-purple-600">{data.summary?.averageConfidence || 0}%</div>
+              <div className="text-sm text-purple-800">Confidence</div>
+            </div>
+          </div>
+          
+          {data.results && data.results.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">Assistant Responses:</h4>
+              {data.results.map((voiceResult: any, index: number) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-900 capitalize">{voiceResult.assistant}</span>
+                    <span className={`text-sm px-2 py-1 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                      {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">{voiceResult.response || 'No response available'}</p>
+                  <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                    <span>Confidence: {voiceResult.confidence || 0}%</span>
+                    {voiceResult.mentioned && voiceResult.ranking && (
+                      <span>Ranking: #{voiceResult.ranking}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+
+    case 'summaries':
+      return (
+        <div className="space-y-4">
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-medium text-gray-900 mb-2">AI-Optimized Summary</h4>
+            <p className="text-gray-700 mb-3">{data.summary}</p>
+            
+            {data.entities && data.entities.length > 0 && (
+              <div className="mb-3">
+                <h5 className="font-medium text-gray-800 mb-1">Key Entities:</h5>
+                <div className="flex flex-wrap gap-1">
+                  {data.entities.slice(0, 10).map((entity: string, index: number) => (
+                    <span key={index} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                      {entity.split(':')[0]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {data.topics && data.topics.length > 0 && (
+              <div>
+                <h5 className="font-medium text-gray-800 mb-1">Main Topics:</h5>
+                <div className="flex flex-wrap gap-1">
+                  {data.topics.slice(0, 8).map((topic: string, index: number) => (
+                    <span key={index} className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                      {topic}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="mt-3 text-xs text-gray-600">
+              Word count: {data.wordCount} | Readability: {data.readability}
+            </div>
+          </div>
+        </div>
+      );
+
+    case 'entities':
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-blue-600">{data.coverageScore || 0}%</div>
+              <div className="text-sm text-blue-800">Coverage Score</div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-green-600">{data.mentionedCount || 0}</div>
+              <div className="text-sm text-green-800">Mentioned</div>
+            </div>
+            <div className="bg-red-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-red-600">{data.missingCount || 0}</div>
+              <div className="text-sm text-red-800">Missing</div>
+            </div>
+          </div>
+          
+          {data.missingEntities && data.missingEntities.length > 0 && (
+            <div className="bg-yellow-50 p-4 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-yellow-900">Missing Important Entities:</h4>
+                <button
+                  onClick={onGenerateWithEntities}
+                  className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200 transition-colors"
+                >
+                  Generate Content
+                </button>
+              </div>
+              <div className="space-y-2">
+                {data.missingEntities.slice(0, 8).map((entity: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <span className="text-yellow-800">{entity.name || entity}</span>
+                    <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded">
+                      {entity.type || 'Entity'} - {entity.importance || 'Important'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {data.mentionedEntities && data.mentionedEntities.length > 0 && (
+            <div className="bg-green-50 p-4 rounded-lg">
+              <h4 className="font-medium text-green-900 mb-2">Well-Covered Entities:</h4>
+              <div className="flex flex-wrap gap-2">
+                {data.mentionedEntities.slice(0, 10).map((entity: any, index: number) => (
+                  <span key={index} className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                    {entity.name || entity}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+
+    case 'generator':
+      return (
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-medium">Generated {data.contentType?.replace('-', ' ') || 'Content'}</h4>
+              <button
+                onClick={() => copyToClipboard(JSON.stringify(data.generatedContent, null, 2))}
+                className="text-blue-600 hover:text-blue-700 p-1 rounded"
+                title="Copy to clipboard"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            </div>
+            
+            {data.generatedContent?.faqs && (
+              <div className="space-y-4">
+                <h5 className="font-medium text-gray-800">Generated FAQs:</h5>
+                {data.generatedContent.faqs.map((faq: any, i: number) => (
+                  <div key={i} className="border-l-4 border-yellow-400 pl-4 py-2 bg-yellow-50">
+                    <h6 className="font-medium text-gray-900">{faq.question}</h6>
+                    <p className="text-gray-700 mt-1">{faq.answer}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {data.generatedContent?.metaTags && (
+              <div className="space-y-3">
+                <h5 className="font-medium text-gray-800">Generated Meta Tags:</h5>
+                <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                  <div className="font-medium text-sm text-gray-500">Title Tag</div>
+                  <div className="text-gray-800">{data.generatedContent.metaTags.title}</div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                  <div className="font-medium text-sm text-gray-500">Meta Description</div>
+                  <div className="text-gray-800">{data.generatedContent.metaTags.description}</div>
+                </div>
+                {data.generatedContent.metaTags.keywords && (
+                  <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                    <div className="font-medium text-sm text-gray-500">Keywords</div>
+                    <div className="text-gray-800">{data.generatedContent.metaTags.keywords}</div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {(data.generatedContent?.snippets || data.generatedContent?.headings || data.generatedContent?.descriptions) && (
+              <div className="space-y-3">
+                <h5 className="font-medium text-gray-800">Generated Content:</h5>
+                <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-wrap">
+                  {data.generatedContent?.raw || 
+                   data.generatedContent?.snippet || 
+                   data.generatedContent?.description ||
+                   data.generatedContent?.headings ||
+                   'Content generated successfully'}
+                </div>
+              </div>
+            )}
+
+            {typeof data.generatedContent === 'string' && (
+              <div className="space-y-3">
+                <h5 className="font-medium text-gray-800">Generated Content:</h5>
+                <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-wrap">
+                  {data.generatedContent}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {data.optimizationTips && data.optimizationTips.length > 0 && (
+            <div className="bg-white p-4 rounded-lg shadow-sm">
+              <h4 className="font-medium mb-2">Optimization Tips</h4>
+              <ul className="space-y-2">
+                {data.optimizationTips.map((tip: string, i: number) => (
+                  <li key={i} className="flex items-start">
+                    <span className="text-yellow-600 mr-2">💡</span>
+                    <span className="text-gray-700">{tip}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          <div className="text-xs text-gray-600">
+            Word count: {data.wordCount || 0} | Generated: {data.generatedAt ? new Date(data.generatedAt).toLocaleString() : 'Just now'}
+          </div>
+        </div>
+      );
+
+    case 'prompts':
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-blue-600">{data.totalPrompts || 0}</div>
+              <div className="text-sm text-blue-800">Total Prompts</div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-green-600">{data.averageLikelihood || 0}%</div>
+              <div className="text-sm text-green-800">Avg Likelihood</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-purple-600">{data.statistics?.highLikelihoodPrompts || 0}</div>
+              <div className="text-sm text-purple-800">High Priority</div>
+            </div>
+          </div>
+          
+          {data.promptSuggestions && data.promptSuggestions.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">Top Prompt Suggestions:</h4>
+              {data.promptSuggestions.slice(0, 8).map((prompt: any, index: number) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-900">{prompt.category || `Prompt ${index + 1}`}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {prompt.likelihood || 'Medium'}% likely
+                      </span>
+                      {prompt.priority && (
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          prompt.priority === 'high' ? 'bg-red-100 text-red-800' :
+                          prompt.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {prompt.priority}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-700 mt-2 font-medium">"{prompt.prompt || prompt.text || prompt}"</p>
+                  {prompt.optimization && (
+                    <p className="text-xs text-gray-600 mt-1">{prompt.optimization}</p>
+                  )}
+                  {prompt.intent && (
+                    <p className="text-xs text-blue-600 mt-1">Intent: {prompt.intent}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+
+    case 'competitive':
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-blue-600">#{data.summary?.ranking || 'N/A'}</div>
+              <div className="text-sm text-blue-800">Your Ranking</div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-green-600">{data.summary?.primarySiteScore || 0}</div>
+              <div className="text-sm text-green-800">Your Score</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-purple-600">{data.summary?.averageCompetitorScore || 0}</div>
+              <div className="text-sm text-purple-800">Competitor Avg</div>
+            </div>
+          </div>
+          
+          {data.competitorAnalyses && data.competitorAnalyses.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">Competitor Analysis:</h4>
+              {data.competitorAnalyses.map((competitor: any, index: number) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-900">{competitor.name || competitor.url || `Competitor ${index + 1}`}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm bg-gray-200 text-gray-800 px-2 py-1 rounded">
+                        {competitor.overallScore || competitor.score || 0}/100
+                      </span>
+                      {competitor.ranking && (
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          #{competitor.ranking}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {(competitor.subscores || competitor.scores) && (
+                    <div className="grid grid-cols-4 gap-2 mt-2 text-xs">
+                      <div>AI: {(competitor.subscores || competitor.scores)?.aiUnderstanding || (competitor.subscores || competitor.scores)?.ai_understanding || 0}</div>
+                      <div>Citation: {(competitor.subscores || competitor.scores)?.citationLikelihood || (competitor.subscores || competitor.scores)?.citation_likelihood || 0}</div>
+                      <div>Voice: {(competitor.subscores || competitor.scores)?.conversationalReadiness || (competitor.subscores || competitor.scores)?.conversational_readiness || 0}</div>
+                      <div>Structure: {(competitor.subscores || competitor.scores)?.contentStructure || (competitor.subscores || competitor.scores)?.content_structure || 0}</div>
+                    </div>
+                  )}
+                  
+                  {competitor.strengths && competitor.strengths.length > 0 && (
+                    <div className="mt-2">
+                      <h5 className="text-xs font-medium text-gray-700">Strengths:</h5>
+                      <p className="text-xs text-gray-600">{competitor.strengths[0]}</p>
+                    </div>
+                  )}
+                  
+                  {competitor.weaknesses && competitor.weaknesses.length > 0 && (
+                    <div className="mt-1">
+                      <h5 className="text-xs font-medium text-gray-700">Opportunities:</h5>
+                      <p className="text-xs text-gray-600">{competitor.weaknesses[0]}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data.insights && data.insights.length > 0 && (
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h4 className="font-medium text-blue-900 mb-2">Key Insights:</h4>
+              <ul className="text-sm text-blue-800 space-y-1">
+                {data.insights.slice(0, 5).map((insight: string, index: number) => (
+                  <li key={index} className="flex items-start space-x-2">
+                    <span className="text-blue-600 mr-1">•</span>
+                    <span>{insight}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+
+    case 'discovery':
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-blue-600">{data.totalSuggestions || 0}</div>
+              <div className="text-sm text-blue-800">Competitors Found</div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-green-600">{data.averageRelevance || 0}%</div>
+              <div className="text-sm text-green-800">Avg Relevance</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg text-center">
+              <div className="text-xl font-bold text-purple-600">{data.competitiveIntensity || 'Medium'}</div>
+              <div className="text-sm text-purple-800">Market Intensity</div>
+            </div>
+          </div>
+          
+          {data.competitorSuggestions && data.competitorSuggestions.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">New Competitors Discovered:</h4>
+              {data.competitorSuggestions.map((competitor: any, index: number) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-900">{competitor.name || `Competitor ${index + 1}`}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {competitor.type || 'Direct'}
+                      </span>
+                      <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">
+                        {competitor.relevanceScore || 0}% relevant
+                      </span>
+                      {competitor.aiVisibilityScore && (
+                        <span className="text-sm bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                          AI: {competitor.aiVisibilityScore}/100
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">{competitor.reason || competitor.description || 'Similar business model and target audience'}</p>
+                  {competitor.url && (
+                    <a 
+                      href={competitor.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1 mt-1"
+                    >
+                      <span>{competitor.url}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                  {competitor.keyStrengths && competitor.keyStrengths.length > 0 && (
+                    <div className="mt-2">
+                      <h5 className="text-xs font-medium text-gray-700">Key Strengths:</h5>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {competitor.keyStrengths.slice(0, 3).map((strength: string, i: number) => (
+                          <span key={i} className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                            {strength}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+
+    default:
+      return (
+        <div className="p-4 bg-gray-50 rounded-lg">
+          <h4 className="font-medium text-gray-900 mb-2">Raw Results:</h4>
+          <pre className="text-sm text-gray-700 overflow-x-auto whitespace-pre-wrap max-h-96">
+            {JSON.stringify(data, null, 2)}
+          </pre>
+        </div>
+      );
+  }
+};
 
 const IssueCard = ({ issue }: { issue: any }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
@@ -1214,4 +1796,6 @@ const IssueCard = ({ issue }: { issue: any }) => {
       )}
     </div>
   );
-}
+};
+
+export default ToolsGrid;
