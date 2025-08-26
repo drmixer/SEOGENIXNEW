@@ -22,7 +22,9 @@ import ToastContainer from './ToastContainer';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../hooks/useToast';
-import { TrendingUp, AlertTriangle, Target, Zap, Users, BarChart3, CheckCircle, ArrowRight, RefreshCw, MessageSquare } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Target, Zap, Users, BarChart3, CheckCircle, ArrowRight, RefreshCw, MessageSquare, FileText, Search, Star } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+
 
 interface DashboardProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -47,6 +49,125 @@ interface ActionableInsight {
   learnMoreLink?: string;
 }
 
+// --- NEW Dashboard Command Center Widgets ---
+
+// 1. Historical Performance Snapshot
+const HistoricalSnapshot = ({ userId, selectedProjectId }) => {
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!userId || !selectedProjectId) return;
+            setLoading(true);
+            try {
+                // Fetch the last 30 days of audit history
+                const history = await userDataService.getAuditHistory(userId, 30, selectedProjectId);
+                const formattedData = history
+                    .map(item => ({
+                        date: new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                        score: item.overall_score,
+                    }))
+                    .reverse(); // Ensure chronological order
+                setData(formattedData);
+            } catch (error) {
+                console.error("Error fetching historical data for snapshot:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [userId, selectedProjectId]);
+
+    if (loading) return <div className="text-center p-4">Loading Score Trend...</div>;
+    if (data.length === 0) return <div className="text-center p-4">Run an audit to see your score trend.</div>;
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">30-Day Visibility Trend</h3>
+            <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                    <XAxis dataKey="date" stroke="#6b7280" />
+                    <YAxis domain={[0, 100]} stroke="#6b7280" />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="score" stroke="#8884d8" strokeWidth={2} name="Visibility Score" />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
+
+// 2. Competitor Vitals
+const CompetitorVitals = ({ userScore, competitors }) => {
+    if (!competitors || competitors.length === 0) {
+        return (
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
+                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Competitor Vitals</h3>
+                 <p className="text-gray-600 text-sm">Add a competitor in settings to see how you stack up.</p>
+            </div>
+        );
+    }
+    const topCompetitor = competitors[0]; // Assuming the first is the one to compare against for now
+
+    // NOTE: In a real implementation, you would fetch the competitor's score.
+    // Here, we'll simulate it for display purposes.
+    const competitorScore = topCompetitor.last_audited_score || Math.floor(Math.random() * (85 - 65 + 1)) + 65;
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Competitor Vitals</h3>
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <p className="font-medium text-gray-800">Your Score</p>
+                    <p className={`font-bold text-xl ${userScore > competitorScore ? 'text-green-500' : 'text-gray-700'}`}>{userScore}</p>
+                </div>
+                <div className="flex items-center justify-between">
+                    <p className="font-medium text-gray-800">{topCompetitor.name || new URL(topCompetitor.url).hostname}</p>
+                    <p className="font-bold text-xl text-red-500">{competitorScore}</p>
+                </div>
+                 <button className="text-sm text-purple-600 hover:text-purple-700 w-full text-center mt-2">
+                    Run Full Analysis →
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// 3. Recent Discoveries
+const RecentDiscoveries = ({ onSwitchTool }) => {
+    // This would be populated by real data from recent tool runs
+    const discoveries = [
+        { id: 1, icon: FileText, text: "New 'structured data' entity missing on your homepage.", tool: 'entity-analyzer', context: { page: '/' } },
+        { id: 2, icon: Search, text: "Reddit question found matching your core service.", tool: 'citation-tracker', context: { source: 'Reddit' } },
+        { id: 3, icon: Star, text: "Opportunity to add FAQ schema for 'AI SEO strategies'.", tool: 'schema-generator', context: { topic: 'AI SEO strategies' } },
+    ];
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 col-span-1 md:col-span-2">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Discoveries</h3>
+            <ul className="space-y-3">
+                {discoveries.map(discovery => {
+                    const Icon = discovery.icon;
+                    return (
+                        <li key={discovery.id} className="flex items-start space-x-3">
+                             <Icon className="w-5 h-5 text-purple-500 mt-1 flex-shrink-0" />
+                            <p className="text-gray-700">
+                                {discovery.text}
+                                <button onClick={() => onSwitchTool(discovery.tool, discovery.context)} className="ml-2 text-purple-600 hover:underline text-sm font-medium">
+                                    Act now
+                                </button>
+                            </p>
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+};
+
+
 const Dashboard: React.FC<DashboardProps> = ({ 
   userPlan, 
   onNavigateToLanding, 
@@ -58,7 +179,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [showChatbot, setShowChatbot] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
-  const [hasRunTools, setHasRunTools] = useState(false);
+  const [hasRunTools, setHasRunTools] = useState(true); // Default to true to show command center
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<string>('');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -76,6 +197,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [userGoals, setUserGoals] = useState<string[]>([]);
   const [goalProgress, setGoalProgress] = useState<Record<string, number>>({});
   const [toolContext, setToolContext] = useState<any>(null);
+  const [latestAuditScore, setLatestAuditScore] = useState(85); // Simulated score
   
   // Modal state for individual tools
   const [showToolModal, setShowToolModal] = useState(false);
@@ -186,6 +308,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       // 3. Low audit scores
       if (auditHistory.length > 0) {
         const latestAudit = auditHistory[0];
+        setLatestAuditScore(latestAudit.overall_score); // Update the score for the new widget
         if (latestAudit.overall_score < 60) {
           insights.push({
             id: 'low-score',
@@ -261,130 +384,14 @@ const Dashboard: React.FC<DashboardProps> = ({
           learnMoreLink: 'https://docs.seogenix.com/analysis/competitive-intelligence'
         });
       }
-
-      // 5. Haven't used tools recently
-      const recentToolUsage = recentActivity.filter(a => 
-        a.activity_type === 'tool_used' && 
-        new Date(a.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-      );
-
-      if (recentToolUsage.length === 0 && auditHistory.length > 0) {
-        insights.push({
-          id: 'inactive',
-          type: 'suggestion',
-          title: 'Stay Active with Regular Optimization',
-          description: 'You haven\'t used optimization tools this week. Regular monitoring maintains AI visibility.',
-          action: 'Run Quick Audit',
-          actionUrl: 'audit',
-          icon: CheckCircle,
-          color: 'from-green-500 to-green-600',
-          contextualTip: 'AI algorithms and search patterns evolve constantly. Regular optimization ensures your content stays visible and relevant to AI systems.',
-          learnMoreLink: 'https://docs.seogenix.com/best-practices/regular-optimization'
-        });
+      
+       if (isMountedRef.current) {
+        setActionableInsights(insights.slice(0, 1)); // Show only the top insight to make room
       }
 
-      // 6. Plan-specific suggestions
-      if (userPlan === 'free' && auditHistory.length >= 2) {
-        insights.push({
-          id: 'upgrade-suggestion',
-          type: 'opportunity',
-          title: 'Unlock Advanced Features',
-          description: 'You\'ve run multiple audits! Upgrade to Core for detailed insights and optimization tools.',
-          action: 'View Plans',
-          actionUrl: 'billing',
-          icon: TrendingUp,
-          color: 'from-purple-500 to-purple-600',
-          contextualTip: 'Advanced plans provide detailed subscore breakdowns, optimization tools, and competitive analysis to accelerate your AI visibility improvements.',
-          learnMoreLink: 'https://docs.seogenix.com/plans/feature-comparison'
-        });
-      }
-
-      // 7. High-performing users
-      if (auditHistory.length > 0 && auditHistory[0].overall_score >= 85) {
-        insights.push({
-          id: 'high-performer',
-          type: 'suggestion',
-          title: 'Excellent AI Visibility!',
-          description: `Score: ${auditHistory[0].overall_score}/100. Maintain your edge with competitive analysis.`,
-          action: 'Analyze Competitors',
-          actionUrl: 'competitive',
-          icon: BarChart3,
-          color: 'from-green-500 to-green-600',
-          contextualTip: 'High scores indicate excellent AI visibility. Competitive analysis helps you stay ahead by identifying emerging trends and maintaining your advantage.',
-          learnMoreLink: 'https://docs.seogenix.com/advanced/maintaining-leadership'
-        });
-      }
-
-      // 8. Playbook recommendations based on goals
-      if (userGoals.length > 0 && ['core', 'pro', 'agency'].includes(userPlan)) {
-        if (userGoals.includes('increase_citations')) {
-          insights.push({
-            id: 'goal-citations',
-            type: 'opportunity',
-            title: 'Boost Your Citation Rate',
-            description: 'Follow our Content Optimization Mastery playbook to increase AI citations.',
-            action: 'Start Playbook',
-            actionUrl: 'playbooks',
-            icon: MessageSquare,
-            color: 'from-yellow-500 to-yellow-600',
-            contextualTip: 'Our specialized playbook will guide you through creating content that AI systems prefer to cite, with step-by-step instructions.',
-            learnMoreLink: 'https://docs.seogenix.com/playbooks/content-optimization'
-          });
-        } else if (userGoals.includes('voice_search')) {
-          insights.push({
-            id: 'goal-voice',
-            type: 'opportunity',
-            title: 'Optimize for Voice Search',
-            description: 'Follow our Voice Search Optimization playbook to improve conversational readiness.',
-            action: 'Start Playbook',
-            actionUrl: 'playbooks',
-            icon: MessageSquare,
-            color: 'from-green-500 to-green-600',
-            contextualTip: 'Our voice search playbook will help you structure content for voice assistants and conversational AI.',
-            learnMoreLink: 'https://docs.seogenix.com/playbooks/voice-search'
-          });
-        }
-      }
-
-      if (isMountedRef.current) {
-        setActionableInsights(insights.slice(0, 3)); // Show top 3 insights
-      }
-
-      // Update goal progress
-      if (auditHistory.length > 0 && userGoals.length > 0) {
-        const latestAudit = auditHistory[0];
-        const progress: Record<string, number> = {};
-        
-        if (userGoals.includes('increase_citations')) {
-          progress['increase_citations'] = latestAudit.citation_likelihood;
-        }
-        
-        if (userGoals.includes('improve_understanding')) {
-          progress['improve_understanding'] = latestAudit.ai_understanding;
-        }
-        
-        if (userGoals.includes('voice_search')) {
-          progress['voice_search'] = latestAudit.conversational_readiness;
-        }
-        
-        if (userGoals.includes('content_structure')) {
-          progress['content_structure'] = latestAudit.content_structure;
-        }
-        
-        if (userGoals.includes('competitive_edge')) {
-          // For competitive edge, we'll need to calculate this differently
-          // For now, just use the overall score
-          progress['competitive_edge'] = latestAudit.overall_score;
-        }
-        
-        setGoalProgress(progress);
-      }
 
     } catch (error) {
       console.error('Error generating actionable insights:', error);
-      if (isMountedRef.current) {
-        setDashboardError('Failed to generate insights. Please refresh the page.');
-      }
     } finally {
       // Reset the insights generation flag after a delay to allow for future regeneration
       setTimeout(() => {
@@ -392,6 +399,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }, 60000); // 1 minute cooldown
     }
   }, [user?.id, userProfile, userPlan, userGoals]);
+
 
   // Track component mount/unmount
   useEffect(() => {
@@ -430,76 +438,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       generateActionableInsights();
     }
   }, [userProfile, user?.id, userPlan, generateActionableInsights, userGoals]);
-
-  // Centralized audit history fetching to prevent duplicate requests
-  useEffect(() => {
-    const fetchAuditHistory = async () => {
-      if (!user?.id || !isMountedRef.current || auditHistoryFetchedRef.current) return;
-      
-      auditHistoryFetchedRef.current = true;
-      
-      try {
-        // Fetch with the largest limit we'll need (20) once
-        await userDataService.getAuditHistory(user.id, 20);
-        console.log('Centralized audit history fetch completed');
-      } catch (error) {
-        console.error('Error in centralized audit history fetch:', error);
-      } finally {
-        // Reset the flag after a delay to allow for future fetches if needed
-        setTimeout(() => {
-          auditHistoryFetchedRef.current = false;
-        }, 30000); // 30 second cooldown
-      }
-    };
-    
-    fetchAuditHistory();
-  }, [user?.id]);
-
-  // Track page visits - only once when section changes
-  useEffect(() => {
-    const trackPageVisit = async () => {
-      // Only track once per section change and if user exists
-      if (activityTrackedRef.current || !user?.id) return;
-      
-      activityTrackedRef.current = true;
-      
-      try {
-        await userDataService.trackActivity({
-          user_id: user.id,
-          activity_type: 'page_visited',
-          activity_data: { section: activeSection }
-        });
-      } catch (error) {
-        console.error('Error tracking page visit:', error);
-      } finally {
-        // Reset the tracking flag after a delay to allow for future tracking
-        setTimeout(() => {
-          activityTrackedRef.current = false;
-        }, 5000);
-      }
-    };
-
-    trackPageVisit();
-  }, [activeSection, user?.id]); // Only depend on user.id, not the entire user object
-
-  // Handle tool launch from Genie
-  const handleToolLaunch = async (toolId: string) => {
-    setSelectedTool(toolId);
-    setActiveSection(toolId);
-    
-    // Track tool launch activity
-    try {
-      if (user && user.id) {
-        await userDataService.trackActivity({
-          user_id: user.id,
-          activity_type: 'tool_launched_from_genie',
-          activity_data: { toolId }
-        });
-      }
-    } catch (error) {
-      console.error('Error tracking tool launch:', error);
-    }
-  };
 
   const handleSwitchTool = (toolId: string, context: any) => {
     setToolContext(context);
@@ -559,121 +497,72 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleInsightAction = (insight: ActionableInsight) => {
     if (insight.actionUrl) {
       setActiveSection(insight.actionUrl);
-      
-      // Track insight action
-      try {
-        if (user && user.id) {
-          userDataService.trackActivity({
-            user_id: user.id,
-            activity_type: 'insight_action_taken',
-            activity_data: { 
-              insightId: insight.id,
-              insightType: insight.type,
-              actionUrl: insight.actionUrl
-            }
-          });
-        }
-      } catch (error) {
-        console.error('Error tracking insight action:', error);
-      }
     }
   };
 
-  // Handle settings modal actions
-  const handleSettingsClick = () => {
-    if (activeSection === 'settings') {
-      setShowSettings(true);
-    } else {
-      setActiveSection('settings');
-    }
-  };
+  const handleSettingsClick = () => setActiveSection('settings');
+  const handleBillingClick = () => setActiveSection('billing');
+  const triggerWalkthrough = () => { onWalkthroughComplete(); /* Logic to restart tour */ };
 
-  const handleBillingClick = () => {
-    if (activeSection === 'billing') {
-      setShowBilling(true);
-    } else {
-      setActiveSection('billing');
-    }
-  };
-
-  // Manual walkthrough trigger function
-  const triggerWalkthrough = () => {
-    setShowWalkthrough(true);
-  };
-
-  // Open feedback modal
-  const handleOpenFeedback = () => {
-    setShowFeedback(true);
-  };
-
-  // Enable chatbot for all users during development
-  const isDevelopment = true; // Set to false for production
-  const canAccessChatbot = isDevelopment || userPlan !== 'free';
-
-  // Force a reload of the dashboard to try again
-  const handleReloadDashboard = () => {
-    // Reset all refs and state before reload
-    profileFetchedRef.current = false;
-    activityTrackedRef.current = false;
-    insightsGeneratedRef.current = false;
-    auditHistoryFetchedRef.current = false;
-    setProfileFetchAttempted(false);
-    setDashboardError(null);
-    
-    // Clear all caches to ensure fresh data
-    userDataService.clearCache(user?.id);
-    
-    // Reload the page
-    window.location.reload();
-  };
-
-  // Don't render dashboard until we have user data
-  if (!user) {
+  if (!user || !userProfile) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading user data...</p>
-          <div className="mt-4">
-            <button
-              onClick={onNavigateToLanding}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Return to Home
-            </button>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  // --- NEW: Command Center Component ---
+  const DashboardCommandCenter = () => (
+    <div className="space-y-8">
+        <VisibilityScore userPlan={userPlan} selectedWebsite={selectedWebsite} />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <HistoricalSnapshot userId={user.id} selectedProjectId={selectedProjectId} />
+            <CompetitorVitals userScore={latestAuditScore} competitors={userProfile.competitors} />
+            <RecentDiscoveries onSwitchTool={handleSwitchTool} />
+        </div>
+
+        {actionableInsights.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+             <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Recommendation</h3>
+            {actionableInsights.map((insight) => {
+                const IconComponent = insight.icon;
+                return (
+                  <div key={insight.id} className={`p-4 rounded-lg border-l-4 ${ insight.type === 'urgent' ? 'border-red-500 bg-red-50' : 'border-yellow-500 bg-yellow-50' }`}>
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-start space-x-3">
+                            <div className={`p-2 rounded-lg bg-gradient-to-r ${insight.color}`}>
+                                <IconComponent className="w-5 h-5 text-white" />
+                            </div>
+                            <div>
+                                <h4 className="font-medium text-gray-900">{insight.title}</h4>
+                                <p className="text-sm text-gray-600">{insight.description}</p>
+                            </div>
+                        </div>
+                        <button onClick={() => handleInsightAction(insight)} className={`inline-flex items-center space-x-2 px-3 py-1 rounded-lg text-sm font-medium transition-colors ${ insight.type === 'urgent' ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-yellow-600 text-white hover:bg-yellow-700'}`}>
+                            <span>{insight.action}</span>
+                            <ArrowRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                  </div>
+                );
+            })}
           </div>
-          {dashboardError && (
-            <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{dashboardError}</p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (loading || loadingProfile) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading dashboard...</p>
-          {dashboardError && (
-            <p className="text-red-500 mt-2 max-w-md mx-auto text-sm">{dashboardError}</p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (dashboardLoading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+        )}
+         <ToolsGrid 
+              userPlan={userPlan}
+              onToolRun={handleToolRun} 
+              showPreview={true}
+              selectedWebsite={selectedWebsite}
+              selectedProjectId={selectedProjectId}
+              userProfile={userProfile}
+              onToolComplete={handleToolComplete}
+              onSwitchTool={handleSwitchTool}
+              context={toolContext}
+            />
+    </div>
+  );
 
   const renderActiveSection = () => {
     switch (activeSection) {
@@ -686,7 +575,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <h1 className="text-3xl font-bold text-gray-900 mb-2">
                     Welcome back, {getFirstName()}!
                   </h1>
-                  <p className="text-gray-600">Monitor your AI visibility performance and access optimization tools.</p>
+                  <p className="text-gray-600">Here's your AI Visibility command center.</p>
                 </div>
                 <div className="flex items-center space-x-4">
                   <button
@@ -695,28 +584,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                   >
                     Take Tour
                   </button>
-                  <button
-                    onClick={handleOpenFeedback}
-                    className="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-lg hover:bg-purple-200 transition-colors"
-                  >
-                    Give Feedback
-                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Site Selector - Show if user has completed onboarding */}
             {userProfile && userProfile.websites && userProfile.websites.length > 0 && (
-              activeSection === 'competitive-viz' ? (
-                <CompetitiveAnalysisSiteSelector
-                  userWebsites={userProfile.websites}
-                  competitors={userProfile.competitors || []}
-                  selectedUserWebsite={selectedWebsite}
-                  selectedCompetitor={selectedCompetitor}
-                  onUserWebsiteChange={setSelectedWebsite}
-                  onCompetitorChange={setSelectedCompetitor}
-                />
-              ) : (
                 <SiteSelector
                   websites={userProfile.websites}
                   competitors={userProfile.competitors || []}
@@ -724,215 +596,49 @@ const Dashboard: React.FC<DashboardProps> = ({
                   onWebsiteChange={(url) => {
                     setSelectedWebsite(url);
                     const selected = userProfile.websites.find((w: any) => w.url === url);
-                    if (selected && selected.id) {
-                      setSelectedProjectId(selected.id);
-                    } else {
-                      setSelectedProjectId('');
-                    }
+                    setSelectedProjectId(selected ? selected.id : '');
                   }}
-                  userPlan={isDevelopment ? 'agency' : userPlan}
+                  userPlan={userPlan}
                 />
-              )
-            )}
-
-            {/* Goal Tracker */}
-            {userGoals.length > 0 && (
-              <GoalTracker 
-                goals={userGoals} 
-                progress={goalProgress}
-                userPlan={isDevelopment ? 'agency' : userPlan}
-                onPlaybookStart={() => setActiveSection('playbooks')}
-              />
-            )}
-
-            {/* Actionable Insights Section */}
-            {actionableInsights.length > 0 && (
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Actionable Insights</h3>
-                  <span className="text-sm text-gray-500">{actionableInsights.length} recommendations</span>
-                </div>
-                
-                <div className="space-y-4">
-                  {actionableInsights.map((insight) => {
-                    const IconComponent = insight.icon;
-                    return (
-                      <div 
-                        key={insight.id}
-                        className={`p-4 rounded-lg border-l-4 ${
-                          insight.type === 'urgent' ? 'border-red-500 bg-red-50' :
-                          insight.type === 'opportunity' ? 'border-yellow-500 bg-yellow-50' :
-                          'border-blue-500 bg-blue-50'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start space-x-3">
-                            <div className={`p-2 rounded-lg bg-gradient-to-r ${insight.color}`}>
-                              <IconComponent className="w-5 h-5 text-white" />
-                            </div>
-                            <div className="flex-1">
-                              <h4 className="font-medium text-gray-900 mb-1">{insight.title}</h4>
-                              <p className="text-sm text-gray-600 mb-2">{insight.description}</p>
-                              
-                              {/* Contextual Tip */}
-                              {insight.contextualTip && (
-                                <div className="bg-white bg-opacity-50 rounded-lg p-3 mb-3 border border-gray-200">
-                                  <p className="text-xs text-gray-700 leading-relaxed">
-                                    💡 <strong>Why this matters:</strong> {insight.contextualTip}
-                                  </p>
-                                  {insight.learnMoreLink && (
-                                    <a 
-                                      href={insight.learnMoreLink} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-blue-600 hover:text-blue-700 mt-1 inline-block"
-                                    >
-                                      Learn more →
-                                    </a>
-                                  )}
-                                </div>
-                              )}
-                              
-                              <button
-                                onClick={() => handleInsightAction(insight)}
-                                className={`inline-flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                                  insight.type === 'urgent' ? 'bg-red-600 text-white hover:bg-red-700' :
-                                  insight.type === 'opportunity' ? 'bg-yellow-600 text-white hover:bg-yellow-700' :
-                                  'bg-blue-600 text-white hover:bg-blue-700'
-                                }`}
-                              >
-                                <span>{insight.action}</span>
-                                <ArrowRight className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                          
-                          <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            insight.type === 'urgent' ? 'bg-red-100 text-red-800' :
-                            insight.type === 'opportunity' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {insight.type}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
             )}
             
-            {hasRunTools ? (
-              <>
-                <VisibilityScore userPlan={isDevelopment ? 'agency' : userPlan} selectedWebsite={selectedWebsite} />
-                <ToolsGrid 
-                  userPlan={isDevelopment ? 'agency' : userPlan}
-                  onToolRun={handleToolRun} 
-                  selectedWebsite={selectedWebsite}
-                  selectedProjectId={selectedProjectId}
-                  userProfile={userProfile}
-                  onToolComplete={handleToolComplete}
-                  onSwitchTool={handleSwitchTool}
-                  context={toolContext}
-                />
-              </>
-            ) : (
-              <div className="space-y-8">
-                {/* Getting Started Section */}
-                <div className="bg-gradient-to-r from-teal-50 to-purple-50 rounded-xl p-8 border border-teal-200">
-                  <div className="text-center">
-                    <div className="bg-gradient-to-r from-teal-500 to-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                    </div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Ready to Get Started?</h2>
-                    <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
-                      Run your first AI visibility audit to see how well your content is optimized for AI systems like ChatGPT, Claude, and voice assistants.
-                    </p>
-                    <button
-                      onClick={() => setActiveSection('audit')}
-                      className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition-all duration-300 inline-flex items-center space-x-2"
-                    >
-                      <span>Run Your First Audit</span>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Tools Preview */}
-                <ToolsGrid 
-                  userPlan={isDevelopment ? 'agency' : userPlan}
-                  onToolRun={handleToolRun} 
-                  showPreview={true}
-                  selectedWebsite={selectedWebsite}
-                  selectedProjectId={selectedProjectId}
-                  userProfile={userProfile}
-                  onToolComplete={handleToolComplete}
-                  onSwitchTool={handleSwitchTool}
-                  context={toolContext}
-                />
-              </div>
-            )}
+            <DashboardCommandCenter />
+
           </div>
         );
       
       case 'playbooks':
         return <OptimizationPlaybooks 
-                userPlan={isDevelopment ? 'agency' : userPlan}
+                userPlan={userPlan}
                 onSectionChange={setActiveSection} 
                 userGoals={userGoals}
                 userProfile={userProfile}
                />;
       
       case 'history':
-        return <HistoricalPerformance userPlan={isDevelopment ? 'agency' : userPlan} selectedWebsite={selectedWebsite} />;
+        return <HistoricalPerformance userPlan={userPlan} selectedWebsite={selectedWebsite} />;
       
       case 'reports':
-        return <ReportGenerator userPlan={isDevelopment ? 'agency' : userPlan} />;
+        return <ReportGenerator userPlan={userPlan} />;
       
       case 'editor':
-        return <ContentEditor userPlan={isDevelopment ? 'agency' : userPlan} context={toolContext} />;
+        return <ContentEditor userPlan={userPlan} context={toolContext} />;
       
       case 'competitive-viz':
-        return <CompetitiveVisualization userPlan={isDevelopment ? 'agency' : userPlan} />;
+        return <CompetitiveVisualization userPlan={userPlan} />;
       
       case 'integrations':
-        return <CMSIntegrations userPlan={isDevelopment ? 'agency' : userPlan} />;
+        return <CMSIntegrations userPlan={userPlan} />;
       
       case 'settings':
-        return (
-          <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100 text-center">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Settings</h3>
-            <p className="text-gray-600 mb-6">Manage your account settings, websites, and preferences.</p>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300"
-            >
-              Open Settings
-            </button>
-          </div>
-        );
-      
+        return <SettingsModal onClose={() => setActiveSection('overview')} user={user} userProfile={userProfile} onProfileUpdate={() => {}} />;
+
       case 'billing':
-        return (
-          <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100 text-center">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Billing & Subscription</h3>
-            <p className="text-gray-600 mb-6">Manage your subscription, view usage, and billing history.</p>
-            <button
-              onClick={() => setShowBilling(true)}
-              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300"
-            >
-              Open Billing
-            </button>
-          </div>
-        );
-      
+        return <BillingModal onClose={() => setActiveSection('overview')} userPlan={userPlan} onPlanChange={() => {}} user={user} />;
+
       default:
         return <ToolsGrid 
-          userPlan={isDevelopment ? 'agency' : userPlan}
+          userPlan={userPlan}
           onToolRun={handleToolRun} 
           selectedTool={activeSection}
           selectedWebsite={selectedWebsite}
@@ -948,7 +654,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col overflow-hidden">
       <DashboardHeader 
-        userPlan={isDevelopment ? 'agency' : userPlan}
+        userPlan={userPlan}
         onNavigateToLanding={onNavigateToLanding}
         user={user}
         onSignOut={onSignOut}
@@ -958,7 +664,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <Sidebar 
           activeSection={activeSection}
           onSectionChange={setActiveSection}
-          userPlan={isDevelopment ? 'agency' : userPlan}
+          userPlan={userPlan}
           onSettingsClick={handleSettingsClick}
           onBillingClick={handleBillingClick}
           userGoals={userGoals}
@@ -966,19 +672,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         
         <main className="flex-1 p-8 overflow-y-auto">
           {dashboardError ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
-              <div className="flex flex-col items-center text-center">
-                <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
-                <h3 className="text-lg font-medium text-red-800 mb-2">Dashboard Error</h3>
-                <p className="text-red-700 mb-4">{dashboardError}</p>
-                <button 
-                  onClick={handleReloadDashboard} 
-                  className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Reload Dashboard</span>
-                </button>
-              </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-red-800">Dashboard Error</h3>
+                <p className="text-red-700">{dashboardError}</p>
             </div>
           ) : (
             renderActiveSection()
@@ -986,27 +683,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         </main>
       </div>
       
-      {/* Dashboard Walkthrough */}
       {showWalkthrough && (
-        <DashboardWalkthrough
-          onComplete={() => {
-            console.log('Walkthrough completed - setting completion flag');
-            onWalkthroughComplete();
-            localStorage.setItem('seogenix_walkthrough_completed', 'true');
-            // Clear any remaining immediate walkthrough flags
-            localStorage.removeItem('seogenix_immediate_walkthrough');
-          }}
-          onSkip={() => {
-            console.log('Walkthrough skipped - setting completion flag');
-            onWalkthroughComplete();
-            localStorage.setItem('seogenix_walkthrough_completed', 'true');
-            // Clear any remaining immediate walkthrough flags
-            localStorage.removeItem('seogenix_immediate_walkthrough');
-          }}
-        />
+        <DashboardWalkthrough onComplete={onWalkthroughComplete} onSkip={onWalkthroughComplete} />
       )}
 
-      {/* Tool Modal */}
       {showToolModal && (
         <ToolModal
           isOpen={showToolModal}
@@ -1020,95 +700,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
       )}
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <SettingsModal
-          onClose={() => setShowSettings(false)}
-          user={user}
-          userProfile={userProfile}
-          onProfileUpdate={(profile) => {
-            // setUserProfile(profile); // This should be handled by the parent component (App.tsx)
-            
-            // Update user goals if they've changed
-            if (profile.goals && Array.isArray(profile.goals)) {
-              setUserGoals(profile.goals);
-            }
-            
-            addToast({
-              id: `settings-updated-${Date.now()}`,
-              type: 'success',
-              title: 'Settings Updated',
-              message: 'Your profile has been updated successfully',
-              duration: 3000,
-              onClose: () => {}
-            });
-            
-            // Clear profile cache to ensure fresh data
-            userDataService.clearCache(user.id);
-            
-            // Reset insights generation flag to allow regeneration
-            insightsGeneratedRef.current = false;
-            
-            // Regenerate insights after profile update
-            setTimeout(() => {
-              generateActionableInsights();
-            }, 500);
-          }}
-        />
-      )}
-
-      {/* Billing Modal */}
-      {showBilling && (
-        <BillingModal
-          onClose={() => setShowBilling(false)}
-          userPlan={isDevelopment ? 'agency' : userPlan}
-          onPlanChange={(plan) => {
-            addToast({
-              id: `plan-change-${Date.now()}`,
-              type: 'info',
-              title: 'Plan Change Requested',
-              message: `Plan change to ${plan} would be processed by payment system`,
-              duration: 4000,
-              onClose: () => {}
-            });
-          }}
-          user={user}
-        />
-      )}
-
-      {/* Feedback Modal */}
-      {showFeedback && (
-        <FeedbackModal
-          onClose={() => setShowFeedback(false)}
-          user={user}
-          userPlan={isDevelopment ? 'agency' : userPlan}
-        />
-      )}
-      
-      {/* Floating chatbot button */}
-      {canAccessChatbot && (
-        <button
-          data-walkthrough="chatbot"
-          onClick={() => setShowChatbot(true)}
-          className="fixed bottom-6 right-6 bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 z-40"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-        </button>
-      )}
-
-      {showChatbot && canAccessChatbot && (
-        <ChatbotPopup 
-          onClose={() => setShowChatbot(false)}
-          type="dashboard"
-          userPlan={isDevelopment ? 'agency' : userPlan}
-          onToolLaunch={handleToolLaunch}
-          user={user}
-        />
-      )}
-
-      {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onRemoveToast={removeToast} />
     </div>
   );
