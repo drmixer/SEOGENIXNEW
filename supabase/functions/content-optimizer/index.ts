@@ -101,11 +101,11 @@ export const optimizerService = async (req, supabase)=>{
       throw new Error('`projectId`, `content`, `targetKeywords`, and `contentType` are required.');
     }
     if (![
-      'blog post',
-      'landing page',
-      'product description'
+      'article',
+      'blog',
+      'landing-page'
     ].includes(contentType)) {
-      throw new Error('Invalid contentType. Must be one of: blog post, landing page, product description');
+      throw new Error('Invalid contentType. Must be one of: article, blog, landing-page');
     }
     runId = await logToolRun(supabase, projectId, 'content-optimizer', {
       contentType,
