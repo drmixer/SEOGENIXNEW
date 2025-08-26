@@ -119,6 +119,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         setGeneratorContentType('faq'); // Default to FAQ for citation responses
       }
     }
+    // *** NEW: Pre-fill competitive analysis URLs from context ***
+    if (activeToolId === 'competitive' && context?.competitors) {
+        setShowCompetitiveAnalysisModal(true);
+    }
   }, [activeToolId, context]);
 
   // Reset tool data when active tool changes
@@ -1038,6 +1042,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 onFixItClick={handleFixItClick}
                 onGenerateWithEntities={handleGenerateWithEntities}
                 onCreateContentFromCitation={handleCreateContentFromCitation}
+                onSwitchTool={onSwitchTool} 
               />
               
               <div className="mt-6">
@@ -1105,7 +1110,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       {showCompetitiveAnalysisModal && (
         <CompetitiveAnalysisModal
           userWebsites={userProfile?.websites || []}
-          userCompetitors={toolData?.competitorSuggestions || userProfile?.competitors || []}
+          userCompetitors={context?.competitors || toolData?.competitorSuggestions || userProfile?.competitors || []}
           onClose={() => setShowCompetitiveAnalysisModal(false)}
           onAnalysisComplete={(results) => {
             setToolData(results);
@@ -1125,7 +1130,8 @@ const ToolResultsDisplay: React.FC<{
   onFixItClick: (recommendation: any) => void;
   onGenerateWithEntities: () => void;
   onCreateContentFromCitation: (citation: any) => void;
-}> = ({ toolId, data, onFixItClick, onGenerateWithEntities, onCreateContentFromCitation }) => {
+  onSwitchTool: (toolId: string, context: any) => void;
+}> = ({ toolId, data, onFixItClick, onGenerateWithEntities, onCreateContentFromCitation, onSwitchTool }) => {
   
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -1683,75 +1689,59 @@ const ToolResultsDisplay: React.FC<{
         </div>
       );
 
+    // *** NEW: Case for Discovery to show integrated results ***
     case 'discovery':
-      return (
-        <div className="space-y-6">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-blue-600">{data.totalSuggestions || 0}</div>
-              <div className="text-sm text-blue-800">Competitors Found</div>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-green-600">{data.averageRelevance || 0}%</div>
-              <div className="text-sm text-green-800">Avg Relevance</div>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-purple-600">{data.competitiveIntensity || 'Medium'}</div>
-              <div className="text-sm text-purple-800">Market Intensity</div>
-            </div>
-          </div>
-          
-          {data.competitorSuggestions && data.competitorSuggestions.length > 0 && (
-            <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">New Competitors Discovered:</h4>
-              {data.competitorSuggestions.map((competitor: any, index: number) => (
-                <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-900">{competitor.name || `Competitor ${index + 1}`}</span>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                        {competitor.type || 'Direct'}
-                      </span>
-                      <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">
-                        {competitor.relevanceScore || 0}% relevant
-                      </span>
-                      {competitor.aiVisibilityScore && (
-                        <span className="text-sm bg-purple-100 text-purple-800 px-2 py-1 rounded">
-                          AI: {competitor.aiVisibilityScore}/100
-                        </span>
-                      )}
+        const competitorUrls = (data.competitorSuggestions || []).map(c => c.url).filter(Boolean).slice(0, 5);
+        return (
+            <div className="space-y-6">
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg text-center">
+                        <div className="text-xl font-bold text-blue-600">{data.totalSuggestions || 0}</div>
+                        <div className="text-sm text-blue-800">Competitors Found</div>
                     </div>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-2">{competitor.reason || competitor.description || 'Similar business model and target audience'}</p>
-                  {competitor.url && (
-                    <a 
-                      href={competitor.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1 mt-1"
-                    >
-                      <span>{competitor.url}</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
-                  {competitor.keyStrengths && competitor.keyStrengths.length > 0 && (
-                    <div className="mt-2">
-                      <h5 className="text-xs font-medium text-gray-700">Key Strengths:</h5>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {competitor.keyStrengths.slice(0, 3).map((strength: string, i: number) => (
-                          <span key={i} className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                            {strength}
-                          </span>
-                        ))}
-                      </div>
+                    <div className="bg-green-50 p-4 rounded-lg text-center">
+                        <div className="text-xl font-bold text-green-600">{data.averageRelevance || 0}%</div>
+                        <div className="text-sm text-green-800">Avg Relevance</div>
                     </div>
-                  )}
+                    <div className="bg-purple-50 p-4 rounded-lg text-center">
+                        <div className="text-xl font-bold text-purple-600">{data.competitiveIntensity || 'Medium'}</div>
+                        <div className="text-sm text-purple-800">Market Intensity</div>
+                    </div>
                 </div>
-              ))}
+
+                {data.competitorSuggestions && data.competitorSuggestions.length > 0 && (
+                    <div className="space-y-4">
+                        <h4 className="font-medium text-gray-900">New Competitors Discovered:</h4>
+                        {data.competitorSuggestions.slice(0, 5).map((competitor: any, index: number) => (
+                            <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-medium text-gray-900">{competitor.name || new URL(competitor.url).hostname}</span>
+                                    {competitor.url && (
+                                        <a
+                                            href={competitor.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1"
+                                        >
+                                            <span>Visit</span>
+                                            <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                    )}
+                                </div>
+                                <p className="text-sm text-gray-600 mt-1">{competitor.reason || 'Similar content and entity profile detected.'}</p>
+                            </div>
+                        ))}
+                        <button
+                            onClick={() => onSwitchTool('competitive', { competitors: competitorUrls })}
+                            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 mt-4 rounded-lg font-semibold hover:shadow-lg transition-all duration-300 inline-flex items-center justify-center space-x-2"
+                        >
+                            <BarChart3 className="w-5 h-5" />
+                            <span>Analyze These Competitors</span>
+                        </button>
+                    </div>
+                )}
             </div>
-          )}
-        </div>
-      );
+        );
 
     default:
       return (
