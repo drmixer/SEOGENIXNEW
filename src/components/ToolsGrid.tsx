@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FileText, 
-  Shield, 
-  Search, 
-  Mic, 
-  Globe, 
-  Users, 
+import {
+  FileText,
+  Shield,
+  Search,
+  Mic,
+  Globe,
+  Users,
   Zap,
   TrendingUp,
   Lightbulb,
@@ -50,9 +50,9 @@ interface Tool {
   isPopular?: boolean;
 }
 
-const ToolsGrid: React.FC<ToolsGridProps> = ({ 
-  userPlan, 
-  onToolRun, 
+const ToolsGrid: React.FC<ToolsGridProps> = ({
+  userPlan,
+  onToolRun,
   showPreview = false,
   selectedTool,
   selectedWebsite,
@@ -68,7 +68,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [toolData, setToolData] = useState<any>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
-  
+
   // AI Visibility Audit specific state
   const [auditScope, setAuditScope] = useState<'site' | 'page'>('site');
   const [pageUrl, setPageUrl] = useState('');
@@ -77,7 +77,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   const [schemaInputType, setSchemaInputType] = useState<'url' | 'text'>('url');
   const [schemaContent, setSchemaContent] = useState('');
   const [schemaContentType, setSchemaContentType] = useState<string>('Article');
-  
+
   // Generator tool specific state
   const [generatorContentType, setGeneratorContentType] = useState<'faq' | 'meta-tags' | 'snippets' | 'headings' | 'descriptions'>('faq');
   const [generatorTopic, setGeneratorTopic] = useState('');
@@ -119,11 +119,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         setGeneratorContentType('faq'); // Default to FAQ for citation responses
       }
     }
-    // *** NEW: Pre-fill competitive analysis URLs from context ***
     if (activeToolId === 'competitive' && context?.competitors) {
         setShowCompetitiveAnalysisModal(true);
     }
   }, [activeToolId, context]);
+
 
   // Reset tool data when active tool changes
   useEffect(() => {
@@ -608,11 +608,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     }
   };
 
-  const handleGenerateWithEntities = () => {
+  const handleGenerateWithEntities = (entitiesToInclude: string[]) => {
     onSwitchTool('generator', {
-      entitiesToInclude: selectedEntities,
+      entitiesToInclude,
       topic: `Content about ${extractDomain(selectedWebsite || '')} that includes key entities`,
-      targetKeywords: selectedEntities,
+      targetKeywords: entitiesToInclude.join(', '),
     });
   };
 
@@ -1042,7 +1042,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 onFixItClick={handleFixItClick}
                 onGenerateWithEntities={handleGenerateWithEntities}
                 onCreateContentFromCitation={handleCreateContentFromCitation}
-                onSwitchTool={onSwitchTool} 
+                onSwitchTool={onSwitchTool}
               />
               
               <div className="mt-6">
@@ -1128,7 +1128,7 @@ const ToolResultsDisplay: React.FC<{
   toolId: string;
   data: any;
   onFixItClick: (recommendation: any) => void;
-  onGenerateWithEntities: () => void;
+  onGenerateWithEntities: (entitiesToInclude: string[]) => void;
   onCreateContentFromCitation: (citation: any) => void;
   onSwitchTool: (toolId: string, context: any) => void;
 }> = ({ toolId, data, onFixItClick, onGenerateWithEntities, onCreateContentFromCitation, onSwitchTool }) => {
@@ -1264,6 +1264,7 @@ const ToolResultsDisplay: React.FC<{
         </div>
       );
 
+    // *** MODIFIED: Citation results now have "Create Response" button ***
     case 'citations':
       return (
         <div className="space-y-6">
@@ -1408,62 +1409,64 @@ const ToolResultsDisplay: React.FC<{
         </div>
       );
 
+    // *** MODIFIED: Entity results now have "Generate Content" button ***
     case 'entities':
-      return (
-        <div className="space-y-6">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-blue-600">{data.coverageScore || 0}%</div>
-              <div className="text-sm text-blue-800">Coverage Score</div>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-green-600">{data.mentionedCount || 0}</div>
-              <div className="text-sm text-green-800">Mentioned</div>
-            </div>
-            <div className="bg-red-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-red-600">{data.missingCount || 0}</div>
-              <div className="text-sm text-red-800">Missing</div>
-            </div>
-          </div>
-          
-          {data.missingEntities && data.missingEntities.length > 0 && (
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-medium text-yellow-900">Missing Important Entities:</h4>
-                <button
-                  onClick={onGenerateWithEntities}
-                  className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200 transition-colors"
-                >
-                  Generate Content
-                </button>
-              </div>
-              <div className="space-y-2">
-                {data.missingEntities.slice(0, 8).map((entity: any, index: number) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <span className="text-yellow-800">{entity.name || entity}</span>
-                    <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded">
-                      {entity.type || 'Entity'} - {entity.importance || 'Important'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        const missingEntitiesForGeneration = (data.missingEntities || []).map(e => e.name || e).slice(0, 5);
+        return (
+            <div className="space-y-6">
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg text-center">
+                        <div className="text-xl font-bold text-blue-600">{data.coverageScore || 0}%</div>
+                        <div className="text-sm text-blue-800">Coverage Score</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg text-center">
+                        <div className="text-xl font-bold text-green-600">{data.mentionedCount || 0}</div>
+                        <div className="text-sm text-green-800">Mentioned</div>
+                    </div>
+                    <div className="bg-red-50 p-4 rounded-lg text-center">
+                        <div className="text-xl font-bold text-red-600">{data.missingCount || 0}</div>
+                        <div className="text-sm text-red-800">Missing</div>
+                    </div>
+                </div>
 
-          {data.mentionedEntities && data.mentionedEntities.length > 0 && (
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h4 className="font-medium text-green-900 mb-2">Well-Covered Entities:</h4>
-              <div className="flex flex-wrap gap-2">
-                {data.mentionedEntities.slice(0, 10).map((entity: any, index: number) => (
-                  <span key={index} className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                    {entity.name || entity}
-                  </span>
-                ))}
-              </div>
+                {data.missingEntities && data.missingEntities.length > 0 && (
+                    <div className="bg-yellow-50 p-4 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium text-yellow-900">Missing Important Entities:</h4>
+                            <button
+                                onClick={() => onGenerateWithEntities(missingEntitiesForGeneration)}
+                                className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200 transition-colors"
+                            >
+                                Generate Content
+                            </button>
+                        </div>
+                        <div className="space-y-2">
+                            {data.missingEntities.slice(0, 8).map((entity: any, index: number) => (
+                                <div key={index} className="flex items-center justify-between">
+                                    <span className="text-yellow-800">{entity.name || entity}</span>
+                                    <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded">
+                                        {entity.type || 'Entity'} - {entity.importance || 'Important'}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {data.mentionedEntities && data.mentionedEntities.length > 0 && (
+                    <div className="bg-green-50 p-4 rounded-lg">
+                        <h4 className="font-medium text-green-900 mb-2">Well-Covered Entities:</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {data.mentionedEntities.slice(0, 10).map((entity: any, index: number) => (
+                                <span key={index} className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                                    {entity.name || entity}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
-          )}
-        </div>
-      );
+        );
 
     case 'generator':
       return (
@@ -1689,7 +1692,6 @@ const ToolResultsDisplay: React.FC<{
         </div>
       );
 
-    // *** NEW: Case for Discovery to show integrated results ***
     case 'discovery':
         const competitorUrls = (data.competitorSuggestions || []).map(c => c.url).filter(Boolean).slice(0, 5);
         return (
