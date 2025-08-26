@@ -187,8 +187,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       isNew: true
     },
     {
-      id: 'content-optimizer',
-      name: 'Content Optimizer',
+      id: 'editor',
+      name: 'Content Editor',
       description: 'Real-time analysis and suggestions for your content',
       icon: TrendingUp,
       color: 'from-orange-500 to-orange-600',
@@ -600,7 +600,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
 
   const handleFixItClick = (recommendation: any) => {
     if (recommendation.action_type === 'content-optimizer') {
-      onSwitchTool('content-optimizer', { url: selectedWebsite });
+      onSwitchTool('editor', { url: selectedWebsite });
     }
   };
 

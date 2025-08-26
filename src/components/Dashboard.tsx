@@ -730,7 +730,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       setSelectedProjectId('');
                     }
                   }}
-                  userPlan={userPlan}
+                  userPlan={isDevelopment ? 'agency' : userPlan}
                 />
               )
             )}
@@ -740,7 +740,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <GoalTracker 
                 goals={userGoals} 
                 progress={goalProgress}
-                userPlan={userPlan}
+                userPlan={isDevelopment ? 'agency' : userPlan}
                 onPlaybookStart={() => setActiveSection('playbooks')}
               />
             )}
@@ -824,7 +824,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             
             {hasRunTools ? (
               <>
-                <VisibilityScore userPlan={userPlan} selectedWebsite={selectedWebsite} />
+                <VisibilityScore userPlan={isDevelopment ? 'agency' : userPlan} selectedWebsite={selectedWebsite} />
                 <ToolsGrid 
                   userPlan={isDevelopment ? 'agency' : userPlan}
                   onToolRun={handleToolRun} 
@@ -881,26 +881,26 @@ const Dashboard: React.FC<DashboardProps> = ({
       
       case 'playbooks':
         return <OptimizationPlaybooks 
-                userPlan={userPlan} 
+                userPlan={isDevelopment ? 'agency' : userPlan}
                 onSectionChange={setActiveSection} 
                 userGoals={userGoals}
                 userProfile={userProfile}
                />;
       
       case 'history':
-        return <HistoricalPerformance userPlan={userPlan} selectedWebsite={selectedWebsite} />;
+        return <HistoricalPerformance userPlan={isDevelopment ? 'agency' : userPlan} selectedWebsite={selectedWebsite} />;
       
       case 'reports':
-        return <ReportGenerator userPlan={userPlan} />;
+        return <ReportGenerator userPlan={isDevelopment ? 'agency' : userPlan} />;
       
-      case 'content-optimizer':
-        return <ContentEditor userPlan={userPlan} context={toolContext} />;
+      case 'editor':
+        return <ContentEditor userPlan={isDevelopment ? 'agency' : userPlan} context={toolContext} />;
       
       case 'competitive-viz':
-        return <CompetitiveVisualization userPlan={userPlan} />;
+        return <CompetitiveVisualization userPlan={isDevelopment ? 'agency' : userPlan} />;
       
       case 'integrations':
-        return <CMSIntegrations userPlan={userPlan} />;
+        return <CMSIntegrations userPlan={isDevelopment ? 'agency' : userPlan} />;
       
       case 'settings':
         return (

@@ -88,11 +88,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
           defaults.inputType = 'url';
           defaults.contentType = 'Article';
           break;
-        case 'content-optimizer':
-          defaults.content = '';
-          defaults.keywords = '';
-          defaults.contentType = 'article';
-          break;
       }
       
       setFormData(defaults);
@@ -113,8 +108,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
       editor: TrendingUp,
       prompts: Lightbulb,
       competitive: BarChart3,
-      discovery: Radar,
-      'content-optimizer': TrendingUp,
+      discovery: Radar
     };
     return iconMap[id] || FileText;
   };
@@ -128,7 +122,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
       summaries: 'from-teal-500 to-teal-600',
       entities: 'from-pink-500 to-pink-600',
       generator: 'from-yellow-500 to-yellow-600',
-      'content-optimizer': 'from-orange-500 to-orange-600',
+      editor: 'from-orange-500 to-orange-600',
       prompts: 'from-cyan-500 to-cyan-600',
       competitive: 'from-red-500 to-red-600',
       discovery: 'from-violet-500 to-violet-600'
@@ -251,13 +245,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
           totalSuggestions: result.totalSuggestions || (result.competitorSuggestions ? result.competitorSuggestions.length : 0),
           averageRelevance: result.averageRelevance || 0,
           competitiveIntensity: result.competitiveIntensity || 'Medium'
-        };
-
-      case 'content-optimizer':
-        return {
-          optimizedContent: result.optimizedContent || result.content || '',
-          score: result.score || 0,
-          suggestions: result.suggestions || [],
         };
 
       default:
@@ -403,18 +390,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
           break;
         }
 
-        case 'content-optimizer': {
-          const keywords = formData.keywords ?
-            formData.keywords.split(',').map((k: string) => k.trim()) :
-            [];
-          result = await apiService.optimizeContent(
-            formData.content || '',
-            keywords,
-            formData.contentType || 'article'
-          );
-          break;
-        }
-
         default:
           throw new Error('Unknown tool');
       }
@@ -509,29 +484,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
-              <input
-                type="url"
-                value={selectedWebsite || formData.url || ''}
-                readOnly={!!selectedWebsite}
-                onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                placeholder="https://example.com"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Content Type</label>
-              <select
-                value={formData.contentType || 'Article'}
-                onChange={(e) => setFormData({ ...formData, contentType: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value="Article">Article</option>
-                <option value="FAQPage">FAQ</option>
-                <option value="HowTo">How-To Guide</option>
-              </select>
-            </div>
-            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Input Method</label>
               <select
                 value={formData.inputType || 'url'}
@@ -542,6 +494,19 @@ const ToolModal: React.FC<ToolModalProps> = ({
                 <option value="text">Paste Content</option>
               </select>
             </div>
+            {formData.inputType === 'url' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
+                <input
+                  type="url"
+                  value={selectedWebsite || formData.url || ''}
+                  readOnly={!!selectedWebsite}
+                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                  placeholder="https://example.com"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+            )}
             {formData.inputType === 'text' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
@@ -554,6 +519,18 @@ const ToolModal: React.FC<ToolModalProps> = ({
                 />
               </div>
             )}
+             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Schema Type</label>
+              <select
+                value={formData.contentType || 'Article'}
+                onChange={(e) => setFormData({ ...formData, contentType: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="Article">Article</option>
+                <option value="FAQPage">FAQ Page</option>
+                <option value="HowTo">How-To Guide</option>
+              </select>
+            </div>
           </div>
         );
       
@@ -835,44 +812,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
                 placeholder="Business owners and marketers"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
-            </div>
-          </div>
-        );
-
-      case 'content-optimizer':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Content to Optimize</label>
-              <textarea
-                value={formData.content || ''}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                placeholder="Paste your content here..."
-                rows={10}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target Keywords (comma separated)</label>
-              <input
-                type="text"
-                value={formData.keywords || ''}
-                onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-                placeholder="e.g., AI, SEO, optimization"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Content Type</label>
-              <select
-                value={formData.contentType || 'article'}
-                onChange={(e) => setFormData({ ...formData, contentType: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value="article">Article</option>
-                <option value="blog">Blog Post</option>
-                <option value="landing-page">Landing Page</option>
-              </select>
             </div>
           </div>
         );
