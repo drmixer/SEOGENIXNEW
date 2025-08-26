@@ -49,6 +49,12 @@ interface ActionableInsight {
   learnMoreLink?: string;
 }
 
+// *** NEW: Development Mode Flag ***
+// Set this to true to unlock all features for any user, regardless of their actual plan.
+// Set to false for production to enforce plan restrictions.
+const isDevelopment = true;
+
+
 // --- NEW Dashboard Command Center Widgets ---
 
 // 1. Historical Performance Snapshot
@@ -210,6 +216,9 @@ const Dashboard: React.FC<DashboardProps> = ({
   const activityTrackedRef = useRef(false);
   const insightsGeneratedRef = useRef(false);
   const auditHistoryFetchedRef = useRef(false);
+
+  // *** NEW: Determine the effective plan based on the development flag ***
+  const effectivePlan = isDevelopment ? 'agency' : userPlan;
 
   // Listen for alert actions from ProactiveAlerts component
   useEffect(() => {
@@ -515,7 +524,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   // --- NEW: Command Center Component ---
   const DashboardCommandCenter = () => (
     <div className="space-y-8">
-        <VisibilityScore userPlan={userPlan} selectedWebsite={selectedWebsite} />
+        <VisibilityScore userPlan={effectivePlan} selectedWebsite={selectedWebsite} />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <HistoricalSnapshot userId={user.id} selectedProjectId={selectedProjectId} />
@@ -551,7 +560,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         )}
          <ToolsGrid 
-              userPlan={userPlan}
+              userPlan={effectivePlan}
               onToolRun={handleToolRun} 
               showPreview={true}
               selectedWebsite={selectedWebsite}
@@ -598,7 +607,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     const selected = userProfile.websites.find((w: any) => w.url === url);
                     setSelectedProjectId(selected ? selected.id : '');
                   }}
-                  userPlan={userPlan}
+                  userPlan={effectivePlan}
                 />
             )}
             
@@ -609,36 +618,36 @@ const Dashboard: React.FC<DashboardProps> = ({
       
       case 'playbooks':
         return <OptimizationPlaybooks 
-                userPlan={userPlan}
+                userPlan={effectivePlan}
                 onSectionChange={setActiveSection} 
                 userGoals={userGoals}
                 userProfile={userProfile}
                />;
       
       case 'history':
-        return <HistoricalPerformance userPlan={userPlan} selectedWebsite={selectedWebsite} />;
+        return <HistoricalPerformance userPlan={effectivePlan} selectedWebsite={selectedWebsite} />;
       
       case 'reports':
-        return <ReportGenerator userPlan={userPlan} />;
+        return <ReportGenerator userPlan={effectivePlan} />;
       
       case 'editor':
-        return <ContentEditor userPlan={userPlan} context={toolContext} />;
+        return <ContentEditor userPlan={effectivePlan} context={toolContext} />;
       
       case 'competitive-viz':
-        return <CompetitiveVisualization userPlan={userPlan} />;
+        return <CompetitiveVisualization userPlan={effectivePlan} />;
       
       case 'integrations':
-        return <CMSIntegrations userPlan={userPlan} />;
+        return <CMSIntegrations userPlan={effectivePlan} />;
       
       case 'settings':
         return <SettingsModal onClose={() => setActiveSection('overview')} user={user} userProfile={userProfile} onProfileUpdate={() => {}} />;
 
       case 'billing':
-        return <BillingModal onClose={() => setActiveSection('overview')} userPlan={userPlan} onPlanChange={() => {}} user={user} />;
+        return <BillingModal onClose={() => setActiveSection('overview')} userPlan={effectivePlan} onPlanChange={() => {}} user={user} />;
 
       default:
         return <ToolsGrid 
-          userPlan={userPlan}
+          userPlan={effectivePlan}
           onToolRun={handleToolRun} 
           selectedTool={activeSection}
           selectedWebsite={selectedWebsite}
@@ -654,7 +663,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col overflow-hidden">
       <DashboardHeader 
-        userPlan={userPlan}
+        userPlan={effectivePlan}
         onNavigateToLanding={onNavigateToLanding}
         user={user}
         onSignOut={onSignOut}
@@ -664,7 +673,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <Sidebar 
           activeSection={activeSection}
           onSectionChange={setActiveSection}
-          userPlan={userPlan}
+          userPlan={effectivePlan}
           onSettingsClick={handleSettingsClick}
           onBillingClick={handleBillingClick}
           userGoals={userGoals}
