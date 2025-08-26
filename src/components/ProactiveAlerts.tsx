@@ -346,7 +346,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
           title: 'Content Freshness Check',
           message: `${randomWebsite.name} may need content updates to maintain AI visibility. Fresh content is more likely to be cited.`,
           severity: 'low',
-          actionUrl: 'editor',
+          actionUrl: 'content-optimizer',
           actionLabel: 'Update Content',
           data: { website: randomWebsite },
           createdAt: new Date().toISOString(),

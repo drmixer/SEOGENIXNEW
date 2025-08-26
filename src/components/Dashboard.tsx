@@ -893,7 +893,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       case 'reports':
         return <ReportGenerator userPlan={userPlan} />;
       
-      case 'editor':
+      case 'content-optimizer':
         return <ContentEditor userPlan={userPlan} context={toolContext} />;
       
       case 'competitive-viz':
@@ -948,7 +948,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col overflow-hidden">
       <DashboardHeader 
-        userPlan={userPlan}
+        userPlan={isDevelopment ? 'agency' : userPlan}
         onNavigateToLanding={onNavigateToLanding}
         user={user}
         onSignOut={onSignOut}
@@ -958,7 +958,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <Sidebar 
           activeSection={activeSection}
           onSectionChange={setActiveSection}
-          userPlan={userPlan}
+          userPlan={isDevelopment ? 'agency' : userPlan}
           onSettingsClick={handleSettingsClick}
           onBillingClick={handleBillingClick}
           userGoals={userGoals}
@@ -1061,7 +1061,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       {showBilling && (
         <BillingModal
           onClose={() => setShowBilling(false)}
-          userPlan={userPlan}
+          userPlan={isDevelopment ? 'agency' : userPlan}
           onPlanChange={(plan) => {
             addToast({
               id: `plan-change-${Date.now()}`,
@@ -1081,7 +1081,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <FeedbackModal
           onClose={() => setShowFeedback(false)}
           user={user}
-          userPlan={userPlan}
+          userPlan={isDevelopment ? 'agency' : userPlan}
         />
       )}
       
@@ -1102,7 +1102,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <ChatbotPopup 
           onClose={() => setShowChatbot(false)}
           type="dashboard"
-          userPlan={userPlan}
+          userPlan={isDevelopment ? 'agency' : userPlan}
           onToolLaunch={handleToolLaunch}
           user={user}
         />
