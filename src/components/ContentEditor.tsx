@@ -59,6 +59,14 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const analysisTimeoutRef = useRef<NodeJS.Timeout>();
 
+  // Entities state (Phase 1 cross-tool integration)
+  type SuggestedEntity = { name: string; type?: string; relevance?: number; description?: string };
+  type MissingEntity = { name: string; type?: string; importance?: string; reasoning?: string };
+  const [entitiesSuggested, setEntitiesSuggested] = useState<SuggestedEntity[]>([]);
+  const [entitiesMissing, setEntitiesMissing] = useState<MissingEntity[]>([]);
+  const [entitiesAccepted, setEntitiesAccepted] = useState<string[]>([]);
+  const [showEntitiesPanel, setShowEntitiesPanel] = useState<boolean>(false);
+
   // CMS Integration State
   const [connectedIntegrations, setConnectedIntegrations] = useState<Integration[]>([]);
   const [isCmsModalOpen, setIsCmsModalOpen] = useState(false);
@@ -542,6 +550,36 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         setShowOptimized(true);
         setOptimizedViewMode('optimized');
         onToast?.({ type: 'success', title: 'Optimization ready', message: 'Review and apply the optimized draft.', duration: 3500 });
+
+        // Trigger entity analysis on the optimized draft
+        try {
+          if (selectedProjectId) {
+            const entityRes = await apiService.analyzeEntityCoverage(selectedProjectId, currentUrl || '', optimized);
+            const analysis = (entityRes?.data) ? entityRes.data : entityRes; // normalize
+            const suggested = Array.isArray(analysis?.mentionedEntities) ? analysis.mentionedEntities : [];
+            const missing = Array.isArray(analysis?.missingEntities) ? analysis.missingEntities : [];
+            setEntitiesSuggested(suggested);
+            setEntitiesMissing(missing);
+            if (typeof analysis?.coverageScore === 'number') setEntityCoverageScore(analysis.coverageScore);
+            if (typeof analysis?.strategicSummary === 'string') setEntitySummary(analysis.strategicSummary);
+            setShowEntitiesPanel(true);
+
+            // Persist draft (without changing accepted selection)
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user && selectedProjectId && (currentUrl || context?.url)) {
+                await userDataService.saveEntitiesDraft({
+                  userId: user.id,
+                  projectId: selectedProjectId,
+                  websiteUrl: (currentUrl || context?.url)!,
+                  draft: { suggested, missing, accepted: entitiesAccepted }
+                });
+              }
+            } catch {}
+          }
+        } catch (e) {
+          console.warn('Entity analysis failed or returned no data:', e);
+        }
       } else {
         onToast?.({ type: 'info', title: 'No changes suggested', message: 'The optimizer did not return a rewritten draft.', duration: 4000 });
       }
@@ -550,6 +588,54 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       onToast?.({ type: 'error', title: 'Optimization failed', message: 'Failed to optimize content. Please try again.', duration: 6000 });
     } finally {
       setIsOptimizing(false);
+    }
+  };
+
+  // Load persisted entities draft for current project + URL
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!selectedProjectId || !(currentUrl || context?.url)) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const draft = await userDataService.getEntitiesDraft(user.id, selectedProjectId, (currentUrl || context?.url)!);
+        if (draft) {
+          setEntitiesSuggested(Array.isArray(draft.suggested) ? draft.suggested as any : []);
+          setEntitiesMissing(Array.isArray(draft.missing) ? draft.missing as any : []);
+          setEntitiesAccepted(Array.isArray(draft.accepted) ? draft.accepted : []);
+        }
+      } catch (e) {
+        console.warn('Failed to load entities draft:', e);
+      }
+    })();
+  }, [selectedProjectId, currentUrl, context?.url]);
+
+  const toggleAcceptEntity = (name: string) => {
+    setEntitiesAccepted(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+  };
+
+  const acceptAllEntities = () => {
+    const names = [
+      ...entitiesSuggested.map(e => e.name),
+      ...entitiesMissing.map(e => e.name)
+    ];
+    const unique = Array.from(new Set(names.filter(Boolean)));
+    setEntitiesAccepted(unique);
+  };
+
+  const saveEntitiesDraft = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !selectedProjectId || !(currentUrl || context?.url)) return;
+      await userDataService.saveEntitiesDraft({
+        userId: user.id,
+        projectId: selectedProjectId,
+        websiteUrl: (currentUrl || context?.url)!,
+        draft: { suggested: entitiesSuggested, missing: entitiesMissing, accepted: entitiesAccepted }
+      });
+      onToast?.({ type: 'success', title: 'Entities saved', message: 'Draft saved to your project context.', duration: 2500 });
+    } catch (e: any) {
+      onToast?.({ type: 'error', title: 'Save failed', message: e?.message || 'Could not save entities draft.', duration: 4000 });
     }
   };
 
@@ -940,6 +1026,13 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                     Replace Current Content
                   </button>
                   <button
+                    onClick={() => setShowEntitiesPanel(v => !v)}
+                    className={`px-3 py-1 text-sm rounded border ${showEntitiesPanel ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                    title="View and manage suggested entities"
+                  >
+                    Entities{entitiesAccepted.length ? ` (${entitiesAccepted.length})` : ''}
+                  </button>
+                  <button
                     onClick={() => {
                       setShowOptimized(false);
                       setOptimizedContent('');
@@ -1028,6 +1121,77 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                   );
                 })()
               )}
+            </div>
+          )}
+
+          {showEntitiesPanel && (
+            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-3">
+                  <h4 className="font-medium text-gray-900">Entities</h4>
+                  {typeof entityCoverageScore === 'number' && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">Coverage: {entityCoverageScore}</span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={acceptAllEntities}
+                    className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Accept All
+                  </button>
+                  <button
+                    onClick={() => setTargetKeywords(entitiesAccepted.join(', '))}
+                    className="px-2.5 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700"
+                    title="Use accepted entities as target keywords"
+                  >
+                    Use as Keywords
+                  </button>
+                  <button
+                    onClick={saveEntitiesDraft}
+                    className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+              {entitySummary && (
+                <p className="text-xs text-gray-600 mb-3">{entitySummary}</p>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Mentioned</div>
+                  <div className="flex flex-wrap gap-2">
+                    {entitiesSuggested.length === 0 && <span className="text-xs text-gray-400">None detected yet.</span>}
+                    {entitiesSuggested.map((e, idx) => (
+                      <button
+                        key={`s-${idx}`}
+                        onClick={() => toggleAcceptEntity(e.name)}
+                        className={`text-xs px-2 py-1 rounded border ${entitiesAccepted.includes(e.name) ? 'bg-green-50 border-green-200 text-green-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                        title={e.description || e.type}
+                      >
+                        {e.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Missing</div>
+                  <div className="flex flex-wrap gap-2">
+                    {entitiesMissing.length === 0 && <span className="text-xs text-gray-400">No gaps identified.</span>}
+                    {entitiesMissing.map((e, idx) => (
+                      <button
+                        key={`m-${idx}`}
+                        onClick={() => toggleAcceptEntity(e.name)}
+                        className={`text-xs px-2 py-1 rounded border ${entitiesAccepted.includes(e.name) ? 'bg-yellow-50 border-yellow-200 text-yellow-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                        title={e.reasoning || e.type}
+                      >
+                        {e.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

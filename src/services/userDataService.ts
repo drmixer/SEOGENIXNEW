@@ -191,6 +191,53 @@ export const userDataService = {
     return profilePromise;
   },
 
+  // Entities draft persistence using user_activity (no new tables)
+  async saveEntitiesDraft(params: { userId: string; projectId: string; websiteUrl: string; draft: { suggested?: any[]; missing?: any[]; accepted?: string[] } }): Promise<void> {
+    const { userId, projectId, websiteUrl, draft } = params;
+    if (!userId || !projectId || !websiteUrl) {
+      console.error('saveEntitiesDraft called with missing identifiers');
+      return;
+    }
+    try {
+      await supabase.from('user_activity').insert({
+        user_id: userId,
+        activity_type: 'entities_draft',
+        website_url: websiteUrl,
+        tool_id: projectId, // reuse tool_id to hold project id
+        activity_data: { ...draft, updatedAt: new Date().toISOString() },
+        created_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Failed to save entities draft:', e);
+    }
+  },
+
+  async getEntitiesDraft(userId: string, projectId: string, websiteUrl: string): Promise<{ suggested?: any[]; missing?: any[]; accepted?: string[]; updatedAt?: string } | null> {
+    if (!userId || !projectId || !websiteUrl) {
+      console.error('getEntitiesDraft called with missing identifiers');
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('user_activity')
+        .select('activity_data, created_at')
+        .eq('user_id', userId)
+        .eq('activity_type', 'entities_draft')
+        .eq('website_url', websiteUrl)
+        .eq('tool_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        return data[0].activity_data || null;
+      }
+      return null;
+    } catch (e) {
+      console.warn('Failed to fetch entities draft:', e);
+      return null;
+    }
+  },
+
   async createUserProfile(profile: Partial<UserProfile>): Promise<UserProfile | null> {
     if (!profile.user_id) {
       console.error('createUserProfile called with empty user_id');

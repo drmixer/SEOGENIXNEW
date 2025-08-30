@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
 import OnboardingModal from './components/OnboardingModal';
 import { WhiteLabelProvider } from './components/WhiteLabelProvider';
+import { WorkContextProvider } from './lib/WorkContext';
 import ToastContainer from './components/ToastContainer';
 import Integrations from './components/pages/Integrations';
 import HelpCenter from './components/pages/HelpCenter';
@@ -23,7 +24,9 @@ import { lemonsqueezyService } from './services/lemonsqueezy';
 function App() {
   return (
     <Router>
-      <AppContent />
+      <WorkContextProvider>
+        <AppContent />
+      </WorkContextProvider>
     </Router>
   );
 }
@@ -428,4 +431,3 @@ function AppContent() {
 }
 
 export default App;
-
