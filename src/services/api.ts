@@ -183,7 +183,7 @@ export const apiService = {
   },
 
   // Schema Generator
-  async generateSchema(projectId: string, url: string, contentType: string, content?: string) {
+  async generateSchema(projectId: string, url: string, contentType: string, content?: string, acceptedEntities?: string[]) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/schema-generator`, { projectId, url, contentType, content });
     
     if (pendingApiRequests.has(cacheKey)) {
@@ -193,7 +193,7 @@ export const apiService = {
     
     const schemaPromise = apiCall(`${API_BASE_URL}/schema-generator`, {
       method: 'POST',
-      body: JSON.stringify({ projectId, url, contentType, content })
+      body: JSON.stringify({ projectId, url, contentType, content, acceptedEntities })
     }).then(response => {
       // Handle the response structure correctly
       if (response.output) {
@@ -209,6 +209,14 @@ export const apiService = {
     });
     
     return schemaPromise;
+  },
+
+  async validateSchema(schema: object | string): Promise<{ valid: boolean; issues: Array<{ path?: string; message: string }> }> {
+    const result = await apiCall(`${API_BASE_URL}/schema-validator`, {
+      method: 'POST',
+      body: JSON.stringify({ schema })
+    });
+    return result.output || result.data || result;
   },
 
   // Citation Tracker

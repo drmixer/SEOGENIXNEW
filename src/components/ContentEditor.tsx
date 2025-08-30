@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { FileText, Zap, Target, Brain, MessageSquare, Save, Copy, RefreshCw, AlertCircle, CheckCircle, Lightbulb, ChevronsUpDown, UploadCloud, Loader } from 'lucide-react';
+import { FileText, Zap, Target, Brain, MessageSquare, Save, Copy, RefreshCw, AlertCircle, CheckCircle, Lightbulb, ChevronsUpDown, UploadCloud, Loader, Shield } from 'lucide-react';
 import { apiService } from '../services/api';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
@@ -66,6 +66,15 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [entitiesMissing, setEntitiesMissing] = useState<MissingEntity[]>([]);
   const [entitiesAccepted, setEntitiesAccepted] = useState<string[]>([]);
   const [showEntitiesPanel, setShowEntitiesPanel] = useState<boolean>(false);
+  const [entityCoverageScore, setEntityCoverageScore] = useState<number | null>(null);
+  const [entitySummary, setEntitySummary] = useState<string | null>(null);
+
+  // Schema state (Phase 2)
+  const [showSchemaPanel, setShowSchemaPanel] = useState<boolean>(false);
+  const [schemaJson, setSchemaJson] = useState<string>('');
+  const [schemaValid, setSchemaValid] = useState<boolean | null>(null);
+  const [schemaIssues, setSchemaIssues] = useState<Array<{ path?: string; message: string }>>([]);
+  const [schemaApplied, setSchemaApplied] = useState<boolean>(false);
 
   // CMS Integration State
   const [connectedIntegrations, setConnectedIntegrations] = useState<Integration[]>([]);
@@ -604,6 +613,14 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           setEntitiesMissing(Array.isArray(draft.missing) ? draft.missing as any : []);
           setEntitiesAccepted(Array.isArray(draft.accepted) ? draft.accepted : []);
         }
+        const schemaDraft = await userDataService.getSchemaDraft(user.id, selectedProjectId, (currentUrl || context?.url)!);
+        if (schemaDraft?.schema) {
+          const jsonStr = typeof schemaDraft.schema === 'string' ? schemaDraft.schema : JSON.stringify(schemaDraft.schema, null, 2);
+          setSchemaJson(jsonStr);
+          setSchemaValid(typeof schemaDraft.valid === 'boolean' ? schemaDraft.valid : null);
+          setSchemaIssues(Array.isArray(schemaDraft.issues) ? schemaDraft.issues : []);
+          setSchemaApplied(!!schemaDraft.applied);
+        }
       } catch (e) {
         console.warn('Failed to load entities draft:', e);
       }
@@ -637,6 +654,80 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     } catch (e: any) {
       onToast?.({ type: 'error', title: 'Save failed', message: e?.message || 'Could not save entities draft.', duration: 4000 });
     }
+  };
+
+  // Schema helpers
+  const generateSchema = async () => {
+    if (!selectedProjectId) {
+      onToast?.({ type: 'warning', title: 'Missing project', message: 'Select a website first.', duration: 3000 });
+      return;
+    }
+    try {
+      const output = await apiService.generateSchema(
+        selectedProjectId,
+        currentUrl || context?.url || '',
+        contentType,
+        (optimizedContent && showOptimized) ? optimizedContent : content,
+        entitiesAccepted
+      );
+      const schemaObj = output?.schema || output?.markup || output?.schemaMarkup || output;
+      const jsonStr = typeof schemaObj === 'string' ? schemaObj : JSON.stringify(schemaObj, null, 2);
+      setSchemaJson(jsonStr);
+      setSchemaValid(null);
+      setSchemaIssues([]);
+      setSchemaApplied(false);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && selectedProjectId && (currentUrl || context?.url)) {
+          await userDataService.saveSchemaDraft({
+            userId: user.id,
+            projectId: selectedProjectId,
+            websiteUrl: (currentUrl || context?.url)!,
+            draft: { schema: typeof schemaObj === 'string' ? JSON.parse(schemaObj) : schemaObj }
+          });
+        }
+      } catch {}
+      onToast?.({ type: 'success', title: 'Schema generated', message: 'Review, validate, then insert.', duration: 2500 });
+    } catch (e: any) {
+      onToast?.({ type: 'error', title: 'Generation failed', message: e?.message || 'Could not generate schema.', duration: 4000 });
+    }
+  };
+
+  const validateSchema = async () => {
+    try {
+      const res = await apiService.validateSchema(schemaJson);
+      setSchemaValid(!!res.valid);
+      setSchemaIssues(Array.isArray(res.issues) ? res.issues : []);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && selectedProjectId && (currentUrl || context?.url)) {
+          await userDataService.saveSchemaDraft({
+            userId: user.id,
+            projectId: selectedProjectId,
+            websiteUrl: (currentUrl || context?.url)!,
+            draft: { schema: JSON.parse(schemaJson), valid: !!res.valid, issues: res.issues || [] }
+          });
+        }
+      } catch {}
+    } catch (e: any) {
+      onToast?.({ type: 'error', title: 'Validation failed', message: e?.message || 'Could not validate schema.', duration: 4000 });
+    }
+  };
+
+  const insertSchemaIntoDraft = async () => {
+    try {
+      setSchemaApplied(true);
+      onToast?.({ type: 'success', title: 'Schema inserted', message: 'Will be included when publishing.', duration: 2500 });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && selectedProjectId && (currentUrl || context?.url)) {
+        await userDataService.saveSchemaDraft({
+          userId: user.id,
+          projectId: selectedProjectId,
+          websiteUrl: (currentUrl || context?.url)!,
+          draft: { applied: true, schema: JSON.parse(schemaJson), valid: schemaValid ?? undefined, issues: schemaIssues }
+        });
+      }
+    } catch {}
   };
 
   const copyToClipboard = (text: string) => {
@@ -1033,6 +1124,16 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                     Entities{entitiesAccepted.length ? ` (${entitiesAccepted.length})` : ''}
                   </button>
                   <button
+                    onClick={() => setShowSchemaPanel(v => !v)}
+                    className={`px-3 py-1 text-sm rounded border ${showSchemaPanel ? 'bg-green-50 border-green-200 text-green-700' : 'border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                    title="Generate and validate JSON-LD schema"
+                  >
+                    <span className="inline-flex items-center space-x-1">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Schema</span>
+                    </span>
+                  </button>
+                  <button
                     onClick={() => {
                       setShowOptimized(false);
                       setOptimizedContent('');
@@ -1192,6 +1293,30 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {showSchemaPanel && (
+            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-3">
+                  <h4 className="font-medium text-gray-900">Schema</h4>
+                  {schemaValid === true && (<span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Valid</span>)}
+                  {schemaValid === false && (<span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Invalid</span>)}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button onClick={generateSchema} className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50">Generate</button>
+                  <button onClick={validateSchema} className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50">Validate</button>
+                  <button onClick={() => { try { navigator.clipboard.writeText(schemaJson); onToast?.({ type: 'success', title: 'Copied', message: 'Schema JSON copied.' }); } catch {} }} className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50">Copy</button>
+                  <button onClick={insertSchemaIntoDraft} className={`px-2.5 py-1 text-xs font-medium rounded ${schemaApplied ? 'bg-green-600 text-white' : 'bg-purple-600 text-white hover:bg-purple-700'}`}>{schemaApplied ? 'Inserted' : 'Insert Into Draft'}</button>
+                </div>
+              </div>
+              {!!schemaIssues?.length && (
+                <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                  {schemaIssues.length} issue(s): {schemaIssues.map((i, idx) => i.message).join('; ')}
+                </div>
+              )}
+              <textarea value={schemaJson} onChange={(e) => setSchemaJson(e.target.value)} rows={12} className="w-full border border-gray-200 rounded p-3 text-xs font-mono bg-gray-50" placeholder='{"@context":"https://schema.org","@type":"Article",...}' />
             </div>
           )}
         </div>
