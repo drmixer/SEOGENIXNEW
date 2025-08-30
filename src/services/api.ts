@@ -252,9 +252,9 @@ export const apiService = {
       method: 'POST',
       body: JSON.stringify({ projectId, content, targetKeywords, contentType })
     }).then(response => {
-      if (response.output) {
-        return response.output;
-      }
+      // Normalize to return the actual data payload directly
+      if (response?.output) return response.output;
+      if (response?.data) return response.data;
       return response;
     });
     

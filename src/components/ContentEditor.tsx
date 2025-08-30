@@ -394,9 +394,21 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     setIsOptimizing(true);
     try {
       const keywords = targetKeywords.split(',').map(k => k.trim()).filter(k => k);
-      const result = await apiService.optimizeContent(selectedProjectId, content, keywords, contentType);
-      setOptimizedContent(result.optimizedContent);
-      setShowOptimized(true);
+      // Map editor contentType to optimizer-accepted values
+      const optimizerType = ((): 'article' | 'blog' | 'landing-page' => {
+        if (contentType === 'article') return 'article';
+        // Default other types to 'article' for now
+        return 'article';
+      })();
+      const result = await apiService.optimizeContent(selectedProjectId, content, keywords, optimizerType);
+      const optimized = result?.optimizedContent || result?.optimized_content || '';
+      if (optimized) {
+        setOptimizedContent(optimized);
+        setShowOptimized(true);
+        onToast?.({ type: 'success', title: 'Optimization ready', message: 'Review and apply the optimized draft.', duration: 3500 });
+      } else {
+        onToast?.({ type: 'info', title: 'No changes suggested', message: 'The optimizer did not return a rewritten draft.', duration: 4000 });
+      }
     } catch (error) {
       console.error('Error optimizing content:', error);
       onToast?.({ type: 'error', title: 'Optimization failed', message: 'Failed to optimize content. Please try again.', duration: 6000 });
@@ -413,6 +425,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     setContent(optimizedContent);
     setShowOptimized(false);
     setOptimizedContent('');
+    onToast?.({ type: 'success', title: 'Applied optimized draft', message: 'Your editor content was replaced.', duration: 2500 });
   };
 
   const getScoreColor = (score?: number) => {
@@ -710,9 +723,46 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                 />
               )}
             </div>
+
+            {/* If fetched text is likely from an SPA (very short), suggest pasting content */}
+            {context?.url && content.trim().length > 0 && content.trim().length < 300 && (
+              <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                This page may be a JavaScript-powered site and returned limited text. Paste the full content here or load from your CMS for better optimization.
+              </div>
+            )}
           </div>
 
-          {/* Other panels (Real-time suggestions, Optimized content) go here */}
+          {/* Optimized content preview panel */}
+          {showOptimized && optimizedContent && (
+            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-gray-900">Optimized Draft</h4>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={useOptimizedContent}
+                    className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                  >
+                    Replace Current Content
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowOptimized(false);
+                      setOptimizedContent('');
+                    }}
+                    className="px-3 py-1 border border-gray-300 text-sm rounded hover:bg-gray-50"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+              <textarea
+                value={optimizedContent}
+                readOnly
+                className="w-full border border-gray-200 rounded p-3 text-sm bg-gray-50"
+                rows={10}
+              />
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
