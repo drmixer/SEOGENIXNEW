@@ -717,6 +717,14 @@ export const apiService = {
     const result = await apiCall(`${API_BASE_URL}/get-integrations`, {
       method: 'GET',
     });
-    return result.data || result;
+    // Normalize possible shapes:
+    // - [{...}] (already array)
+    // - { integrations: [...] }
+    // - { success: true, integrations: [...] }
+    // - { success: true, data: { integrations: [...] } }
+    if (Array.isArray(result)) return result;
+    if (Array.isArray(result?.integrations)) return result.integrations;
+    if (Array.isArray(result?.data?.integrations)) return result.data.integrations;
+    return [];
   }
 };

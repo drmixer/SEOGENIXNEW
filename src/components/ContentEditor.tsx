@@ -67,12 +67,13 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     const fetchIntegrations = async () => {
       try {
         const integrations = await apiService.getConnectedIntegrations();
-        setConnectedIntegrations(integrations);
+        const arr = Array.isArray(integrations) ? integrations : [];
+        setConnectedIntegrations(arr);
         // Set default publish target based on last-used and available integrations
         try {
           const { data: { user } } = await supabase.auth.getUser();
-          const hasWP = integrations.some((i: any) => i.cms_type === 'wordpress');
-          const hasShop = integrations.some((i: any) => i.cms_type === 'shopify');
+          const hasWP = arr.some((i: any) => i.cms_type === 'wordpress');
+          const hasShop = arr.some((i: any) => i.cms_type === 'shopify');
           if (user && hasWP && hasShop) {
             const last = await userDataService.getLastCmsTarget(user.id);
             if (last) setDefaultPublishTarget(last);
@@ -119,7 +120,12 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           }
         } catch (error) {
           console.error("Failed to fetch URL content:", error);
-          alert(`Failed to load content from ${context.url}. Please check the URL or paste the content manually.`);
+          onToast?.({
+            type: 'warning',
+            title: 'Could not load page content',
+            message: `Failed to load ${context.url}. Paste content manually or try another URL.`,
+            duration: 6000
+          });
         } finally {
           setIsLoadingUrl(false);
         }

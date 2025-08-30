@@ -729,6 +729,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           selectedProjectId={selectedProjectId}
           userProfile={userProfile}
           onComplete={handleToolComplete}
+          onSwitchTool={handleSwitchTool}
         />
       )}
 

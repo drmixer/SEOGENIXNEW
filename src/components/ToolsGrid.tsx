@@ -24,6 +24,7 @@ import { apiService } from '../services/api';
 import CompetitiveAnalysisModal from './CompetitiveAnalysisModal';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
+import { mapRecommendationToTool } from '../utils/fixItRouter';
 
 interface ToolsGridProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -607,80 +608,12 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   };
 
   const handleFixItClick = (recommendation: any) => {
-    const lower = (s: any) => (typeof s === 'string' ? s.toLowerCase() : '');
-    const action = lower(recommendation?.action_type);
-    const title = lower(recommendation?.title);
-    const desc = lower(recommendation?.description);
-    const text = `${title} ${desc}`;
-
-    const open = (toolId: string, ctx: any = {}) => {
-      onSwitchTool(toolId, {
-        source: 'fixit',
-        fromRecommendation: recommendation,
-        ...ctx,
-      });
-    };
-
-    // Content optimization/editor
-    if (
-      action.includes('content-optimizer') ||
-      action.includes('content') ||
-      text.includes('optimiz') ||
-      text.includes('readability') ||
-      text.includes('structure') ||
-      text.includes('heading') ||
-      text.includes('meta')
-    ) {
-      open('editor', { url: selectedWebsite, hint: recommendation?.title });
-      return;
-    }
-
-    // Schema / Structured Data
-    if (
-      action.includes('schema') ||
-      text.includes('schema') ||
-      text.includes('structured data') ||
-      text.includes('json-ld')
-    ) {
-      open('schema', { contentType: 'Article' });
-      return;
-    }
-
-    // Entity Coverage
-    if (action.includes('entity') || text.includes('entity') || text.includes('entities') || text.includes('topic')) {
-      open('entities', {});
-      return;
-    }
-
-    // Citations / Mentions
-    if (action.includes('citation') || text.includes('citation') || text.includes('mention')) {
-      open('citations', {});
-      return;
-    }
-
-    // Voice / Conversational
-    if (action.includes('voice') || text.includes('voice') || text.includes('assistant') || text.includes('conversational')) {
-      open('voice', {});
-      return;
-    }
-
-    // Prompts
-    if (action.includes('prompt') || text.includes('prompt')) {
-      open('prompts', { topic: extractDomain(selectedWebsite || '') });
-      return;
-    }
-
-    // Content Generator (FAQs, snippets, etc.)
-    if (action.includes('generate') || text.includes('generate') || text.includes('faq') || text.includes('snippet')) {
-      open('generator', {
-        topic: recommendation?.title || `Content for ${extractDomain(selectedWebsite || '')}`,
-        targetKeywords: ''
-      });
-      return;
-    }
-
-    // Fallback: editor
-    open('editor', { url: selectedWebsite, hint: recommendation?.title });
+    const route = mapRecommendationToTool(recommendation, { selectedWebsite });
+    onSwitchTool(route.toolId, {
+      source: 'fixit',
+      fromRecommendation: recommendation,
+      ...(route.context || {}),
+    });
   };
 
   const handleGenerateWithEntities = (entitiesToInclude: string[]) => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader, Copy, Download, ExternalLink, CheckCircle, AlertCircle, Target, FileText, Search, Mic, Globe, Users, Zap, TrendingUp, Lightbulb, BarChart3, Radar, Shield } from 'lucide-react';
 import { apiService } from '../services/api';
+import { mapRecommendationToTool } from '../utils/fixItRouter';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 
@@ -13,6 +14,7 @@ interface ToolModalProps {
   selectedProjectId?: string;
   userProfile?: any;
   onComplete?: (toolName: string, success: boolean, message?: string) => void;
+  onSwitchTool?: (toolId: string, context: any) => void;
 }
 
 const ToolModal: React.FC<ToolModalProps> = ({
@@ -23,7 +25,8 @@ const ToolModal: React.FC<ToolModalProps> = ({
   selectedWebsite,
   selectedProjectId,
   userProfile,
-  onComplete
+  onComplete,
+  onSwitchTool
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -128,6 +131,19 @@ const ToolModal: React.FC<ToolModalProps> = ({
       discovery: 'from-violet-500 to-violet-600'
     };
     return colorMap[id] || 'from-gray-500 to-gray-600';
+  };
+
+  // Map recommendations to tools (mirror ToolsGrid logic)
+  const handleFixItRouting = (recommendation: any) => {
+    const route = mapRecommendationToTool(recommendation, { selectedWebsite });
+    if (onSwitchTool) {
+      onClose();
+      onSwitchTool(route.toolId, {
+        source: 'fixit',
+        fromRecommendation: recommendation,
+        ...(route.context || {}),
+      });
+    }
   };
 
   // Normalize different result structures into consistent format (matching ToolsGrid)
@@ -898,8 +914,17 @@ const ToolModal: React.FC<ToolModalProps> = ({
 
     if (!result) return null;
 
-    // Use the same ToolResultsDisplay component from ToolsGrid
-    return <ToolResultsDisplay toolId={toolId} data={result} onFixItClick={() => {}} onGenerateWithEntities={() => {}} onCreateContentFromCitation={() => {}} />;
+    // Use the same ToolResultsDisplay component from ToolsGrid with working Fix It
+    return (
+      <ToolResultsDisplay
+        toolId={toolId}
+        data={result}
+        onFixItClick={handleFixItRouting}
+        onGenerateWithEntities={() => {}}
+        onCreateContentFromCitation={() => {}}
+        onSwitchTool={onSwitchTool || (() => {})}
+      />
+    );
   };
 
   const IconComponent = getToolIcon(toolId);
@@ -988,6 +1013,7 @@ const ToolResultsDisplay: React.FC<{
   onFixItClick: (recommendation: any) => void;
   onGenerateWithEntities: () => void;
   onCreateContentFromCitation: (citation: any) => void;
+  onSwitchTool?: (toolId: string, context: any) => void;
 }> = ({ toolId, data, onFixItClick, onGenerateWithEntities, onCreateContentFromCitation }) => {
   
   const copyToClipboard = (text: string) => {
