@@ -232,6 +232,27 @@ export const wordpressService = async (req, supabase)=>{
       case 'update_content':
         if (!postId || !content) throw new Error('postId and content are required');
         console.log(`Updating content for post/page: ${postId}`);
+        // If requested, auto-generate schema and append to content before updating
+        let finalUpdateContent = content;
+        if (autoGenerateSchema && typeof finalUpdateContent === 'string') {
+          try {
+            console.log('Auto-generating schema for WordPress update...');
+            const { data: schemaData, error: schemaError } = await supabase.functions.invoke('schema-generator', {
+              body: {
+                url: integration.site_url,
+                contentType: 'Article',
+                content: finalUpdateContent
+              }
+            });
+            if (schemaError) throw schemaError;
+            if (schemaData?.output?.implementation) {
+              finalUpdateContent += `\n\n${schemaData.output.implementation}`;
+              console.log('Schema markup appended for update');
+            }
+          } catch (e) {
+            console.error('Schema generation failed on update:', e?.message || e);
+          }
+        }
         let updateResponse = await fetch(`${integration.site_url}/wp-json/wp/v2/posts/${postId}`, {
           method: 'POST',
           headers: {
@@ -240,7 +261,7 @@ export const wordpressService = async (req, supabase)=>{
           },
           body: JSON.stringify({
             title: title,
-            content: content
+            content: finalUpdateContent
           })
         });
         if (!updateResponse.ok) {
@@ -254,7 +275,7 @@ export const wordpressService = async (req, supabase)=>{
               },
               body: JSON.stringify({
                 title: title,
-                content: content
+                content: finalUpdateContent
               })
             });
           } else {
@@ -326,4 +347,3 @@ Deno.serve(async (req)=>{
   const supabase = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
   return await wordpressService(req, supabase);
 });
-

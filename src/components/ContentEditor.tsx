@@ -443,7 +443,12 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     if (!loadedCmsContent) return;
     setIsPushing(true);
     try {
-      await apiService.updateCMSContentItem(loadedCmsContent.cmsType, loadedCmsContent.id, { title, content });
+      await apiService.updateCMSContentItem(
+        loadedCmsContent.cmsType,
+        loadedCmsContent.id,
+        { title, content },
+        { autoGenerateSchema: autoGenerateSchema, projectId: selectedProjectId }
+      );
       alert('Content updated successfully!');
       setLoadedCmsContent(prev => prev ? { ...prev, title } : null);
     } catch (error) {

@@ -682,7 +682,12 @@ export const apiService = {
       return result.data;
   },
 
-  async updateCMSContentItem(cmsType: 'wordpress' | 'shopify', itemId: number | string, content: { title?: string, content: string }) {
+  async updateCMSContentItem(
+    cmsType: 'wordpress' | 'shopify',
+    itemId: number | string,
+    content: { title?: string; content: string },
+    options?: { autoGenerateSchema?: boolean; projectId?: string }
+  ) {
       const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
       const idKey = cmsType === 'wordpress' ? 'postId' : 'productId';
 
@@ -695,7 +700,9 @@ export const apiService = {
           body: JSON.stringify({
               action: 'update_content',
               [idKey]: itemId,
-              content: bodyPayload
+              content: bodyPayload,
+              // For WP, allow auto-schema generation when updating
+              ...(cmsType === 'wordpress' ? { autoGenerateSchema: options?.autoGenerateSchema, projectId: options?.projectId } : {})
           })
       });
   },
