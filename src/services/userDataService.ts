@@ -256,7 +256,68 @@ export const userDataService = {
       }
 
       console.log('Successfully updated user profile:', data);
-      
+
+      // If websites were provided, create/update corresponding project records
+      if (websites && Array.isArray(websites)) {
+        const sanitized = websites
+          .filter((w: any) => w && typeof w.url === 'string' && typeof w.name === 'string')
+          .map((w: any) => ({ url: w.url.trim(), name: w.name.trim(), id: (w as any).id || null }))
+          .filter((w) => w.url && w.name);
+
+        for (const w of sanitized) {
+          try {
+            if (w.id) {
+              // Update existing project name/url if needed
+              const { error: updateErr } = await supabase
+                .from('projects')
+                .update({ name: w.name, url: w.url })
+                .eq('id', w.id)
+                .eq('owner_id', userId);
+              if (updateErr) {
+                console.warn('Failed updating existing project', w.id, updateErr.message);
+              }
+            } else {
+              // Check for existing project with same URL for this owner
+              const { data: existing, error: existingErr } = await supabase
+                .from('projects')
+                .select('id')
+                .eq('owner_id', userId)
+                .eq('url', w.url)
+                .maybeSingle();
+
+              if (!existingErr && existing) {
+                // Update name if it differs
+                const { error: nameUpdateErr } = await supabase
+                  .from('projects')
+                  .update({ name: w.name })
+                  .eq('id', existing.id);
+                if (nameUpdateErr) {
+                  console.warn('Failed updating project name for', existing.id, nameUpdateErr.message);
+                }
+              } else {
+                // Insert new project. Include org_id placeholder if present in schema.
+                const insertPayload: Record<string, any> = {
+                  name: w.name,
+                  owner_id: userId,
+                  url: w.url,
+                  // Matches SettingsModal convention; harmless if column exists, ignored otherwise by DB
+                  org_id: '00000000-0000-0000-0000-000000000000'
+                };
+                const { error: insertErr } = await supabase
+                  .from('projects')
+                  .insert(insertPayload);
+                if (insertErr) {
+                  console.warn('Failed inserting new project for', w.url, insertErr.message);
+                }
+              }
+            }
+          } catch (projectErr: any) {
+            console.warn('Project sync error for website', w.url, projectErr?.message || projectErr);
+          }
+        }
+      }
+
+      // Refresh cached profile (includes projects as websites)
       await this.getUserProfile(userId, true);
       
       return data;
