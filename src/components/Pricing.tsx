@@ -48,7 +48,7 @@ const Pricing: React.FC<PricingProps> = ({ onPlanSelect }) => {
         'Everything in Free',
         'AI Visibility Subscores',
         'Schema Generator',
-        'AI Content Optimizer',
+        'AI Content Editor',
         'LLM Site Summaries',
         'Citation Tracker',
         'Voice Assistant Tester',

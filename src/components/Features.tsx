@@ -58,8 +58,8 @@ const Features = () => {
     },
     {
       icon: TrendingUp,
-      title: 'AI Content Optimizer',
-      description: 'Score and rewrite your content to maximize AI visibility and citation potential.'
+      title: 'AI Content Editor',
+      description: 'Edit and optimize content with AI visibility feedback, rewrites, and CMS publishing.'
     },
     {
       icon: Lightbulb,

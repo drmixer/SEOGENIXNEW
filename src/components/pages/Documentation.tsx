@@ -35,7 +35,7 @@ const Documentation = () => {
         { title: 'Schema Generator', path: '/docs/schema-generator' },
         { title: 'Citation Tracker', path: '/docs/citation-tracker' },
         { title: 'Voice Assistant Tester', path: '/docs/voice-tester' },
-        { title: 'Content Optimizer', path: '/docs/content-optimizer' },
+        { title: 'Content Editor', path: '/docs/content-editor' },
         { title: 'Entity Coverage Analyzer', path: '/docs/entity-analyzer' },
         { title: 'Prompt Match Suggestions', path: '/docs/prompt-suggestions' }
       ]

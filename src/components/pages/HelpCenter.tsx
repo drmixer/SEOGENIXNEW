@@ -36,7 +36,7 @@ const HelpCenter = () => {
         "Schema Generator Documentation",
         "Citation Tracker Guide",
         "Voice Assistant Tester Tutorial",
-        "Content Optimizer Best Practices"
+        "Content Editor Best Practices"
       ]
     },
     {

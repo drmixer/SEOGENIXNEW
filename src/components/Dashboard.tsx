@@ -337,8 +337,8 @@ const Dashboard: React.FC<DashboardProps> = ({
             actionUrl: 'editor',
             icon: AlertTriangle,
             color: 'from-red-500 to-red-600',
-            contextualTip: 'Scores below 60 indicate significant issues with AI comprehension. Content optimization can quickly improve your visibility and citation likelihood.',
-            learnMoreLink: 'https://docs.seogenix.com/optimization/content-optimizer'
+            contextualTip: 'Scores below 60 indicate significant issues with AI comprehension. Optimizing your content in the editor can quickly improve visibility and citation likelihood.',
+            learnMoreLink: 'https://docs.seogenix.com/tools/content-editor'
           });
         } else if (latestAudit.overall_score < 75) {
           insights.push({
