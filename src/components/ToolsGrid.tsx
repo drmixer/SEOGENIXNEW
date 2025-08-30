@@ -614,7 +614,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     const text = `${title} ${desc}`;
 
     const open = (toolId: string, ctx: any = {}) => {
-      onSwitchTool(toolId, ctx);
+      onSwitchTool(toolId, {
+        source: 'fixit',
+        fromRecommendation: recommendation,
+        ...ctx,
+      });
     };
 
     // Content optimization/editor
@@ -1208,6 +1212,9 @@ const ToolResultsDisplay: React.FC<{
     navigator.clipboard.writeText(text);
   };
 
+  // Lightweight state for a simple Fixes Playlist walkthrough
+  const [playlistIndex, setPlaylistIndex] = React.useState(0);
+
   switch (toolId) {
     case 'audit':
       return (
@@ -1254,6 +1261,45 @@ const ToolResultsDisplay: React.FC<{
                     </button>
                   </div>
                 ))}
+              </div>
+              {/* Simple Fixes Playlist */}
+              <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h5 className="font-medium text-gray-900">Fixes Playlist</h5>
+                  <span className="text-xs text-gray-500">Step {Math.min(playlistIndex + 1, data.recommendations.length)} of {data.recommendations.length}</span>
+                </div>
+                {data.recommendations[playlistIndex] && (
+                  <div className="flex items-start justify-between">
+                    <div className="pr-4">
+                      <div className="font-medium text-gray-800">{data.recommendations[playlistIndex].title || String(data.recommendations[playlistIndex])}</div>
+                      {data.recommendations[playlistIndex].description && (
+                        <p className="text-sm text-gray-600 mt-1">{data.recommendations[playlistIndex].description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setPlaylistIndex(Math.max(0, playlistIndex - 1))}
+                        className="px-3 py-1 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        disabled={playlistIndex === 0}
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => onFixItClick(data.recommendations[playlistIndex])}
+                        className="px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700"
+                      >
+                        Do it now
+                      </button>
+                      <button
+                        onClick={() => setPlaylistIndex(Math.min(data.recommendations.length - 1, playlistIndex + 1))}
+                        className="px-3 py-1 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        disabled={playlistIndex >= data.recommendations.length - 1}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1552,6 +1598,44 @@ const ToolResultsDisplay: React.FC<{
               </button>
             </div>
             
+            {/* Open in Editor CTA */}
+            <div className="mb-4">
+              <button
+                onClick={() => {
+                  // Build plain content for editor context
+                  let contentText = '';
+                  let titleText = 'Generated Content';
+                  let keywordsText = '';
+                  const gc = data.generatedContent;
+                  if (gc?.faqs) {
+                    titleText = 'FAQs';
+                    contentText = gc.faqs.map((f: any) => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n');
+                  } else if (gc?.metaTags) {
+                    titleText = gc.metaTags.title || 'Meta Tags';
+                    contentText = `Title: ${gc.metaTags.title}\n\nDescription: ${gc.metaTags.description}\n\nKeywords: ${gc.metaTags.keywords || ''}`;
+                    keywordsText = gc.metaTags.keywords || '';
+                  } else if (typeof gc === 'string') {
+                    contentText = gc;
+                  } else if (gc?.raw || gc?.snippet || gc?.description || gc?.headings) {
+                    contentText = gc.raw || gc.snippet || gc.description || (Array.isArray(gc.headings) ? gc.headings.join('\n') : String(gc.headings));
+                  } else {
+                    contentText = JSON.stringify(gc, null, 2);
+                  }
+
+                  onSwitchTool('editor', {
+                    source: 'generator-open-in-editor',
+                    content: contentText,
+                    title: titleText,
+                    keywords: keywordsText,
+                    contentType: data.contentType || 'content'
+                  });
+                }}
+                className="px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
+              >
+                Open in Editor
+              </button>
+            </div>
+
             {data.generatedContent?.faqs && (
               <div className="space-y-4">
                 <h5 className="font-medium text-gray-800">Generated FAQs:</h5>

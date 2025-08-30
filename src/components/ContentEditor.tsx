@@ -7,7 +7,7 @@ import CMSContentModal from './CMSContentModal';
 
 interface ContentEditorProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
-  context?: { url?: string };
+  context?: { url?: string; content?: string; title?: string; keywords?: string; contentType?: 'article' | 'product' | 'faq' | 'meta' };
 }
 
 interface ContentAnalysis {
@@ -73,6 +73,16 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
   }, []);
 
   useEffect(() => {
+    // Load direct content if provided via context (e.g., from Generator)
+    if (context?.content) {
+      setLoadedCmsContent(null);
+      setTitle(context.title || 'Generated Content');
+      setContent(context.content);
+      if (context.keywords) setTargetKeywords(context.keywords);
+      if (context.contentType) setContentType(context.contentType);
+      return; // Prefer direct content over URL fetch
+    }
+
     if (context?.url) {
       const loadContentFromUrl = async () => {
         setIsLoadingUrl(true);

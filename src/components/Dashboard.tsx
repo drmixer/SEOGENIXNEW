@@ -451,6 +451,29 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleSwitchTool = (toolId: string, context: any) => {
     setToolContext(context);
     setActiveSection(toolId);
+
+    // Success toast when tool opened from a workflow (e.g., Fix it / Generator)
+    if (context && (context.source === 'fixit' || context.source === 'generator-open-in-editor')) {
+      const toolNames: Record<string, string> = {
+        editor: 'Content Editor',
+        schema: 'Schema Generator',
+        entities: 'Entity Analyzer',
+        citations: 'Citation Tracker',
+        voice: 'Voice Assistant Tester',
+        prompts: 'Prompt Suggestions',
+        generator: 'AI Content Generator',
+        audit: 'AI Visibility Audit'
+      };
+      const pretty = toolNames[toolId] || 'Tool';
+      addToast({
+        id: `nav-${Date.now()}`,
+        type: 'success',
+        title: `Opened ${pretty}`,
+        message: context.source === 'fixit' ? 'Jumped from a recommendation to take action.' : 'Loaded generated content into the editor.',
+        duration: 3500,
+        onClose: () => {}
+      });
+    }
   };
 
   // Handle tool run from ToolsGrid - this can either open modal or navigate
