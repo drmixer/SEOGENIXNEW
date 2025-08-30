@@ -458,6 +458,12 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       );
       alert('Content updated successfully!');
       setLoadedCmsContent(prev => prev ? { ...prev, title } : null);
+      // Post-publish follow-up: validate schema and re-audit
+      try {
+        await postPublishFollowup(loadedCmsContent.cmsType);
+      } catch (e) {
+        console.warn('Post-publish follow-up failed:', e);
+      }
     } catch (error) {
       console.error("Failed to update CMS content:", error);
       alert('Failed to update content.');
@@ -491,6 +497,11 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       }
       alert('New content pushed successfully as a draft!');
       setLoadedCmsContent(null);
+      try {
+        await postPublishFollowup(loadedCmsContent.cmsType);
+      } catch (e) {
+        console.warn('Post-publish follow-up failed:', e);
+      }
     } catch (error) {
       console.error("Failed to push new content:", error);
       alert('Failed to push new content.');
@@ -516,7 +527,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           autoGenerateSchema,
           projectId: selectedProjectId,
           pageUrl: (currentUrl || context?.url),
-          useInsertedSchema: true
+          useInsertedSchema
         });
       } else {
         result = await apiService.publishToShopify({ 
@@ -524,7 +535,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           autoGenerateSchema,
           projectId: selectedProjectId,
           pageUrl: (currentUrl || context?.url),
-          useInsertedSchema: true
+          useInsertedSchema
         });
       }
       const maybeUrl = result?.data?.url || result?.data?.permalink || result?.data?.product_url || result?.data?.admin_url;
@@ -535,6 +546,11 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         duration: 4000
       });
       try {
+        await postPublishFollowup(cmsType, maybeUrl);
+      } catch (e) {
+        console.warn('Post-publish follow-up failed:', e);
+      }
+      try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) await userDataService.saveLastCmsTarget(user.id, cmsType);
       } catch {}
@@ -543,6 +559,100 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       onToast?.({ type: 'error', title: 'Publish failed', message: e?.message || 'Failed to publish draft. Please check your integration.', duration: 7000 });
     } finally {
       setIsPushing(false);
+    }
+  };
+
+  // Post-publish validation and re-audit
+  const postPublishFollowup = async (cmsType: 'wordpress' | 'shopify', permalink?: string) => {
+    try {
+      const usedSchema = (useInsertedSchema && hasAppliedSchemaForContext)
+        ? 'inserted'
+        : (autoGenerateSchema ? 'generator' : 'none');
+
+      let schemaValid: boolean | null = null;
+      let issues: Array<{ path?: string; message: string }> = [];
+
+      if (usedSchema !== 'none') {
+        try {
+          if (useInsertedSchema && hasAppliedSchemaForContext && schemaJson?.trim()) {
+            const res = await apiService.validateSchema(schemaJson);
+            schemaValid = !!res.valid;
+            issues = Array.isArray(res.issues) ? res.issues : [];
+          } else if (autoGenerateSchema && selectedProjectId) {
+            const gen = await apiService.generateSchema(
+              selectedProjectId,
+              permalink || currentUrl || context?.url || '',
+              contentType,
+              content,
+              entitiesAccepted
+            );
+            const candidate = gen?.schema || gen?.markup || gen?.schemaMarkup || gen;
+            const jsonStr = typeof candidate === 'string' ? candidate : JSON.stringify(candidate);
+            const res = await apiService.validateSchema(jsonStr);
+            schemaValid = !!res.valid;
+            issues = Array.isArray(res.issues) ? res.issues : [];
+          }
+        } catch (e) {
+          console.warn('Schema validation after publish failed:', e);
+        }
+      }
+
+      // Re-audit
+      let afterScore: number | null = null;
+      let delta: number | null = null;
+      try {
+        if (selectedProjectId) {
+          const auditUrl = permalink || currentUrl || context?.url || 'https://example.com';
+          const res = await apiService.runAudit(selectedProjectId, auditUrl, content);
+          afterScore = res?.overallScore ?? null;
+          if (analysis?.overallScore != null && afterScore != null) {
+            delta = Math.round(afterScore - analysis.overallScore);
+          }
+        }
+      } catch (e) {
+        console.warn('Re-audit after publish failed:', e);
+      }
+
+      // Toast summary
+      const schemaMsg = usedSchema === 'none'
+        ? 'Schema: none'
+        : (schemaValid === true ? 'Schema: valid' : (schemaValid === false ? `Schema: invalid (${issues.length} issues)` : 'Schema: checked'));
+      const auditMsg = afterScore != null
+        ? `Visibility: ${afterScore}${delta != null && delta !== 0 ? (delta > 0 ? ` (▲${delta})` : ` (▼${Math.abs(delta)})`) : ''}`
+        : 'Visibility: checked';
+      onToast?.({
+        type: 'success',
+        title: `Post-publish checks (${cmsType})`,
+        message: `${schemaMsg} • ${auditMsg}`,
+        duration: 6000
+      });
+
+      // Track activity
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && selectedProjectId) {
+          await userDataService.trackActivity({
+            user_id: user.id,
+            activity_type: 'post_publish_validation',
+            tool_id: selectedProjectId,
+            website_url: permalink || currentUrl || context?.url,
+            created_at: new Date().toISOString(),
+            activity_data: {
+              cms_type: cmsType,
+              usedSchema,
+              schemaValid,
+              schemaIssueCount: issues.length,
+              afterScore,
+              delta,
+              permalink
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to track post-publish activity:', e);
+      }
+    } catch (e) {
+      console.warn('postPublishFollowup error:', e);
     }
   };
 
