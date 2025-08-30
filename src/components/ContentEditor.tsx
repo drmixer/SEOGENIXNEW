@@ -40,6 +40,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+  const [htmlContent, setHtmlContent] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'text' | 'html'>('text');
   const [targetKeywords, setTargetKeywords] = useState('');
   const [contentType, setContentType] = useState<'article' | 'product' | 'faq' | 'meta'>('article');
   const [analysis, setAnalysis] = useState<ContentAnalysis | null>(null);
@@ -62,6 +64,64 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [autoGenerateSchema, setAutoGenerateSchema] = useState(true);
   const [defaultPublishTarget, setDefaultPublishTarget] = useState<'wordpress' | 'shopify' | 'none'>('none');
   const [publishMenuOpen, setPublishMenuOpen] = useState(false);
+
+  // Convert fetched HTML into readable plain text for the editor
+  const htmlToPlainText = (html: string): string => {
+    try {
+      const container = document.createElement('div');
+      container.innerHTML = html;
+
+      // Remove non-content elements
+      container.querySelectorAll('script, style, noscript, svg, nav, footer, header, aside').forEach(el => el.remove());
+
+      // Prefer a main-like content wrapper if present
+      const root = (container.querySelector('main, article, [role="main"], #main, #content, .content') as HTMLElement) || container;
+
+      const lines: string[] = [];
+      const blocks = root.querySelectorAll('h1, h2, h3, p, li, blockquote, pre');
+      blocks.forEach((el) => {
+        const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        const tag = el.tagName.toLowerCase();
+        if (tag === 'li') {
+          lines.push(`- ${text}`);
+        } else if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
+          // Add a visual break before headings
+          if (lines.length && lines[lines.length - 1] !== '') lines.push('');
+          lines.push(text);
+          lines.push('');
+        } else if (tag === 'blockquote') {
+          lines.push(text);
+          lines.push('');
+        } else if (tag === 'pre') {
+          lines.push(text);
+          lines.push('');
+        } else {
+          lines.push(text);
+        }
+      });
+
+      // Fallback to body text if nothing was captured
+      let output = lines.join('\n').trim();
+      if (!output) {
+        output = container.textContent?.replace(/\s+/g, ' ').trim() || '';
+      }
+
+      // Collapse excessive blank lines
+      output = output.replace(/\n{3,}/g, '\n\n');
+
+      // Keep the content at a reasonable size
+      if (output.length > 20000) {
+        output = output.slice(0, 20000) + '\n\n…';
+      }
+      return output;
+    } catch {
+      // If parsing fails, just return a stripped string
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      return (tmp.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+  };
 
   // Fetch integrations on mount
   useEffect(() => {
@@ -112,12 +172,18 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         try {
           const result = await apiService.fetchUrlContent(context.url);
           if (result.content) {
-            // Basic title extraction
+            // Extract a sensible title and readable text content
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = result.content;
             const h1 = tempDiv.querySelector('h1');
-            setTitle(h1 ? h1.innerText : 'Untitled');
-            setContent(result.content);
+            setTitle(h1 ? h1.innerText.trim() : 'Untitled');
+            const plain = htmlToPlainText(result.content);
+            setContent(plain);
+            setHtmlContent(result.content);
+          } else {
+            setTitle('Untitled');
+            setContent('');
+            setHtmlContent(null);
           }
         } catch (error) {
           console.error("Failed to fetch URL content:", error);
@@ -544,7 +610,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 relative">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 relative">
             {isLoadingUrl && (
               <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-20">
                 <Loader className="w-8 h-8 text-purple-600 animate-spin" />
@@ -578,14 +644,71 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                     </>
                   )}
                 </div>
-                <div className="flex items-center space-x-2 text-sm text-gray-500">
-                  <span>{content.length} characters</span>
-                  {isAnalyzing && <div className="flex items-center space-x-1"><RefreshCw className="w-3 h-3 animate-spin" /><span>Analyzing...</span></div>}
+                <div className="flex items-center space-x-3">
+                  {/* View mode toggle */}
+                  <div className="inline-flex rounded-md overflow-hidden border border-gray-200 bg-white" role="tablist" aria-label="Editor view mode">
+                    <button
+                      role="tab"
+                      aria-selected={viewMode === 'text'}
+                      onClick={() => setViewMode('text')}
+                      className={`${viewMode === 'text' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} px-2.5 py-1 text-xs font-medium border-r border-gray-200`}
+                      title="Edit clean text (recommended)"
+                    >
+                      Text
+                    </button>
+                    <button
+                      role="tab"
+                      aria-selected={viewMode === 'html'}
+                      onClick={() => htmlContent && setViewMode('html')}
+                      disabled={!htmlContent}
+                      className={`${viewMode === 'html' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} px-2.5 py-1 text-xs font-medium ${htmlContent ? '' : 'opacity-50 cursor-not-allowed'}`}
+                      title={htmlContent ? 'Preview raw HTML (read-only)' : 'HTML preview unavailable'}
+                    >
+                      HTML
+                    </button>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm text-gray-500">
+                    <span>{content.length} characters</span>
+                    {isAnalyzing && <div className="flex items-center space-x-1"><RefreshCw className="w-3 h-3 animate-spin" /><span>Analyzing...</span></div>}
+                  </div>
                 </div>
               </div>
             </div>
             <div className="p-4 relative">
-              <textarea ref={textareaRef} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Start writing your content here..." rows={12} className="w-full border-0 resize-none focus:ring-0 focus:outline-none" />
+              {viewMode === 'html' && htmlContent ? (
+                <div>
+                  <div className="flex items-start justify-between mb-2">
+                    <p className="text-xs text-gray-600 mr-2">Read-only HTML preview. Switch to Text to edit.</p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(htmlContent || '');
+                          onToast?.({ type: 'success', title: 'HTML copied', message: 'Raw HTML copied to clipboard.', duration: 2500 });
+                        } catch (e: any) {
+                          onToast?.({ type: 'error', title: 'Copy failed', message: e?.message || 'Could not copy HTML.', duration: 4000 });
+                        }
+                      }}
+                      className="flex items-center space-x-1.5 text-xs font-medium text-gray-700 bg-gray-100 px-2.5 py-1.5 rounded-md hover:bg-gray-200"
+                      title="Copy raw HTML"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy HTML</span>
+                    </button>
+                  </div>
+                  <pre className="whitespace-pre-wrap text-xs bg-gray-50 border border-gray-200 rounded-md p-3 max-h-96 overflow-auto">
+                    {htmlContent}
+                  </pre>
+                </div>
+              ) : (
+                <textarea
+                  ref={textareaRef}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Start writing your content here..."
+                  rows={12}
+                  className="w-full border-0 resize-none focus:ring-0 focus:outline-none"
+                />
+              )}
             </div>
           </div>
 
