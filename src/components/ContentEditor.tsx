@@ -49,6 +49,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizedContent, setOptimizedContent] = useState('');
   const [showOptimized, setShowOptimized] = useState(false);
+  const [optimizedViewMode, setOptimizedViewMode] = useState<'optimized' | 'diff'>('optimized');
   const [realTimeSuggestions, setRealTimeSuggestions] = useState<RealTimeSuggestion[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<RealTimeSuggestion | null>(null);
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
@@ -121,6 +122,39 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       tmp.innerHTML = html;
       return (tmp.textContent || '').replace(/\s+/g, ' ').trim();
     }
+  };
+
+  // Strip simple markdown emphasis wrappers
+  const stripBasicMarkdownEmphasis = (text: string): string => {
+    try {
+      let out = text;
+      out = out.replace(/\*\*(.*?)\*\*/g, '$1');
+      out = out.replace(/\*(.*?)\*/g, '$1');
+      out = out.replace(/_(.*?)_/g, '$1');
+      return out;
+    } catch {
+      return text;
+    }
+  };
+
+  // Simple line-level diff for Original vs Optimized
+  const computeLineDiff = (
+    original: string,
+    optimized: string
+  ): { left: Array<{ text: string; changed: boolean }>; right: Array<{ text: string; changed: boolean }> } => {
+    const a = original.split(/\r?\n/);
+    const b = optimized.split(/\r?\n/);
+    const max = Math.max(a.length, b.length);
+    const left: Array<{ text: string; changed: boolean }> = [];
+    const right: Array<{ text: string; changed: boolean }> = [];
+    for (let i = 0; i < max; i++) {
+      const l = a[i] ?? '';
+      const r = b[i] ?? '';
+      const changed = l !== r;
+      left.push({ text: l, changed });
+      right.push({ text: r, changed });
+    }
+    return { left, right };
   };
 
   // Fetch integrations on mount
@@ -401,10 +435,12 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         return 'article';
       })();
       const result = await apiService.optimizeContent(selectedProjectId, content, keywords, optimizerType);
-      const optimized = result?.optimizedContent || result?.optimized_content || '';
+      const rawOptimized = result?.optimizedContent || result?.optimized_content || '';
+      const optimized = stripBasicMarkdownEmphasis(rawOptimized);
       if (optimized) {
         setOptimizedContent(optimized);
         setShowOptimized(true);
+        setOptimizedViewMode('optimized');
         onToast?.({ type: 'success', title: 'Optimization ready', message: 'Review and apply the optimized draft.', duration: 3500 });
       } else {
         onToast?.({ type: 'info', title: 'No changes suggested', message: 'The optimizer did not return a rewritten draft.', duration: 4000 });
@@ -425,6 +461,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     setContent(optimizedContent);
     setShowOptimized(false);
     setOptimizedContent('');
+    setOptimizedViewMode('optimized');
     onToast?.({ type: 'success', title: 'Applied optimized draft', message: 'Your editor content was replaced.', duration: 2500 });
   };
 
@@ -735,8 +772,24 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           {/* Optimized content preview panel */}
           {showOptimized && optimizedContent && (
             <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-medium text-gray-900">Optimized Draft</h4>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-3">
+                  <h4 className="font-medium text-gray-900">Optimized Draft</h4>
+                  <div className="inline-flex rounded-md overflow-hidden border border-gray-200 bg-white">
+                    <button
+                      className={`${optimizedViewMode === 'optimized' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} px-2.5 py-1 text-xs font-medium border-r border-gray-200`}
+                      onClick={() => setOptimizedViewMode('optimized')}
+                    >
+                      View Optimized
+                    </button>
+                    <button
+                      className={`${optimizedViewMode === 'diff' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} px-2.5 py-1 text-xs font-medium`}
+                      onClick={() => setOptimizedViewMode('diff')}
+                    >
+                      View Diff
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={useOptimizedContent}
@@ -748,6 +801,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                     onClick={() => {
                       setShowOptimized(false);
                       setOptimizedContent('');
+                      setOptimizedViewMode('optimized');
                     }}
                     className="px-3 py-1 border border-gray-300 text-sm rounded hover:bg-gray-50"
                   >
@@ -755,12 +809,38 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                   </button>
                 </div>
               </div>
-              <textarea
-                value={optimizedContent}
-                readOnly
-                className="w-full border border-gray-200 rounded p-3 text-sm bg-gray-50"
-                rows={10}
-              />
+              {optimizedViewMode === 'optimized' ? (
+                <textarea
+                  value={optimizedContent}
+                  readOnly
+                  className="w-full border border-gray-200 rounded p-3 text-sm bg-gray-50"
+                  rows={10}
+                />
+              ) : (
+                (() => {
+                  const { left, right } = computeLineDiff(content, optimizedContent);
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1">Original</div>
+                        <div className="border border-gray-200 rounded p-3 text-sm bg-gray-50 max-h-80 overflow-auto">
+                          {left.map((l, i) => (
+                            <div key={i} className={l.changed ? 'bg-red-50 line-through decoration-red-400' : ''}>{l.text || '\u00A0'}</div>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1">Optimized</div>
+                        <div className="border border-gray-200 rounded p-3 text-sm bg-gray-50 max-h-80 overflow-auto">
+                          {right.map((r, i) => (
+                            <div key={i} className={r.changed ? 'bg-green-50' : ''}>{r.text || '\u00A0'}</div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
             </div>
           )}
         </div>

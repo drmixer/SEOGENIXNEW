@@ -89,7 +89,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
               "Check if schema markup is still present and valid",
               "Verify that key content sections haven't been removed",
               "Run a new audit to confirm the drop",
-              "Use Content Optimizer to address identified issues"
+              "Open the Content Editor to address identified issues"
             ]
           });
         }
@@ -111,7 +111,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
             title: 'Subscore Anomaly Detected',
             message: `${problematicArea?.replace('_', ' ')} score dropped significantly by ${Math.abs(largestDrop)} points. This may indicate a specific technical issue.`,
             severity: 'high',
-            actionUrl: 'optimizer',
+            actionUrl: 'editor',
             actionLabel: 'Fix Content Issues',
             data: { problematicArea, change: largestDrop },
             createdAt: latest.created_at,

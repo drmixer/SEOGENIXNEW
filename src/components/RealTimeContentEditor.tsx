@@ -152,7 +152,7 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan,
     };
   };
 
-  // Debounce the analysis
+  // Debounce the analysis (more responsive ~400ms)
   useEffect(() => {
     if (analysisTimeoutRef.current) {
       clearTimeout(analysisTimeoutRef.current);
@@ -162,7 +162,7 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan,
       if (content.trim()) {
         analyzeContent(content);
       }
-    }, 1000);
+    }, 400);
 
     return () => {
       if (analysisTimeoutRef.current) {
@@ -280,8 +280,9 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan,
               />
               
               {/* Inline suggestions overlay */}
-              {metrics?.suggestions.map((suggestion, index) => (
-                suggestion.position.start > 0 && suggestion.position.end > 0 && (
+              {metrics?.suggestions
+                ?.filter((s) => s && s.position && Number.isFinite(s.position.start) && Number.isFinite(s.position.end) && s.position.start > 0 && s.position.end > 0)
+                .map((suggestion, index) => (
                   <div
                     key={index}
                     className="absolute pointer-events-none"
@@ -292,8 +293,7 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan,
                   >
                     <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
                   </div>
-                )
-              ))}
+                ))}
             </div>
           </div>
         </div>

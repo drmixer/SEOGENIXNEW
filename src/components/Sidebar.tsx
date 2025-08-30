@@ -52,7 +52,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'summaries', label: 'LLM Site Summaries', icon: Globe, available: isDevelopment || userPlan !== 'free' },
     { id: 'entities', label: 'Entity Coverage', icon: Users, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'generator', label: 'AI Content Generator', icon: Zap, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
-    { id: 'optimizer', label: 'Content Optimizer', icon: TrendingUp, available: isDevelopment || userPlan !== 'free' },
     { id: 'prompts', label: 'Prompt Suggestions', icon: Lightbulb, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'competitive', label: 'Competitive Analysis', icon: BarChart3, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'discovery', label: 'Competitor Discovery', icon: Radar, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
@@ -61,11 +60,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Highlight tools based on user goals
   const getHighlightedTools = () => {
     const toolMap: Record<string, string[]> = {
-      'increase_citations': ['citations', 'optimizer', 'generator'],
-      'improve_understanding': ['entities', 'summaries', 'optimizer'],
+      'increase_citations': ['citations', 'editor', 'generator'],
+      'improve_understanding': ['entities', 'summaries', 'editor'],
       'voice_search': ['voice', 'prompts', 'generator'],
       'competitive_edge': ['competitive', 'discovery', 'audit'],
-      'content_structure': ['schema', 'optimizer', 'audit']
+      'content_structure': ['schema', 'editor', 'audit']
     };
     
     // Collect all tools that should be highlighted based on user goals

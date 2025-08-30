@@ -332,13 +332,13 @@ const Dashboard: React.FC<DashboardProps> = ({
             id: 'low-score',
             type: 'urgent',
             title: 'Critical: Low AI Visibility Score',
-            description: `Your latest score is ${latestAudit.overall_score}/100. Use Content Optimizer to improve immediately.`,
-            action: 'Optimize Content',
-            actionUrl: 'optimizer',
+            description: `Your latest score is ${latestAudit.overall_score}/100. Use the Content Editor to improve immediately.`,
+            action: 'Open Content Editor',
+            actionUrl: 'editor',
             icon: AlertTriangle,
             color: 'from-red-500 to-red-600',
-            contextualTip: 'Scores below 60 indicate significant issues with AI comprehension. Content optimization can quickly improve your visibility and citation likelihood.',
-            learnMoreLink: 'https://docs.seogenix.com/optimization/content-optimizer'
+            contextualTip: 'Scores below 60 indicate significant issues with AI comprehension. Optimizing your content in the editor can quickly improve visibility and citation likelihood.',
+            learnMoreLink: 'https://docs.seogenix.com/tools/content-editor'
           });
         } else if (latestAudit.overall_score < 75) {
           insights.push({

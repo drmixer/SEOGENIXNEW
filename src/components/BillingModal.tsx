@@ -73,7 +73,7 @@ const BillingModal: React.FC<BillingModalProps> = ({ onClose, userPlan, onPlanCh
         'Everything in Free',
         'AI Visibility Subscores',
         'Schema Generator',
-        'AI Content Optimizer',
+        'AI Content Editor',
         'LLM Site Summaries',
         'Citation Tracker',
         'Voice Assistant Tester',
