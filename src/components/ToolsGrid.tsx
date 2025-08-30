@@ -621,20 +621,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       });
     };
 
-    // Content optimization/editor
-    if (
-      action.includes('content-optimizer') ||
-      action.includes('content') ||
-      text.includes('optimiz') ||
-      text.includes('readability') ||
-      text.includes('structure') ||
-      text.includes('heading') ||
-      text.includes('meta')
-    ) {
-      open('editor', { url: selectedWebsite, hint: recommendation?.title });
-      return;
-    }
-
     // Schema / Structured Data
     if (
       action.includes('schema') ||
@@ -643,6 +629,20 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       text.includes('json-ld')
     ) {
       open('schema', { contentType: 'Article' });
+      return;
+    }
+
+    // Content optimization/editor (run after schema so we don't hijack schema recs mentioning meta)
+    if (
+      action.includes('content-optimizer') ||
+      action.includes('content') ||
+      text.includes('optimiz') ||
+      text.includes('readability') ||
+      text.includes('structure') ||
+      text.includes('heading') ||
+      (text.includes('meta') && !text.includes('schema'))
+    ) {
+      open('editor', { url: selectedWebsite, hint: recommendation?.title });
       return;
     }
 
