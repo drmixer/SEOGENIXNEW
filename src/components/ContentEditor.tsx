@@ -63,6 +63,64 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [defaultPublishTarget, setDefaultPublishTarget] = useState<'wordpress' | 'shopify' | 'none'>('none');
   const [publishMenuOpen, setPublishMenuOpen] = useState(false);
 
+  // Convert fetched HTML into readable plain text for the editor
+  const htmlToPlainText = (html: string): string => {
+    try {
+      const container = document.createElement('div');
+      container.innerHTML = html;
+
+      // Remove non-content elements
+      container.querySelectorAll('script, style, noscript, svg, nav, footer, header, aside').forEach(el => el.remove());
+
+      // Prefer a main-like content wrapper if present
+      const root = (container.querySelector('main, article, [role="main"], #main, #content, .content') as HTMLElement) || container;
+
+      const lines: string[] = [];
+      const blocks = root.querySelectorAll('h1, h2, h3, p, li, blockquote, pre');
+      blocks.forEach((el) => {
+        const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        const tag = el.tagName.toLowerCase();
+        if (tag === 'li') {
+          lines.push(`- ${text}`);
+        } else if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
+          // Add a visual break before headings
+          if (lines.length && lines[lines.length - 1] !== '') lines.push('');
+          lines.push(text);
+          lines.push('');
+        } else if (tag === 'blockquote') {
+          lines.push(text);
+          lines.push('');
+        } else if (tag === 'pre') {
+          lines.push(text);
+          lines.push('');
+        } else {
+          lines.push(text);
+        }
+      });
+
+      // Fallback to body text if nothing was captured
+      let output = lines.join('\n').trim();
+      if (!output) {
+        output = container.textContent?.replace(/\s+/g, ' ').trim() || '';
+      }
+
+      // Collapse excessive blank lines
+      output = output.replace(/\n{3,}/g, '\n\n');
+
+      // Keep the content at a reasonable size
+      if (output.length > 20000) {
+        output = output.slice(0, 20000) + '\n\n…';
+      }
+      return output;
+    } catch {
+      // If parsing fails, just return a stripped string
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      return (tmp.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+  };
+
   // Fetch integrations on mount
   useEffect(() => {
     const fetchIntegrations = async () => {
@@ -112,12 +170,16 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         try {
           const result = await apiService.fetchUrlContent(context.url);
           if (result.content) {
-            // Basic title extraction
+            // Extract a sensible title and readable text content
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = result.content;
             const h1 = tempDiv.querySelector('h1');
-            setTitle(h1 ? h1.innerText : 'Untitled');
-            setContent(result.content);
+            setTitle(h1 ? h1.innerText.trim() : 'Untitled');
+            const plain = htmlToPlainText(result.content);
+            setContent(plain);
+          } else {
+            setTitle('Untitled');
+            setContent('');
           }
         } catch (error) {
           console.error("Failed to fetch URL content:", error);
