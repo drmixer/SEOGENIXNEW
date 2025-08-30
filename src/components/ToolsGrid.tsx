@@ -1118,6 +1118,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 onGenerateWithEntities={handleGenerateWithEntities}
                 onCreateContentFromCitation={handleCreateContentFromCitation}
                 onSwitchTool={onSwitchTool}
+                userProfile={userProfile}
+                selectedWebsite={selectedWebsite}
               />
               
               <div className="mt-6">
@@ -1206,14 +1208,30 @@ const ToolResultsDisplay: React.FC<{
   onGenerateWithEntities: (entitiesToInclude: string[]) => void;
   onCreateContentFromCitation: (citation: any) => void;
   onSwitchTool: (toolId: string, context: any) => void;
-}> = ({ toolId, data, onFixItClick, onGenerateWithEntities, onCreateContentFromCitation, onSwitchTool }) => {
+  userProfile?: any;
+  selectedWebsite?: string;
+}> = ({ toolId, data, onFixItClick, onGenerateWithEntities, onCreateContentFromCitation, onSwitchTool, userProfile, selectedWebsite }) => {
   
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
 
-  // Lightweight state for a simple Fixes Playlist walkthrough
+  // Lightweight state for a simple Fixes Playlist walkthrough (persisted per website)
   const [playlistIndex, setPlaylistIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    const loadProgress = async () => {
+      if (toolId !== 'audit' || !userProfile?.user_id || !selectedWebsite) return;
+      try {
+        const prog = await userDataService.getFixesPlaylistProgress(userProfile.user_id, selectedWebsite);
+        if (prog && typeof prog.index === 'number' && data?.recommendations?.length) {
+          const bounded = Math.min(Math.max(0, prog.index), data.recommendations.length - 1);
+          setPlaylistIndex(bounded);
+        }
+      } catch {}
+    };
+    loadProgress();
+  }, [toolId, userProfile?.user_id, selectedWebsite, data?.recommendations?.length]);
 
   switch (toolId) {
     case 'audit':
@@ -1278,20 +1296,55 @@ const ToolResultsDisplay: React.FC<{
                     </div>
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => setPlaylistIndex(Math.max(0, playlistIndex - 1))}
+                        onClick={async () => {
+                          const nextIndex = Math.max(0, playlistIndex - 1);
+                          setPlaylistIndex(nextIndex);
+                          if (userProfile?.user_id && selectedWebsite) {
+                            await userDataService.saveFixesPlaylistProgress({
+                              userId: userProfile.user_id,
+                              websiteUrl: selectedWebsite,
+                              index: nextIndex,
+                              total: data.recommendations.length,
+                              note: 'prev'
+                            });
+                          }
+                        }}
                         className="px-3 py-1 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
                         disabled={playlistIndex === 0}
                       >
                         Previous
                       </button>
                       <button
-                        onClick={() => onFixItClick(data.recommendations[playlistIndex])}
+                        onClick={async () => {
+                          if (userProfile?.user_id && selectedWebsite) {
+                            await userDataService.saveFixesPlaylistProgress({
+                              userId: userProfile.user_id,
+                              websiteUrl: selectedWebsite,
+                              index: playlistIndex,
+                              total: data.recommendations.length,
+                              note: 'do-it-now'
+                            });
+                          }
+                          onFixItClick(data.recommendations[playlistIndex]);
+                        }}
                         className="px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700"
                       >
                         Do it now
                       </button>
                       <button
-                        onClick={() => setPlaylistIndex(Math.min(data.recommendations.length - 1, playlistIndex + 1))}
+                        onClick={async () => {
+                          const nextIndex = Math.min(data.recommendations.length - 1, playlistIndex + 1);
+                          setPlaylistIndex(nextIndex);
+                          if (userProfile?.user_id && selectedWebsite) {
+                            await userDataService.saveFixesPlaylistProgress({
+                              userId: userProfile.user_id,
+                              websiteUrl: selectedWebsite,
+                              index: nextIndex,
+                              total: data.recommendations.length,
+                              note: 'next'
+                            });
+                          }
+                        }}
                         className="px-3 py-1 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
                         disabled={playlistIndex >= data.recommendations.length - 1}
                       >

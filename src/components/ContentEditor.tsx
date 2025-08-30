@@ -206,6 +206,28 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
     }
   };
 
+  // Quick publish without loading an existing CMS item
+  const handleQuickPublish = async (cmsType: 'wordpress' | 'shopify') => {
+    if (!title.trim() || !content.trim()) {
+      alert('Please add a title and content before publishing.');
+      return;
+    }
+    setIsPushing(true);
+    try {
+      if (cmsType === 'wordpress') {
+        await apiService.publishToWordPress({ title, content, status: 'draft', autoGenerateSchema });
+      } else {
+        await apiService.publishToShopify({ product: { title, body_html: content }, autoGenerateSchema });
+      }
+      alert(`Published draft to ${cmsType === 'wordpress' ? 'WordPress' : 'Shopify'}!`);
+    } catch (e) {
+      console.error('Quick publish failed:', e);
+      alert('Failed to publish draft. Please check your integration.');
+    } finally {
+      setIsPushing(false);
+    }
+  };
+
   // Other functions (calculateKeywordDensity, etc.) remain the same
   const calculateKeywordDensity = (text: string, keywords: string): Record<string, number> => {
     if (!keywords.trim()) return {};
@@ -340,6 +362,30 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
               <span>Load from {int.cms_type === 'wordpress' ? 'WordPress' : 'Shopify'}</span>
             </button>
           ))}
+          {connectedIntegrations.length > 0 && (
+            <div className="flex items-center space-x-2">
+              {connectedIntegrations.some(ci => ci.cms_type === 'wordpress') && (
+                <button
+                  onClick={() => handleQuickPublish('wordpress')}
+                  disabled={isPushing || !content.trim()}
+                  className="bg-blue-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2"
+                >
+                  {isPushing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                  <span>Publish to WordPress</span>
+                </button>
+              )}
+              {connectedIntegrations.some(ci => ci.cms_type === 'shopify') && (
+                <button
+                  onClick={() => handleQuickPublish('shopify')}
+                  disabled={isPushing || !content.trim()}
+                  className="bg-green-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2"
+                >
+                  {isPushing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                  <span>Publish to Shopify</span>
+                </button>
+              )}
+            </div>
+          )}
           <button
             onClick={optimizeContent}
             disabled={isOptimizing || !content.trim()}
