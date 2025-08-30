@@ -52,8 +52,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [optimizedViewMode, setOptimizedViewMode] = useState<'optimized' | 'diff'>('optimized');
   const [diffGranularity, setDiffGranularity] = useState<'line' | 'word'>('line');
   const [realTimeSuggestions, setRealTimeSuggestions] = useState<RealTimeSuggestion[]>([]);
-  // URL loading state for direct Editor access
-  const [urlInput, setUrlInput] = useState<string>(context?.url || '');
+  // URL resolved from Fix It context or selected project
   const [currentUrl, setCurrentUrl] = useState<string | undefined>(context?.url);
   const [selectedSuggestion, setSelectedSuggestion] = useState<RealTimeSuggestion | null>(null);
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
@@ -293,6 +292,48 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     }
   }, [context]);
 
+  // If no specific page URL provided, resolve the website URL from the selected project
+  useEffect(() => {
+    const loadFromSelectedProject = async () => {
+      if (context?.url || context?.content) return; // already handled
+      if (!selectedProjectId || currentUrl) return; // need a project and avoid duplicate loads
+      try {
+        setIsLoadingUrl(true);
+        const { data, error } = await supabase
+          .from('projects')
+          .select('url')
+          .eq('id', selectedProjectId)
+          .single();
+        if (error) throw error;
+        const siteUrl: string | undefined = data?.url;
+        if (!siteUrl) return;
+        setCurrentUrl(siteUrl);
+        setLoadedCmsContent(null);
+        // Fetch homepage content via standard fetcher
+        const result = await apiService.fetchUrlContent(siteUrl);
+        if (result.content) {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = result.content;
+          const h1 = tempDiv.querySelector('h1');
+          setTitle(h1 ? h1.innerText.trim() : 'Untitled');
+          const plain = htmlToPlainText(result.content);
+          setContent(plain);
+          setHtmlContent(result.content);
+        } else {
+          setTitle('Untitled');
+          setContent('');
+          setHtmlContent(null);
+        }
+      } catch (e: any) {
+        console.error('Failed to load site content from selected project:', e);
+        onToast?.({ type: 'info', title: 'Editor Ready', message: 'Start by pasting content or load from CMS.', duration: 4000 });
+      } finally {
+        setIsLoadingUrl(false);
+      }
+    };
+    loadFromSelectedProject();
+  }, [selectedProjectId, context?.url, context?.content, currentUrl]);
+
   // Debounced analysis
   const analyzeContent = useCallback(async () => {
     if (!content.trim() || content.length < 50) {
@@ -313,7 +354,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       // Best-effort analysis summary without blocking if audit fails
       try {
         if (selectedProjectId) {
-          const auditResult = await apiService.runAudit(selectedProjectId, context?.url || 'https://example.com', content);
+          const auditUrl = currentUrl || context?.url || 'https://example.com';
+          const auditResult = await apiService.runAudit(selectedProjectId, auditUrl, content);
           const contentAnalysis: ContentAnalysis = {
             overallScore: auditResult.overallScore,
             subscores: auditResult.subscores,
@@ -772,73 +814,6 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                   )}
                 </div>
                 <div className="flex items-center space-x-3">
-                  {/* Load by URL (always available) */}
-                  <div className="hidden md:flex items-center space-x-2">
-                    <input
-                      type="url"
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      placeholder="https://example.com/page"
-                      className="w-64 border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                    <button
-                      className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
-                      onClick={async () => {
-                        if (!urlInput.trim()) return;
-                        try {
-                          setIsLoadingUrl(true);
-                          setLoadedCmsContent(null);
-                          const result = await apiService.fetchUrlContent(urlInput.trim());
-                          if (result.content) {
-                            const tempDiv = document.createElement('div');
-                            tempDiv.innerHTML = result.content;
-                            const h1 = tempDiv.querySelector('h1');
-                            setTitle(h1 ? h1.innerText.trim() : 'Untitled');
-                            const plain = htmlToPlainText(result.content);
-                            setContent(plain);
-                            setHtmlContent(result.content);
-                            setCurrentUrl(urlInput.trim());
-                            onToast?.({ type: 'success', title: 'Loaded page content', message: 'Converted HTML to clean text.', duration: 2500 });
-                          } else {
-                            onToast?.({ type: 'warning', title: 'No content found', message: 'Try prerender or paste content.', duration: 3000 });
-                          }
-                        } catch (e: any) {
-                          onToast?.({ type: 'error', title: 'URL fetch failed', message: e?.message || 'Try prerender or paste content.', duration: 4000 });
-                        } finally {
-                          setIsLoadingUrl(false);
-                        }
-                      }}
-                      title="Fetch via standard URL fetcher"
-                    >
-                      Fetch
-                    </button>
-                    <button
-                      className="px-2 py-1 text-xs font-medium bg-amber-600 text-white rounded hover:bg-amber-700"
-                      onClick={async () => {
-                        if (!urlInput.trim()) return;
-                        try {
-                          setIsLoadingUrl(true);
-                          const res = await apiService.fetchUrlContentPrerender(urlInput.trim());
-                          const prerendered = (res?.content || '').toString();
-                          if (prerendered.trim().length > 0) {
-                            setContent(prerendered);
-                            setHtmlContent(null);
-                            setCurrentUrl(urlInput.trim());
-                            onToast?.({ type: 'success', title: 'Loaded prerendered text', message: 'Great for JS-heavy pages.', duration: 3000 });
-                          } else {
-                            onToast?.({ type: 'warning', title: 'No text returned', message: 'Prerender returned empty content.', duration: 3000 });
-                          }
-                        } catch (e: any) {
-                          onToast?.({ type: 'error', title: 'Prerender fetch failed', message: e?.message || 'Paste content instead.', duration: 4000 });
-                        } finally {
-                          setIsLoadingUrl(false);
-                        }
-                      }}
-                      title="Fetch prerendered plain text"
-                    >
-                      Prerender
-                    </button>
-                  </div>
                   {/* View mode toggle */}
                   <div className="inline-flex rounded-md overflow-hidden border border-gray-200 bg-white" role="tablist" aria-label="Editor view mode">
                     <button
