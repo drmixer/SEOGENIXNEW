@@ -79,7 +79,7 @@ export const wordpressService = async (req, supabase)=>{
     let integration;
 
     // Helper: prefer user-inserted schema draft, fallback to null
-    async function getAppliedSchemaImplementation(projectId?: string, pageUrlHint?: string): Promise<string | null> {
+    async function getAppliedSchemaImplementation(projectId?: string, pageUrlHint?: string, cmsItemId?: string | number): Promise<string | null> {
       try {
         if (!projectId) return null;
         let query = supabase
@@ -98,7 +98,10 @@ export const wordpressService = async (req, supabase)=>{
           console.warn('Failed to fetch schema draft:', error.message);
           return null;
         }
-        const picked = (data || []).find(r => r?.activity_data?.applied && r?.activity_data?.schema);
+        const rows = data || [];
+        const picked = (cmsItemId != null)
+          ? rows.find(r => r?.activity_data?.applied && r?.activity_data?.schema && r?.activity_data?.cms_item_id == cmsItemId)
+          : rows.find(r => r?.activity_data?.applied && r?.activity_data?.schema);
         if (!picked) return null;
         const schemaObj = picked.activity_data.schema;
         const json = typeof schemaObj === 'string' ? schemaObj : JSON.stringify(schemaObj, null, 2);
@@ -291,7 +294,7 @@ export const wordpressService = async (req, supabase)=>{
         const incomingTitle = (typeof content === 'object' && content?.title) ? content.title : (title || undefined);
         let finalUpdateContent = (typeof content === 'object' && typeof content?.content === 'string') ? content.content : (typeof content === 'string' ? content : '');
         // Prefer inserted schema draft if available; else generate when allowed
-        const appliedImpl = (useInsertedSchema !== false) ? await getAppliedSchemaImplementation(projectId, pageUrl) : null;
+        const appliedImpl = (useInsertedSchema !== false) ? await getAppliedSchemaImplementation(projectId, pageUrl, postId) : null;
         if (appliedImpl) {
           finalUpdateContent += `\n\n${appliedImpl}`;
         } else if (autoGenerateSchema && typeof finalUpdateContent === 'string') {

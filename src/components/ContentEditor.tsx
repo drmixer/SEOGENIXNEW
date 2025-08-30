@@ -75,6 +75,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [schemaValid, setSchemaValid] = useState<boolean | null>(null);
   const [schemaIssues, setSchemaIssues] = useState<Array<{ path?: string; message: string }>>([]);
   const [schemaApplied, setSchemaApplied] = useState<boolean>(false);
+  const [hasAppliedSchemaForContext, setHasAppliedSchemaForContext] = useState<boolean>(false);
+  const [useInsertedSchema, setUseInsertedSchema] = useState<boolean>(true);
 
   // CMS Integration State
   const [connectedIntegrations, setConnectedIntegrations] = useState<Integration[]>([]);
@@ -451,7 +453,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           autoGenerateSchema: autoGenerateSchema, 
           projectId: selectedProjectId,
           pageUrl: (currentUrl || context?.url),
-          useInsertedSchema: true
+          useInsertedSchema
         }
       );
       alert('Content updated successfully!');
@@ -476,7 +478,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           autoGenerateSchema,
           projectId: selectedProjectId,
           pageUrl: (currentUrl || context?.url),
-          useInsertedSchema: true
+          useInsertedSchema
         });
       } else {
         await apiService.publishToShopify({
@@ -484,7 +486,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           autoGenerateSchema,
           projectId: selectedProjectId,
           pageUrl: (currentUrl || context?.url),
-          useInsertedSchema: true
+          useInsertedSchema
         });
       }
       alert('New content pushed successfully as a draft!');
@@ -648,13 +650,21 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           setEntitiesMissing(Array.isArray(draft.missing) ? draft.missing as any : []);
           setEntitiesAccepted(Array.isArray(draft.accepted) ? draft.accepted : []);
         }
-        const schemaDraft = await userDataService.getSchemaDraft(user.id, selectedProjectId, (currentUrl || context?.url)!);
+        const schemaDraft = await userDataService.getSchemaDraft(
+          user.id,
+          selectedProjectId,
+          (currentUrl || context?.url)!,
+          loadedCmsContent ? { cms_type: loadedCmsContent.cmsType, cms_item_id: loadedCmsContent.id } : undefined
+        );
         if (schemaDraft?.schema) {
           const jsonStr = typeof schemaDraft.schema === 'string' ? schemaDraft.schema : JSON.stringify(schemaDraft.schema, null, 2);
           setSchemaJson(jsonStr);
           setSchemaValid(typeof schemaDraft.valid === 'boolean' ? schemaDraft.valid : null);
           setSchemaIssues(Array.isArray(schemaDraft.issues) ? schemaDraft.issues : []);
           setSchemaApplied(!!schemaDraft.applied);
+          setHasAppliedSchemaForContext(!!schemaDraft.applied);
+        } else {
+          setHasAppliedSchemaForContext(false);
         }
       } catch (e) {
         console.warn('Failed to load entities draft:', e);
@@ -718,7 +728,11 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
             userId: user.id,
             projectId: selectedProjectId,
             websiteUrl: (currentUrl || context?.url)!,
-            draft: { schema: typeof schemaObj === 'string' ? JSON.parse(schemaObj) : schemaObj }
+            draft: {
+              schema: typeof schemaObj === 'string' ? JSON.parse(schemaObj) : schemaObj,
+              cms_type: loadedCmsContent?.cmsType,
+              cms_item_id: loadedCmsContent?.id
+            }
           });
         }
       } catch {}
@@ -740,7 +754,13 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
             userId: user.id,
             projectId: selectedProjectId,
             websiteUrl: (currentUrl || context?.url)!,
-            draft: { schema: JSON.parse(schemaJson), valid: !!res.valid, issues: res.issues || [] }
+            draft: {
+              schema: JSON.parse(schemaJson),
+              valid: !!res.valid,
+              issues: res.issues || [],
+              cms_type: loadedCmsContent?.cmsType,
+              cms_item_id: loadedCmsContent?.id
+            }
           });
         }
       } catch {}
@@ -759,8 +779,16 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           userId: user.id,
           projectId: selectedProjectId,
           websiteUrl: (currentUrl || context?.url)!,
-          draft: { applied: true, schema: JSON.parse(schemaJson), valid: schemaValid ?? undefined, issues: schemaIssues }
+          draft: {
+            applied: true,
+            schema: JSON.parse(schemaJson),
+            valid: schemaValid ?? undefined,
+            issues: schemaIssues,
+            cms_type: loadedCmsContent?.cmsType,
+            cms_item_id: loadedCmsContent?.id
+          }
         });
+        setHasAppliedSchemaForContext(true);
       }
     } catch {}
   };
@@ -931,6 +959,39 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
             }
             return null;
           })()}
+          {/* Schema application status + quick actions */}
+          <div className="hidden md:flex items-center space-x-2 text-xs text-gray-700">
+            <span
+              className={`px-2 py-1 rounded border ${
+                (useInsertedSchema && hasAppliedSchemaForContext)
+                  ? 'bg-green-50 border-green-200 text-green-700'
+                  : (autoGenerateSchema ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600')
+              }`}
+            >
+              Applied schema: {(useInsertedSchema && hasAppliedSchemaForContext) ? 'Inserted' : (autoGenerateSchema ? 'Auto-generate' : 'None')}
+            </span>
+            <button
+              onClick={() => setShowSchemaPanel(true)}
+              className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+              title="View or edit schema draft"
+            >View</button>
+            <button
+              onClick={() => {
+                const next = !useInsertedSchema;
+                setUseInsertedSchema(next);
+                onToast?.({
+                  type: 'success',
+                  title: 'Schema preference',
+                  message: next ? 'Will prefer inserted schema if available.' : 'Will use generator when publishing.',
+                  duration: 2500
+                });
+              }}
+              className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+              title="Toggle between using inserted schema and generator"
+            >
+              {useInsertedSchema ? 'Switch to generator' : 'Switch to inserted'}
+            </button>
+          </div>
           <button
             onClick={optimizeContent}
             disabled={isOptimizing || !content.trim()}

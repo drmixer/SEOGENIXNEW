@@ -239,7 +239,7 @@ export const userDataService = {
   },
 
   // Schema draft persistence using user_activity
-  async saveSchemaDraft(params: { userId: string; projectId: string; websiteUrl: string; draft: { schema?: any; valid?: boolean; issues?: Array<{ path?: string; message: string }>; applied?: boolean } }): Promise<void> {
+  async saveSchemaDraft(params: { userId: string; projectId: string; websiteUrl: string; draft: { schema?: any; valid?: boolean; issues?: Array<{ path?: string; message: string }>; applied?: boolean; cms_type?: 'wordpress' | 'shopify'; cms_item_id?: string | number } }): Promise<void> {
     const { userId, projectId, websiteUrl, draft } = params;
     if (!userId || !projectId || !websiteUrl) {
       console.error('saveSchemaDraft called with missing identifiers');
@@ -259,7 +259,12 @@ export const userDataService = {
     }
   },
 
-  async getSchemaDraft(userId: string, projectId: string, websiteUrl: string): Promise<{ schema?: any; valid?: boolean; issues?: Array<{ path?: string; message: string }>; applied?: boolean; updatedAt?: string } | null> {
+  async getSchemaDraft(
+    userId: string,
+    projectId: string,
+    websiteUrl: string,
+    opts?: { cms_type?: 'wordpress' | 'shopify'; cms_item_id?: string | number }
+  ): Promise<{ schema?: any; valid?: boolean; issues?: Array<{ path?: string; message: string }>; applied?: boolean; updatedAt?: string; cms_type?: 'wordpress' | 'shopify'; cms_item_id?: string | number } | null> {
     if (!userId || !projectId || !websiteUrl) {
       console.error('getSchemaDraft called with missing identifiers');
       return null;
@@ -267,18 +272,24 @@ export const userDataService = {
     try {
       const { data, error } = await supabase
         .from('user_activity')
-        .select('activity_data, created_at')
+        .select('activity_data, website_url, created_at')
         .eq('user_id', userId)
         .eq('activity_type', 'schema_draft')
-        .eq('website_url', websiteUrl)
         .eq('tool_id', projectId)
         .order('created_at', { ascending: false })
-        .limit(1);
+        .limit(20);
       if (error) throw error;
-      if (data && data.length > 0) {
-        return data[0].activity_data || null;
-      }
-      return null;
+      const rows = data || [];
+      // Prefer exact CMS item match
+      const byItem = opts?.cms_item_id
+        ? rows.find(r => r?.activity_data?.cms_item_id == opts.cms_item_id && r?.activity_data?.applied && r?.activity_data?.schema)
+        : null;
+      if (byItem) return byItem.activity_data || null;
+      // Else prefer website URL match
+      const byUrl = rows.find(r => r?.website_url === websiteUrl && r?.activity_data?.applied && r?.activity_data?.schema);
+      if (byUrl) return byUrl.activity_data || null;
+      // Else return latest draft if any
+      return rows[0]?.activity_data || null;
     } catch (e) {
       console.warn('Failed to fetch schema draft:', e);
       return null;

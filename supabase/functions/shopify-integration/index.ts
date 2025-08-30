@@ -107,7 +107,7 @@ export const shopifyService = async (req, supabase)=>{
       shopifyHeaders['X-Shopify-Access-Token'] = integration.credentials.access_token;
     }
     // Helper: prefer user-inserted schema draft, fallback to null
-    async function getAppliedSchemaImplementation(projectId?: string, userId?: string, pageUrlHint?: string): Promise<string | null> {
+    async function getAppliedSchemaImplementation(projectId?: string, userId?: string, pageUrlHint?: string, cmsItemId?: string | number): Promise<string | null> {
       try {
         if (!projectId || !userId) return null;
         let query = supabase
@@ -124,7 +124,10 @@ export const shopifyService = async (req, supabase)=>{
           console.warn('Failed to fetch schema draft:', error.message);
           return null;
         }
-        const picked = (data || []).find(r => r?.activity_data?.applied && r?.activity_data?.schema);
+        const rows = data || [];
+        const picked = (cmsItemId != null)
+          ? rows.find(r => r?.activity_data?.applied && r?.activity_data?.schema && r?.activity_data?.cms_item_id == cmsItemId)
+          : rows.find(r => r?.activity_data?.applied && r?.activity_data?.schema);
         if (!picked) return null;
         const schemaObj = picked.activity_data.schema;
         const json = typeof schemaObj === 'string' ? schemaObj : JSON.stringify(schemaObj, null, 2);
@@ -255,7 +258,7 @@ export const shopifyService = async (req, supabase)=>{
         let incomingBody = content?.product?.body_html ?? content?.body_html ?? '';
         if (typeof incomingBody !== 'string') incomingBody = '';
         // Prefer inserted schema, else generate when allowed
-        const appliedImpl = (useInsertedSchema !== false) ? await getAppliedSchemaImplementation(projectId, user.id, pageUrl) : null;
+        const appliedImpl = (useInsertedSchema !== false) ? await getAppliedSchemaImplementation(projectId, user.id, pageUrl, productId) : null;
         if (appliedImpl) {
           incomingBody += `\n\n${appliedImpl}`;
         } else if (autoGenerateSchema && incomingBody) {
