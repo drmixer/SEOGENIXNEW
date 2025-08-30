@@ -7,6 +7,7 @@ import ToolModal from './ToolModal';
 import HistoricalPerformance from './HistoricalPerformance';
 import ReportGenerator from './ReportGenerator';
 import ContentEditor from './ContentEditor';
+import RealTimeContentEditor from './RealTimeContentEditor';
 import CompetitiveVisualization from './CompetitiveVisualization';
 import CMSIntegrations from './CMSIntegrations';
 import OptimizationPlaybooks from './OptimizationPlaybooks';
@@ -204,6 +205,14 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [goalProgress, setGoalProgress] = useState<Record<string, number>>({});
   const [toolContext, setToolContext] = useState<any>(null);
   const [latestAuditScore, setLatestAuditScore] = useState(85); // Simulated score
+  // Editor mode: 'standard' or 'realtime' with persistence
+  const [editorMode, setEditorMode] = useState<'standard' | 'realtime'>(() => {
+    const saved = localStorage.getItem('seogenix_editor_mode');
+    return (saved === 'realtime' || saved === 'standard') ? saved : 'standard';
+  });
+  useEffect(() => {
+    localStorage.setItem('seogenix_editor_mode', editorMode);
+  }, [editorMode]);
   
   // Modal state for individual tools
   const [showToolModal, setShowToolModal] = useState(false);
@@ -653,8 +662,73 @@ const Dashboard: React.FC<DashboardProps> = ({
       case 'reports':
         return <ReportGenerator userPlan={effectivePlan} />;
       
-      case 'editor':
-        return <ContentEditor userPlan={effectivePlan} context={toolContext} onToast={addToast} />;
+      case 'editor': {
+        // Suggest Real-time banner if the current context recommendation is about readability/clarity/structure
+        const recText = String(
+          toolContext?.fromRecommendation?.title || ''
+        ) + ' ' + String(toolContext?.fromRecommendation?.description || '');
+        const lower = recText.toLowerCase();
+        const suggestRealtime = editorMode === 'standard' && (
+          lower.includes('readability') || lower.includes('clarity') || lower.includes('structure') || lower.includes('optimiz')
+        );
+
+        return (
+          <div className="space-y-4">
+            {/* Segmented control for editor modes */}
+            <div className="inline-flex rounded-lg overflow-hidden border border-gray-200 bg-white shadow-sm" role="tablist" aria-label="Editor mode selector">
+              <button
+                role="tab"
+                aria-selected={editorMode === 'standard'}
+                onClick={() => setEditorMode('standard')}
+                title="Standard Editor: compose and optimize with workflows"
+                className={`${editorMode === 'standard' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} px-4 py-2 text-sm font-medium border-r border-gray-200`}
+              >
+                Standard
+              </button>
+              <button
+                role="tab"
+                aria-selected={editorMode === 'realtime'}
+                onClick={() => setEditorMode('realtime')}
+                title="Real-time Editor: instant suggestions as you type"
+                className={`${editorMode === 'realtime' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} px-4 py-2 text-sm font-medium`}
+              >
+                Real-time
+              </button>
+            </div>
+
+            {/* Contextual banner suggesting Real-time mode */}
+            {suggestRealtime && (
+              <div className="flex items-start justify-between bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                <div>
+                  <div className="font-medium text-indigo-900">Try Real-time mode for readability and clarity</div>
+                  <div className="text-sm text-indigo-800">See instant suggestions for structure, clarity, and keyword usage while you write.</div>
+                </div>
+                <button
+                  onClick={() => setEditorMode('realtime')}
+                  className="ml-4 px-3 py-1 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
+                  title="Switch to Real-time Editor"
+                >
+                  Switch now
+                </button>
+              </div>
+            )}
+
+            {editorMode === 'standard' ? (
+              <ContentEditor
+                userPlan={effectivePlan}
+                context={toolContext}
+                onToast={addToast}
+                selectedProjectId={selectedProjectId || ''}
+              />
+            ) : (
+              <RealTimeContentEditor
+                userPlan={effectivePlan}
+                selectedProjectId={selectedProjectId || ''}
+              />
+            )}
+          </div>
+        );
+      }
       
       case 'competitive-viz':
         return <CompetitiveVisualization userPlan={effectivePlan} />;

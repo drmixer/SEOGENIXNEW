@@ -4,6 +4,7 @@ import { apiService } from '../services/api';
 
 interface RealTimeContentEditorProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
+  selectedProjectId?: string;
 }
 
 interface RealTimeSuggestion {
@@ -23,7 +24,7 @@ interface ContentMetrics {
   suggestions: RealTimeSuggestion[];
 }
 
-const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan }) => {
+const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan, selectedProjectId }) => {
   const [content, setContent] = useState('');
   const [targetKeywords, setTargetKeywords] = useState('AI, SEO, optimization');
   const [metrics, setMetrics] = useState<ContentMetrics | null>(null);
@@ -42,19 +43,27 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan 
     setIsAnalyzing(true);
     try {
       const keywords = targetKeywords.split(',').map(k => k.trim());
-      
-      // Use the real-time analysis API
-      const result = await apiService.analyzeContentRealTime(text, keywords);
+
+      // If no project is selected, skip API call and provide fallback
+      if (!selectedProjectId) {
+        const fallbackMetrics = generateFallbackMetrics(text, keywords);
+        setMetrics(fallbackMetrics);
+        return;
+      }
+
+      // Use the real-time analysis API with project context
+      const result = await apiService.analyzeContentRealTime(selectedProjectId, text, keywords);
       setMetrics(result);
     } catch (error) {
       console.error('Real-time analysis error:', error);
       // Generate fallback metrics
+      const keywords = targetKeywords.split(',').map(k => k.trim());
       const fallbackMetrics = generateFallbackMetrics(text, keywords);
       setMetrics(fallbackMetrics);
     } finally {
       setIsAnalyzing(false);
     }
-  }, [targetKeywords]);
+  }, [targetKeywords, selectedProjectId]);
 
   // Generate fallback metrics for demo
   const generateFallbackMetrics = (text: string, keywords: string[]): ContentMetrics => {
