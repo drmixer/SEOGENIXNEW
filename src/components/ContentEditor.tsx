@@ -52,6 +52,9 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [optimizedViewMode, setOptimizedViewMode] = useState<'optimized' | 'diff'>('optimized');
   const [diffGranularity, setDiffGranularity] = useState<'line' | 'word'>('line');
   const [realTimeSuggestions, setRealTimeSuggestions] = useState<RealTimeSuggestion[]>([]);
+  // URL loading state for direct Editor access
+  const [urlInput, setUrlInput] = useState<string>(context?.url || '');
+  const [currentUrl, setCurrentUrl] = useState<string | undefined>(context?.url);
   const [selectedSuggestion, setSelectedSuggestion] = useState<RealTimeSuggestion | null>(null);
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -254,6 +257,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     }
 
     if (context?.url) {
+      setCurrentUrl(context.url);
       const loadContentFromUrl = async () => {
         setIsLoadingUrl(true);
         setLoadedCmsContent(null); // Reset CMS context
@@ -725,6 +729,25 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-gray-900">Editor</h3>
                 <div className="flex items-center space-x-2">
+                  {/* Quick Load from CMS */}
+                  {connectedIntegrations.length > 0 && (
+                    <div className="hidden md:flex items-center space-x-1 mr-3">
+                      {connectedIntegrations.some(i => i.cms_type === 'wordpress') && (
+                        <button
+                          onClick={() => handleOpenCmsModal('wordpress')}
+                          className="px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100"
+                          title="Load content from WordPress"
+                        >Load WP</button>
+                      )}
+                      {connectedIntegrations.some(i => i.cms_type === 'shopify') && (
+                        <button
+                          onClick={() => handleOpenCmsModal('shopify')}
+                          className="px-2 py-1 text-xs font-medium bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100"
+                          title="Load content from Shopify"
+                        >Load Shopify</button>
+                      )}
+                    </div>
+                  )}
                   {loadedCmsContent && (
                     <>
                       <button onClick={handleUpdateCmsContent} disabled={isPushing || !content.trim()} className="flex items-center space-x-1.5 text-sm font-medium text-white bg-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
@@ -749,6 +772,73 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                   )}
                 </div>
                 <div className="flex items-center space-x-3">
+                  {/* Load by URL (always available) */}
+                  <div className="hidden md:flex items-center space-x-2">
+                    <input
+                      type="url"
+                      value={urlInput}
+                      onChange={(e) => setUrlInput(e.target.value)}
+                      placeholder="https://example.com/page"
+                      className="w-64 border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                    <button
+                      className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
+                      onClick={async () => {
+                        if (!urlInput.trim()) return;
+                        try {
+                          setIsLoadingUrl(true);
+                          setLoadedCmsContent(null);
+                          const result = await apiService.fetchUrlContent(urlInput.trim());
+                          if (result.content) {
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = result.content;
+                            const h1 = tempDiv.querySelector('h1');
+                            setTitle(h1 ? h1.innerText.trim() : 'Untitled');
+                            const plain = htmlToPlainText(result.content);
+                            setContent(plain);
+                            setHtmlContent(result.content);
+                            setCurrentUrl(urlInput.trim());
+                            onToast?.({ type: 'success', title: 'Loaded page content', message: 'Converted HTML to clean text.', duration: 2500 });
+                          } else {
+                            onToast?.({ type: 'warning', title: 'No content found', message: 'Try prerender or paste content.', duration: 3000 });
+                          }
+                        } catch (e: any) {
+                          onToast?.({ type: 'error', title: 'URL fetch failed', message: e?.message || 'Try prerender or paste content.', duration: 4000 });
+                        } finally {
+                          setIsLoadingUrl(false);
+                        }
+                      }}
+                      title="Fetch via standard URL fetcher"
+                    >
+                      Fetch
+                    </button>
+                    <button
+                      className="px-2 py-1 text-xs font-medium bg-amber-600 text-white rounded hover:bg-amber-700"
+                      onClick={async () => {
+                        if (!urlInput.trim()) return;
+                        try {
+                          setIsLoadingUrl(true);
+                          const res = await apiService.fetchUrlContentPrerender(urlInput.trim());
+                          const prerendered = (res?.content || '').toString();
+                          if (prerendered.trim().length > 0) {
+                            setContent(prerendered);
+                            setHtmlContent(null);
+                            setCurrentUrl(urlInput.trim());
+                            onToast?.({ type: 'success', title: 'Loaded prerendered text', message: 'Great for JS-heavy pages.', duration: 3000 });
+                          } else {
+                            onToast?.({ type: 'warning', title: 'No text returned', message: 'Prerender returned empty content.', duration: 3000 });
+                          }
+                        } catch (e: any) {
+                          onToast?.({ type: 'error', title: 'Prerender fetch failed', message: e?.message || 'Paste content instead.', duration: 4000 });
+                        } finally {
+                          setIsLoadingUrl(false);
+                        }
+                      }}
+                      title="Fetch prerendered plain text"
+                    >
+                      Prerender
+                    </button>
+                  </div>
                   {/* View mode toggle */}
                   <div className="inline-flex rounded-md overflow-hidden border border-gray-200 bg-white" role="tablist" aria-label="Editor view mode">
                     <button
@@ -816,14 +906,14 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
             </div>
 
             {/* If fetched text is likely from an SPA (very short), suggest pasting content */}
-            {context?.url && content.trim().length > 0 && content.trim().length < 300 && (
+            {(currentUrl || context?.url) && content.trim().length > 0 && content.trim().length < 300 && (
               <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 flex items-center justify-between">
                 <span>This page may be a JavaScript-powered site and returned limited text. Paste content or try a prerendered fetch.</span>
                 <button
                   onClick={async () => {
                     try {
                       setIsLoadingUrl(true);
-                      const res = await apiService.fetchUrlContentPrerender(context.url!);
+                      const res = await apiService.fetchUrlContentPrerender((currentUrl || context?.url)!);
                       const prerendered = (res?.content || '').toString();
                       if (prerendered.trim().length > 0) {
                         // Prerender service returns plain text; set directly

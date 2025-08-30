@@ -50,4 +50,5 @@
   import_map = "./functions/wordpress-integration/deno.json"
 
 [functions.prerender-fetch]
-  # No import map required for simple fetch-only function
+  # Allow unauthenticated browser calls
+  verify_jwt = false
