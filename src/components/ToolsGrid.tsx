@@ -117,6 +117,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         setGeneratorTopic(context.topic || `Responding to: "${context.citation.snippet}"`);
         setGeneratorKeywords(context.targetKeywords || '');
         setGeneratorContentType('faq'); // Default to FAQ for citation responses
+      } else {
+        if (context?.topic) setGeneratorTopic(context.topic);
+        if (context?.targetKeywords) setGeneratorKeywords(context.targetKeywords);
+        if (context?.contentType) setGeneratorContentType(context.contentType);
       }
     }
     if (activeToolId === 'competitive' && context?.competitors) {
@@ -603,9 +607,76 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   };
 
   const handleFixItClick = (recommendation: any) => {
-    if (recommendation.action_type === 'content-optimizer') {
-      onSwitchTool('editor', { url: selectedWebsite });
+    const lower = (s: any) => (typeof s === 'string' ? s.toLowerCase() : '');
+    const action = lower(recommendation?.action_type);
+    const title = lower(recommendation?.title);
+    const desc = lower(recommendation?.description);
+    const text = `${title} ${desc}`;
+
+    const open = (toolId: string, ctx: any = {}) => {
+      onSwitchTool(toolId, ctx);
+    };
+
+    // Content optimization/editor
+    if (
+      action.includes('content-optimizer') ||
+      action.includes('content') ||
+      text.includes('optimiz') ||
+      text.includes('readability') ||
+      text.includes('structure') ||
+      text.includes('heading') ||
+      text.includes('meta')
+    ) {
+      open('editor', { url: selectedWebsite, hint: recommendation?.title });
+      return;
     }
+
+    // Schema / Structured Data
+    if (
+      action.includes('schema') ||
+      text.includes('schema') ||
+      text.includes('structured data') ||
+      text.includes('json-ld')
+    ) {
+      open('schema', { contentType: 'Article' });
+      return;
+    }
+
+    // Entity Coverage
+    if (action.includes('entity') || text.includes('entity') || text.includes('entities') || text.includes('topic')) {
+      open('entities', {});
+      return;
+    }
+
+    // Citations / Mentions
+    if (action.includes('citation') || text.includes('citation') || text.includes('mention')) {
+      open('citations', {});
+      return;
+    }
+
+    // Voice / Conversational
+    if (action.includes('voice') || text.includes('voice') || text.includes('assistant') || text.includes('conversational')) {
+      open('voice', {});
+      return;
+    }
+
+    // Prompts
+    if (action.includes('prompt') || text.includes('prompt')) {
+      open('prompts', { topic: extractDomain(selectedWebsite || '') });
+      return;
+    }
+
+    // Content Generator (FAQs, snippets, etc.)
+    if (action.includes('generate') || text.includes('generate') || text.includes('faq') || text.includes('snippet')) {
+      open('generator', {
+        topic: recommendation?.title || `Content for ${extractDomain(selectedWebsite || '')}`,
+        targetKeywords: ''
+      });
+      return;
+    }
+
+    // Fallback: editor
+    open('editor', { url: selectedWebsite, hint: recommendation?.title });
   };
 
   const handleGenerateWithEntities = (entitiesToInclude: string[]) => {
@@ -1175,14 +1246,12 @@ const ToolResultsDisplay: React.FC<{
                         <p className="text-sm text-green-800 ml-6">{rec.description}</p>
                       )}
                     </div>
-                    {rec.action_type === 'content-optimizer' && (
-                      <button
-                        onClick={() => onFixItClick(rec)}
-                        className="ml-4 px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
-                      >
-                        Fix it
-                      </button>
-                    )}
+                    <button
+                      onClick={() => onFixItClick(rec)}
+                      className="ml-4 px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
+                    >
+                      Fix it
+                    </button>
                   </div>
                 ))}
               </div>
