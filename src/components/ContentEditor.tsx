@@ -52,6 +52,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [optimizedViewMode, setOptimizedViewMode] = useState<'optimized' | 'diff'>('optimized');
   const [diffGranularity, setDiffGranularity] = useState<'line' | 'word'>('line');
   const [realTimeSuggestions, setRealTimeSuggestions] = useState<RealTimeSuggestion[]>([]);
+  // URL resolved from Fix It context or selected project
+  const [currentUrl, setCurrentUrl] = useState<string | undefined>(context?.url);
   const [selectedSuggestion, setSelectedSuggestion] = useState<RealTimeSuggestion | null>(null);
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -254,6 +256,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     }
 
     if (context?.url) {
+      setCurrentUrl(context.url);
       const loadContentFromUrl = async () => {
         setIsLoadingUrl(true);
         setLoadedCmsContent(null); // Reset CMS context
@@ -289,6 +292,48 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     }
   }, [context]);
 
+  // If no specific page URL provided, resolve the website URL from the selected project
+  useEffect(() => {
+    const loadFromSelectedProject = async () => {
+      if (context?.url || context?.content) return; // already handled
+      if (!selectedProjectId || currentUrl) return; // need a project and avoid duplicate loads
+      try {
+        setIsLoadingUrl(true);
+        const { data, error } = await supabase
+          .from('projects')
+          .select('url')
+          .eq('id', selectedProjectId)
+          .single();
+        if (error) throw error;
+        const siteUrl: string | undefined = data?.url;
+        if (!siteUrl) return;
+        setCurrentUrl(siteUrl);
+        setLoadedCmsContent(null);
+        // Fetch homepage content via standard fetcher
+        const result = await apiService.fetchUrlContent(siteUrl);
+        if (result.content) {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = result.content;
+          const h1 = tempDiv.querySelector('h1');
+          setTitle(h1 ? h1.innerText.trim() : 'Untitled');
+          const plain = htmlToPlainText(result.content);
+          setContent(plain);
+          setHtmlContent(result.content);
+        } else {
+          setTitle('Untitled');
+          setContent('');
+          setHtmlContent(null);
+        }
+      } catch (e: any) {
+        console.error('Failed to load site content from selected project:', e);
+        onToast?.({ type: 'info', title: 'Editor Ready', message: 'Start by pasting content or load from CMS.', duration: 4000 });
+      } finally {
+        setIsLoadingUrl(false);
+      }
+    };
+    loadFromSelectedProject();
+  }, [selectedProjectId, context?.url, context?.content, currentUrl]);
+
   // Debounced analysis
   const analyzeContent = useCallback(async () => {
     if (!content.trim() || content.length < 50) {
@@ -309,7 +354,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       // Best-effort analysis summary without blocking if audit fails
       try {
         if (selectedProjectId) {
-          const auditResult = await apiService.runAudit(selectedProjectId, context?.url || 'https://example.com', content);
+          const auditUrl = currentUrl || context?.url || 'https://example.com';
+          const auditResult = await apiService.runAudit(selectedProjectId, auditUrl, content);
           const contentAnalysis: ContentAnalysis = {
             overallScore: auditResult.overallScore,
             subscores: auditResult.subscores,
@@ -725,6 +771,25 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-gray-900">Editor</h3>
                 <div className="flex items-center space-x-2">
+                  {/* Quick Load from CMS */}
+                  {connectedIntegrations.length > 0 && (
+                    <div className="hidden md:flex items-center space-x-1 mr-3">
+                      {connectedIntegrations.some(i => i.cms_type === 'wordpress') && (
+                        <button
+                          onClick={() => handleOpenCmsModal('wordpress')}
+                          className="px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100"
+                          title="Load content from WordPress"
+                        >Load WP</button>
+                      )}
+                      {connectedIntegrations.some(i => i.cms_type === 'shopify') && (
+                        <button
+                          onClick={() => handleOpenCmsModal('shopify')}
+                          className="px-2 py-1 text-xs font-medium bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100"
+                          title="Load content from Shopify"
+                        >Load Shopify</button>
+                      )}
+                    </div>
+                  )}
                   {loadedCmsContent && (
                     <>
                       <button onClick={handleUpdateCmsContent} disabled={isPushing || !content.trim()} className="flex items-center space-x-1.5 text-sm font-medium text-white bg-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
@@ -816,14 +881,14 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
             </div>
 
             {/* If fetched text is likely from an SPA (very short), suggest pasting content */}
-            {context?.url && content.trim().length > 0 && content.trim().length < 300 && (
+            {(currentUrl || context?.url) && content.trim().length > 0 && content.trim().length < 300 && (
               <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 flex items-center justify-between">
                 <span>This page may be a JavaScript-powered site and returned limited text. Paste content or try a prerendered fetch.</span>
                 <button
                   onClick={async () => {
                     try {
                       setIsLoadingUrl(true);
-                      const res = await apiService.fetchUrlContentPrerender(context.url!);
+                      const res = await apiService.fetchUrlContentPrerender((currentUrl || context?.url)!);
                       const prerendered = (res?.content || '').toString();
                       if (prerendered.trim().length > 0) {
                         // Prerender service returns plain text; set directly
