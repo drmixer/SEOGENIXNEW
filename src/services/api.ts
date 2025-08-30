@@ -706,6 +706,15 @@ export const apiService = {
     return result.data || result;
   },
 
+  async fetchUrlContentPrerender(url: string): Promise<{ content: string }> {
+    // Prerender/extracted text via edge function (no auth required)
+    const result = await apiCall(`${API_BASE_URL}/prerender-fetch`, {
+      method: 'POST',
+      body: JSON.stringify({ url })
+    }, false);
+    return result.data || result;
+  },
+
   async generateAdaptivePlaybook(userId: string, goal: string, focusArea: string) {
     const result = await apiCall(`${API_BASE_URL}/adaptive-playbook-generator`, {
       method: 'POST',

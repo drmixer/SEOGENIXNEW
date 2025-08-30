@@ -50,6 +50,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [optimizedContent, setOptimizedContent] = useState('');
   const [showOptimized, setShowOptimized] = useState(false);
   const [optimizedViewMode, setOptimizedViewMode] = useState<'optimized' | 'diff'>('optimized');
+  const [diffGranularity, setDiffGranularity] = useState<'line' | 'word'>('line');
   const [realTimeSuggestions, setRealTimeSuggestions] = useState<RealTimeSuggestion[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<RealTimeSuggestion | null>(null);
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
@@ -156,6 +157,59 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     }
     return { left, right };
   };
+
+  // Word-level diff for a single line using LCS
+  const computeWordDiffForLine = (aLine: string, bLine: string): {
+    left: Array<{ value: string; type: 'equal' | 'removed' }>
+    right: Array<{ value: string; type: 'equal' | 'added' }>
+  } => {
+    const a = aLine.split(/(\s+)/); // keep spaces as tokens to preserve spacing
+    const b = bLine.split(/(\s+)/);
+    const m = a.length, n = b.length;
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i--) {
+      for (let j = n - 1; j >= 0; j--) {
+        dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const left: Array<{ value: string; type: 'equal' | 'removed' }> = [];
+    const right: Array<{ value: string; type: 'equal' | 'added' }> = [];
+    let i = 0, j = 0;
+    while (i < m && j < n) {
+      if (a[i] === b[j]) {
+        left.push({ value: a[i], type: 'equal' });
+        right.push({ value: b[j], type: 'equal' });
+        i++; j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        left.push({ value: a[i], type: 'removed' });
+        i++;
+      } else {
+        right.push({ value: b[j], type: 'added' });
+        j++;
+      }
+    }
+    while (i < m) { left.push({ value: a[i++], type: 'removed' }); }
+    while (j < n) { right.push({ value: b[j++], type: 'added' }); }
+    return { left, right };
+  };
+
+  const renderWordDiffSpanLeft = (tokens: Array<{ value: string; type: 'equal' | 'removed' }>, keyPrefix: string) => (
+    <div>
+      {tokens.map((t, idx) => t.type === 'equal'
+        ? <span key={`${keyPrefix}-l-${idx}`}>{t.value}</span>
+        : <span key={`${keyPrefix}-l-${idx}`} className="bg-red-50 text-red-700 line-through decoration-red-400">{t.value}</span>
+      )}
+    </div>
+  );
+
+  const renderWordDiffSpanRight = (tokens: Array<{ value: string; type: 'equal' | 'added' }>, keyPrefix: string) => (
+    <div>
+      {tokens.map((t, idx) => t.type === 'equal'
+        ? <span key={`${keyPrefix}-r-${idx}`}>{t.value}</span>
+        : <span key={`${keyPrefix}-r-${idx}`} className="bg-green-100 text-green-800">{t.value}</span>
+      )}
+    </div>
+  );
 
   // Fetch integrations on mount
   useEffect(() => {
@@ -763,8 +817,31 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
 
             {/* If fetched text is likely from an SPA (very short), suggest pasting content */}
             {context?.url && content.trim().length > 0 && content.trim().length < 300 && (
-              <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-                This page may be a JavaScript-powered site and returned limited text. Paste the full content here or load from your CMS for better optimization.
+              <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 flex items-center justify-between">
+                <span>This page may be a JavaScript-powered site and returned limited text. Paste content or try a prerendered fetch.</span>
+                <button
+                  onClick={async () => {
+                    try {
+                      setIsLoadingUrl(true);
+                      const res = await apiService.fetchUrlContentPrerender(context.url!);
+                      const prerendered = (res?.content || '').toString();
+                      if (prerendered.trim().length > 0) {
+                        // Prerender service returns plain text; set directly
+                        setContent(prerendered);
+                        onToast?.({ type: 'success', title: 'Loaded prerendered text', message: 'Replaced with prerendered content for better editing.', duration: 3000 });
+                      } else {
+                        onToast?.({ type: 'warning', title: 'No text returned', message: 'Prerender service returned empty content.', duration: 3000 });
+                      }
+                    } catch (e: any) {
+                      onToast?.({ type: 'error', title: 'Prerender fetch failed', message: e?.message || 'Please paste your content instead.', duration: 4000 });
+                    } finally {
+                      setIsLoadingUrl(false);
+                    }
+                  }}
+                  className="ml-2 px-2 py-1 bg-amber-600 text-white rounded hover:bg-amber-700"
+                >
+                  Try prerender fetch
+                </button>
               </div>
             )}
           </div>
@@ -807,6 +884,20 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                   >
                     Dismiss
                   </button>
+                  {optimizedViewMode === 'diff' && (
+                    <div className="ml-2 inline-flex rounded-md overflow-hidden border border-gray-200 bg-white">
+                      <button
+                        className={`${diffGranularity === 'line' ? 'bg-gray-800 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} px-2 py-1 text-xs font-medium border-r border-gray-200`}
+                        onClick={() => setDiffGranularity('line')}
+                        title="Highlight whole-line changes"
+                      >Line</button>
+                      <button
+                        className={`${diffGranularity === 'word' ? 'bg-gray-800 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} px-2 py-1 text-xs font-medium`}
+                        onClick={() => setDiffGranularity('word')}
+                        title="Highlight changes within lines"
+                      >Word</button>
+                    </div>
+                  )}
                 </div>
               </div>
               {optimizedViewMode === 'optimized' ? (
@@ -819,22 +910,53 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
               ) : (
                 (() => {
                   const { left, right } = computeLineDiff(content, optimizedContent);
+                  if (diffGranularity === 'line') {
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">Original</div>
+                          <div className="border border-gray-200 rounded p-3 text-sm bg-gray-50 max-h-80 overflow-auto">
+                            {left.map((l, i) => (
+                              <div key={i} className={l.changed ? 'bg-red-50 line-through decoration-red-400' : ''}>{l.text || '\u00A0'}</div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">Optimized</div>
+                          <div className="border border-gray-200 rounded p-3 text-sm bg-gray-50 max-h-80 overflow-auto">
+                            {right.map((r, i) => (
+                              <div key={i} className={r.changed ? 'bg-green-50' : ''}>{r.text || '\u00A0'}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  // Word-level rendering within changed lines
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <div className="text-xs text-gray-500 mb-1">Original</div>
                         <div className="border border-gray-200 rounded p-3 text-sm bg-gray-50 max-h-80 overflow-auto">
-                          {left.map((l, i) => (
-                            <div key={i} className={l.changed ? 'bg-red-50 line-through decoration-red-400' : ''}>{l.text || '\u00A0'}</div>
-                          ))}
+                          {left.map((l, i) => {
+                            if (!l.changed) return <div key={i}>{l.text || '\u00A0'}</div>;
+                            const { left: lTokens } = computeWordDiffForLine(l.text, right[i]?.text ?? '');
+                            return (
+                              <div key={i}>{renderWordDiffSpanLeft(lTokens, `wl-${i}`)}</div>
+                            );
+                          })}
                         </div>
                       </div>
                       <div>
                         <div className="text-xs text-gray-500 mb-1">Optimized</div>
                         <div className="border border-gray-200 rounded p-3 text-sm bg-gray-50 max-h-80 overflow-auto">
-                          {right.map((r, i) => (
-                            <div key={i} className={r.changed ? 'bg-green-50' : ''}>{r.text || '\u00A0'}</div>
-                          ))}
+                          {right.map((r, i) => {
+                            if (!r.changed) return <div key={i}>{r.text || '\u00A0'}</div>;
+                            const { right: rTokens } = computeWordDiffForLine(left[i]?.text ?? '', r.text);
+                            return (
+                              <div key={i}>{renderWordDiffSpanRight(rTokens, `wr-${i}`)}</div>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>

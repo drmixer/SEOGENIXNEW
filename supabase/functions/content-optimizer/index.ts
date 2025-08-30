@@ -78,6 +78,11 @@ ${content.substring(0, 12000)}
 4. Improve the structure, headings, and overall flow.
 5. Provide an analysis comparing the original to the optimized version.
 
+STRICT FORMAT RULES FOR optimizedContent:
+- Return PLAIN TEXT only. Do not use Markdown or HTML.
+- Do not include formatting markers like **, *, _, #, <, >, backticks, or code fences.
+- Preserve readable paragraph breaks and list bullets using hyphens where appropriate.
+
 **CRITICAL: You MUST provide your response in a single, valid JSON object enclosed in a \`\`\`json markdown block.**
 The JSON object must follow this exact schema:
 \`\`\`json
