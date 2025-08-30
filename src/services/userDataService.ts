@@ -910,6 +910,41 @@ export const userDataService = {
     }
   },
 
+  // Remember last-used CMS publish target without new tables
+  async saveLastCmsTarget(userId: string, target: 'wordpress' | 'shopify'): Promise<void> {
+    if (!userId) return;
+    try {
+      await supabase.from('user_activity').insert({
+        user_id: userId,
+        activity_type: 'last_cms_target',
+        activity_data: { target },
+        created_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Failed to save last CMS target:', e);
+    }
+  },
+
+  async getLastCmsTarget(userId: string): Promise<'wordpress' | 'shopify' | null> {
+    if (!userId) return null;
+    try {
+      const { data, error } = await supabase
+        .from('user_activity')
+        .select('activity_data, created_at')
+        .eq('user_id', userId)
+        .eq('activity_type', 'last_cms_target')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      const target = data?.[0]?.activity_data?.target;
+      if (target === 'wordpress' || target === 'shopify') return target;
+      return null;
+    } catch (e) {
+      console.warn('Failed to fetch last CMS target:', e);
+      return null;
+    }
+  },
+
   async saveReport(report: Partial<Report>): Promise<Report | null> {
     if (!report.user_id) {
       console.error('saveReport called with empty user_id');

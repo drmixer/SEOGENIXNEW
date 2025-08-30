@@ -8,6 +8,7 @@ import CMSContentModal from './CMSContentModal';
 interface ContentEditorProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
   context?: { url?: string; content?: string; title?: string; keywords?: string; contentType?: 'article' | 'product' | 'faq' | 'meta' };
+  onToast?: (toast: { type: 'success' | 'error' | 'info' | 'warning'; title: string; message?: string; duration?: number }) => void;
 }
 
 interface ContentAnalysis {
@@ -34,7 +35,7 @@ interface RealTimeSuggestion {
 
 type Integration = { id: string; cms_type: 'wordpress' | 'shopify'; cms_name: string; site_url: string };
 
-const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
+const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToast }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
@@ -58,6 +59,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
   const [loadedCmsContent, setLoadedCmsContent] = useState<{ id: any; cmsType: 'wordpress' | 'shopify'; title: string } | null>(null);
   const [isPushing, setIsPushing] = useState(false);
   const [autoGenerateSchema, setAutoGenerateSchema] = useState(true);
+  const [defaultPublishTarget, setDefaultPublishTarget] = useState<'wordpress' | 'shopify' | 'none'>('none');
+  const [publishMenuOpen, setPublishMenuOpen] = useState(false);
 
   // Fetch integrations on mount
   useEffect(() => {
@@ -65,6 +68,23 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
       try {
         const integrations = await apiService.getConnectedIntegrations();
         setConnectedIntegrations(integrations);
+        // Set default publish target based on last-used and available integrations
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          const hasWP = integrations.some((i: any) => i.cms_type === 'wordpress');
+          const hasShop = integrations.some((i: any) => i.cms_type === 'shopify');
+          if (user && hasWP && hasShop) {
+            const last = await userDataService.getLastCmsTarget(user.id);
+            if (last) setDefaultPublishTarget(last);
+            else setDefaultPublishTarget('wordpress');
+          } else if (hasWP) {
+            setDefaultPublishTarget('wordpress');
+          } else if (hasShop) {
+            setDefaultPublishTarget('shopify');
+          } else {
+            setDefaultPublishTarget('none');
+          }
+        } catch {}
       } catch (error) {
         console.error("Failed to fetch connected integrations:", error);
       }
@@ -209,20 +229,31 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
   // Quick publish without loading an existing CMS item
   const handleQuickPublish = async (cmsType: 'wordpress' | 'shopify') => {
     if (!title.trim() || !content.trim()) {
-      alert('Please add a title and content before publishing.');
+      onToast?.({ type: 'warning', title: 'Cannot publish', message: 'Please add a title and content before publishing.', duration: 5000 });
       return;
     }
     setIsPushing(true);
     try {
+      let result: any;
       if (cmsType === 'wordpress') {
-        await apiService.publishToWordPress({ title, content, status: 'draft', autoGenerateSchema });
+        result = await apiService.publishToWordPress({ title, content, status: 'draft', autoGenerateSchema });
       } else {
-        await apiService.publishToShopify({ product: { title, body_html: content }, autoGenerateSchema });
+        result = await apiService.publishToShopify({ product: { title, body_html: content }, autoGenerateSchema });
       }
-      alert(`Published draft to ${cmsType === 'wordpress' ? 'WordPress' : 'Shopify'}!`);
-    } catch (e) {
+      const maybeUrl = result?.data?.url || result?.data?.permalink || result?.data?.product_url || result?.data?.admin_url;
+      onToast?.({
+        type: 'success',
+        title: `Published to ${cmsType === 'wordpress' ? 'WordPress' : 'Shopify'}`,
+        message: maybeUrl ? `Draft created. View: ${maybeUrl}` : 'Draft created successfully.',
+        duration: 4000
+      });
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) await userDataService.saveLastCmsTarget(user.id, cmsType);
+      } catch {}
+    } catch (e: any) {
       console.error('Quick publish failed:', e);
-      alert('Failed to publish draft. Please check your integration.');
+      onToast?.({ type: 'error', title: 'Publish failed', message: e?.message || 'Failed to publish draft. Please check your integration.', duration: 7000 });
     } finally {
       setIsPushing(false);
     }
@@ -362,9 +393,55 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
               <span>Load from {int.cms_type === 'wordpress' ? 'WordPress' : 'Shopify'}</span>
             </button>
           ))}
-          {connectedIntegrations.length > 0 && (
-            <div className="flex items-center space-x-2">
-              {connectedIntegrations.some(ci => ci.cms_type === 'wordpress') && (
+          {connectedIntegrations.length > 0 && (() => {
+            const hasWP = connectedIntegrations.some(ci => ci.cms_type === 'wordpress');
+            const hasShop = connectedIntegrations.some(ci => ci.cms_type === 'shopify');
+            if (hasWP && hasShop) {
+              const label = defaultPublishTarget === 'shopify' ? 'Shopify' : 'WordPress';
+              const primaryColor = defaultPublishTarget === 'shopify' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700';
+              return (
+                <div className="relative flex items-center">
+                  <button
+                    onClick={() => handleQuickPublish(defaultPublishTarget === 'none' ? 'wordpress' : defaultPublishTarget)}
+                    disabled={isPushing || !content.trim()}
+                    className={`${primaryColor} text-white px-3 py-2 rounded-l-lg font-medium disabled:opacity-50 flex items-center space-x-2`}
+                  >
+                    {isPushing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                    <span>Publish to {label}</span>
+                  </button>
+                  <button
+                    onClick={() => setPublishMenuOpen(v => !v)}
+                    className={`${primaryColor} text-white px-2 py-2 rounded-r-lg border-l border-white/20`}
+                  >
+                    <ChevronsUpDown className="w-4 h-4" />
+                  </button>
+                  {publishMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                      <button
+                        onClick={async () => {
+                          setPublishMenuOpen(false);
+                          setDefaultPublishTarget('wordpress');
+                          try { const { data: { user } } = await supabase.auth.getUser(); if (user) await userDataService.saveLastCmsTarget(user.id, 'wordpress'); } catch {}
+                          handleQuickPublish('wordpress');
+                        }}
+                        className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                      >Publish to WordPress</button>
+                      <button
+                        onClick={async () => {
+                          setPublishMenuOpen(false);
+                          setDefaultPublishTarget('shopify');
+                          try { const { data: { user } } = await supabase.auth.getUser(); if (user) await userDataService.saveLastCmsTarget(user.id, 'shopify'); } catch {}
+                          handleQuickPublish('shopify');
+                        }}
+                        className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                      >Publish to Shopify</button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            if (hasWP) {
+              return (
                 <button
                   onClick={() => handleQuickPublish('wordpress')}
                   disabled={isPushing || !content.trim()}
@@ -373,8 +450,10 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
                   {isPushing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
                   <span>Publish to WordPress</span>
                 </button>
-              )}
-              {connectedIntegrations.some(ci => ci.cms_type === 'shopify') && (
+              );
+            }
+            if (hasShop) {
+              return (
                 <button
                   onClick={() => handleQuickPublish('shopify')}
                   disabled={isPushing || !content.trim()}
@@ -383,9 +462,10 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context }) => {
                   {isPushing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
                   <span>Publish to Shopify</span>
                 </button>
-              )}
-            </div>
-          )}
+              );
+            }
+            return null;
+          })()}
           <button
             onClick={optimizeContent}
             disabled={isOptimizing || !content.trim()}
