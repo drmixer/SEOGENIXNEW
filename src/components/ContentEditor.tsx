@@ -447,7 +447,12 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         loadedCmsContent.cmsType,
         loadedCmsContent.id,
         { title, content },
-        { autoGenerateSchema: autoGenerateSchema, projectId: selectedProjectId }
+        { 
+          autoGenerateSchema: autoGenerateSchema, 
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema: true
+        }
       );
       alert('Content updated successfully!');
       setLoadedCmsContent(prev => prev ? { ...prev, title } : null);
@@ -464,11 +469,22 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     setIsPushing(true);
     try {
       if (loadedCmsContent.cmsType === 'wordpress') {
-        await apiService.publishToWordPress({ title, content, status: 'draft', autoGenerateSchema });
+        await apiService.publishToWordPress({ 
+          title, 
+          content, 
+          status: 'draft', 
+          autoGenerateSchema,
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema: true
+        });
       } else {
         await apiService.publishToShopify({
           product: { title, body_html: content },
-          autoGenerateSchema
+          autoGenerateSchema,
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema: true
         });
       }
       alert('New content pushed successfully as a draft!');
@@ -491,9 +507,23 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     try {
       let result: any;
       if (cmsType === 'wordpress') {
-        result = await apiService.publishToWordPress({ title, content, status: 'draft', autoGenerateSchema });
+        result = await apiService.publishToWordPress({ 
+          title, 
+          content, 
+          status: 'draft', 
+          autoGenerateSchema,
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema: true
+        });
       } else {
-        result = await apiService.publishToShopify({ product: { title, body_html: content }, autoGenerateSchema });
+        result = await apiService.publishToShopify({ 
+          product: { title, body_html: content }, 
+          autoGenerateSchema,
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema: true
+        });
       }
       const maybeUrl = result?.data?.url || result?.data?.permalink || result?.data?.product_url || result?.data?.admin_url;
       onToast?.({

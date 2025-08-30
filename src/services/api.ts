@@ -596,6 +596,10 @@ export const apiService = {
     categories?: string[];
     tags?: string[];
     autoGenerateSchema?: boolean;
+    // Prefer inserted schema on server if present
+    projectId?: string;
+    pageUrl?: string;
+    useInsertedSchema?: boolean;
   }) {
     return await apiCall(`${API_BASE_URL}/wordpress-integration`, {
       method: 'POST',
@@ -630,6 +634,9 @@ export const apiService = {
       }>;
     };
     autoGenerateSchema?: boolean;
+    projectId?: string;
+    pageUrl?: string;
+    useInsertedSchema?: boolean;
   }) {
     return await apiCall(`${API_BASE_URL}/shopify-integration`, {
       method: 'POST',
@@ -686,23 +693,26 @@ export const apiService = {
     cmsType: 'wordpress' | 'shopify',
     itemId: number | string,
     content: { title?: string; content: string },
-    options?: { autoGenerateSchema?: boolean; projectId?: string }
+    options?: { autoGenerateSchema?: boolean; projectId?: string; pageUrl?: string; useInsertedSchema?: boolean }
   ) {
       const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
       const idKey = cmsType === 'wordpress' ? 'postId' : 'productId';
-
-      const bodyPayload = cmsType === 'shopify'
-        ? { product: { id: itemId, body_html: content.content } }
-        : { title: content.title, content: content.content };
 
       return await apiCall(`${API_BASE_URL}/${endpoint}`, {
           method: 'POST',
           body: JSON.stringify({
               action: 'update_content',
               [idKey]: itemId,
-              content: bodyPayload,
-              // For WP, allow auto-schema generation when updating
-              ...(cmsType === 'wordpress' ? { autoGenerateSchema: options?.autoGenerateSchema, projectId: options?.projectId } : {})
+              // For Shopify, wrap content under product; for WordPress, send top-level title/content
+              ...(cmsType === 'shopify' 
+                ? { content: { product: { id: itemId, body_html: content.content } } }
+                : { title: content.title, content: content.content }
+              ),
+              // Allow auto-schema and inserted-schema usage on update
+              autoGenerateSchema: options?.autoGenerateSchema,
+              projectId: options?.projectId,
+              pageUrl: options?.pageUrl,
+              useInsertedSchema: options?.useInsertedSchema
           })
       });
   },

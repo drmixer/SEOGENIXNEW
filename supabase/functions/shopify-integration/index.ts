@@ -76,7 +76,7 @@ export const shopifyService = async (req, supabase)=>{
   }
   let runId = null;
   try {
-    const { action, projectId, shopDomain, accessToken, product, productId, content, limit, page_info, search, autoGenerateSchema } = await req.json();
+    const { action, projectId, shopDomain, accessToken, product, productId, content, limit, page_info, search, autoGenerateSchema, pageUrl, useInsertedSchema } = await req.json();
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header required');
     const token = authHeader.replace('Bearer ', '');
@@ -106,6 +106,35 @@ export const shopifyService = async (req, supabase)=>{
       shopifyApiUrl = `https://${integration.credentials.shop_domain}/admin/api/2023-10`;
       shopifyHeaders['X-Shopify-Access-Token'] = integration.credentials.access_token;
     }
+    // Helper: prefer user-inserted schema draft, fallback to null
+    async function getAppliedSchemaImplementation(projectId?: string, userId?: string, pageUrlHint?: string): Promise<string | null> {
+      try {
+        if (!projectId || !userId) return null;
+        let query = supabase
+          .from('user_activity')
+          .select('activity_data, website_url, created_at')
+          .eq('user_id', userId)
+          .eq('activity_type', 'schema_draft')
+          .eq('tool_id', projectId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+        if (pageUrlHint) query = query.eq('website_url', pageUrlHint);
+        const { data, error } = await query;
+        if (error) {
+          console.warn('Failed to fetch schema draft:', error.message);
+          return null;
+        }
+        const picked = (data || []).find(r => r?.activity_data?.applied && r?.activity_data?.schema);
+        if (!picked) return null;
+        const schemaObj = picked.activity_data.schema;
+        const json = typeof schemaObj === 'string' ? schemaObj : JSON.stringify(schemaObj, null, 2);
+        return `<script type=\"application/ld+json\">${json}</script>`;
+      } catch (e) {
+        console.warn('getAppliedSchemaImplementation error:', e?.message || e);
+        return null;
+      }
+    }
+
     let output;
     switch(action){
       case 'connect':
@@ -140,23 +169,29 @@ export const shopifyService = async (req, supabase)=>{
         let finalProduct = {
           ...product
         };
-        if (autoGenerateSchema && finalProduct.body_html) {
-          console.log('Auto-generating schema for product...');
-          try {
-            const { data: schemaData, error: schemaError } = await supabase.functions.invoke('schema-generator', {
-              body: {
-                url: `${integration.site_url}/products/${product.handle || ''}`,
-                contentType: 'Product',
-                content: finalProduct.body_html
+        if (finalProduct.body_html) {
+          // Prefer inserted schema draft when present
+          const impl = (useInsertedSchema !== false) ? await getAppliedSchemaImplementation(projectId, user.id, pageUrl) : null;
+          if (impl) {
+            finalProduct.body_html += `\n\n${impl}`;
+          } else if (autoGenerateSchema) {
+            console.log('Auto-generating schema for product...');
+            try {
+              const { data: schemaData, error: schemaError } = await supabase.functions.invoke('schema-generator', {
+                body: {
+                  url: pageUrl || `${integration.site_url}`,
+                  contentType: 'Product',
+                  content: finalProduct.body_html
+                }
+              });
+              if (schemaError) throw schemaError;
+              if (schemaData.output.implementation) {
+                finalProduct.body_html += `\n\n${schemaData.output.implementation}`;
+                console.log('Schema markup added to product');
               }
-            });
-            if (schemaError) throw schemaError;
-            if (schemaData.output.implementation) {
-              finalProduct.body_html += `\n\n${schemaData.output.implementation}`;
-              console.log('Schema markup added to product');
+            } catch (e) {
+              console.error("Schema generation failed, publishing without schema:", e.message);
             }
-          } catch (e) {
-            console.error("Schema generation failed, publishing without schema:", e.message);
           }
         }
         console.log('Publishing product to Shopify...');
@@ -216,10 +251,34 @@ export const shopifyService = async (req, supabase)=>{
         break;
       case 'update_content':
         if (!productId || !content) throw new Error('productId and content are required');
+        // Normalize incoming content
+        let incomingBody = content?.product?.body_html ?? content?.body_html ?? '';
+        if (typeof incomingBody !== 'string') incomingBody = '';
+        // Prefer inserted schema, else generate when allowed
+        const appliedImpl = (useInsertedSchema !== false) ? await getAppliedSchemaImplementation(projectId, user.id, pageUrl) : null;
+        if (appliedImpl) {
+          incomingBody += `\n\n${appliedImpl}`;
+        } else if (autoGenerateSchema && incomingBody) {
+          try {
+            const { data: schemaData, error: schemaError } = await supabase.functions.invoke('schema-generator', {
+              body: {
+                url: pageUrl || `${integration.site_url}`,
+                contentType: 'Product',
+                content: incomingBody
+              }
+            });
+            if (schemaError) throw schemaError;
+            if (schemaData?.output?.implementation) {
+              incomingBody += `\n\n${schemaData.output.implementation}`;
+            }
+          } catch (e) {
+            console.error('Schema generation failed on update:', e?.message || e);
+          }
+        }
         const updatePayload = {
           product: {
             id: productId,
-            body_html: content.body_html
+            body_html: incomingBody
           }
         };
         console.log(`Updating product content: ${productId}`);
