@@ -183,7 +183,7 @@ export const apiService = {
   },
 
   // Schema Generator
-  async generateSchema(projectId: string, url: string, contentType: string, content?: string) {
+  async generateSchema(projectId: string, url: string, contentType: string, content?: string, acceptedEntities?: string[]) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/schema-generator`, { projectId, url, contentType, content });
     
     if (pendingApiRequests.has(cacheKey)) {
@@ -193,7 +193,7 @@ export const apiService = {
     
     const schemaPromise = apiCall(`${API_BASE_URL}/schema-generator`, {
       method: 'POST',
-      body: JSON.stringify({ projectId, url, contentType, content })
+      body: JSON.stringify({ projectId, url, contentType, content, acceptedEntities })
     }).then(response => {
       // Handle the response structure correctly
       if (response.output) {
@@ -209,6 +209,14 @@ export const apiService = {
     });
     
     return schemaPromise;
+  },
+
+  async validateSchema(schema: object | string): Promise<{ valid: boolean; issues: Array<{ path?: string; message: string }> }> {
+    const result = await apiCall(`${API_BASE_URL}/schema-validator`, {
+      method: 'POST',
+      body: JSON.stringify({ schema })
+    });
+    return result.output || result.data || result;
   },
 
   // Citation Tracker
@@ -588,6 +596,10 @@ export const apiService = {
     categories?: string[];
     tags?: string[];
     autoGenerateSchema?: boolean;
+    // Prefer inserted schema on server if present
+    projectId?: string;
+    pageUrl?: string;
+    useInsertedSchema?: boolean;
   }) {
     return await apiCall(`${API_BASE_URL}/wordpress-integration`, {
       method: 'POST',
@@ -622,6 +634,9 @@ export const apiService = {
       }>;
     };
     autoGenerateSchema?: boolean;
+    projectId?: string;
+    pageUrl?: string;
+    useInsertedSchema?: boolean;
   }) {
     return await apiCall(`${API_BASE_URL}/shopify-integration`, {
       method: 'POST',
@@ -674,20 +689,30 @@ export const apiService = {
       return result.data;
   },
 
-  async updateCMSContentItem(cmsType: 'wordpress' | 'shopify', itemId: number | string, content: { title?: string, content: string }) {
+  async updateCMSContentItem(
+    cmsType: 'wordpress' | 'shopify',
+    itemId: number | string,
+    content: { title?: string; content: string },
+    options?: { autoGenerateSchema?: boolean; projectId?: string; pageUrl?: string; useInsertedSchema?: boolean }
+  ) {
       const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
       const idKey = cmsType === 'wordpress' ? 'postId' : 'productId';
-
-      const bodyPayload = cmsType === 'shopify'
-        ? { product: { id: itemId, body_html: content.content } }
-        : { title: content.title, content: content.content };
 
       return await apiCall(`${API_BASE_URL}/${endpoint}`, {
           method: 'POST',
           body: JSON.stringify({
               action: 'update_content',
               [idKey]: itemId,
-              content: bodyPayload
+              // For Shopify, wrap content under product; for WordPress, send top-level title/content
+              ...(cmsType === 'shopify' 
+                ? { content: { product: { id: itemId, body_html: content.content } } }
+                : { title: content.title, content: content.content }
+              ),
+              // Allow auto-schema and inserted-schema usage on update
+              autoGenerateSchema: options?.autoGenerateSchema,
+              projectId: options?.projectId,
+              pageUrl: options?.pageUrl,
+              useInsertedSchema: options?.useInsertedSchema
           })
       });
   },

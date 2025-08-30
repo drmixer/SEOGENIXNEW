@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { FileText, Zap, Target, Brain, MessageSquare, Save, Copy, RefreshCw, AlertCircle, CheckCircle, Lightbulb, ChevronsUpDown, UploadCloud, Loader } from 'lucide-react';
+import { FileText, Zap, Target, Brain, MessageSquare, Save, Copy, RefreshCw, AlertCircle, CheckCircle, Lightbulb, ChevronsUpDown, UploadCloud, Loader, Shield } from 'lucide-react';
 import { apiService } from '../services/api';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
@@ -58,6 +58,27 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const analysisTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Entities state (Phase 1 cross-tool integration)
+  type SuggestedEntity = { name: string; type?: string; relevance?: number; description?: string };
+  type MissingEntity = { name: string; type?: string; importance?: string; reasoning?: string };
+  const [entitiesSuggested, setEntitiesSuggested] = useState<SuggestedEntity[]>([]);
+  const [entitiesMissing, setEntitiesMissing] = useState<MissingEntity[]>([]);
+  const [entitiesAccepted, setEntitiesAccepted] = useState<string[]>([]);
+  const [showEntitiesPanel, setShowEntitiesPanel] = useState<boolean>(false);
+  const [entityCoverageScore, setEntityCoverageScore] = useState<number | null>(null);
+  const [entitySummary, setEntitySummary] = useState<string | null>(null);
+
+  // Schema state (Phase 2)
+  const [showSchemaPanel, setShowSchemaPanel] = useState<boolean>(false);
+  const [schemaJson, setSchemaJson] = useState<string>('');
+  const [schemaValid, setSchemaValid] = useState<boolean | null>(null);
+  const [schemaIssues, setSchemaIssues] = useState<Array<{ path?: string; message: string }>>([]);
+  const [schemaApplied, setSchemaApplied] = useState<boolean>(false);
+  const [hasAppliedSchemaForContext, setHasAppliedSchemaForContext] = useState<boolean>(false);
+  const [useInsertedSchema, setUseInsertedSchema] = useState<boolean>(true);
+  // Publish Impact
+  const [recentImpacts, setRecentImpacts] = useState<Array<any>>([]);
 
   // CMS Integration State
   const [connectedIntegrations, setConnectedIntegrations] = useState<Integration[]>([]);
@@ -426,9 +447,27 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     if (!loadedCmsContent) return;
     setIsPushing(true);
     try {
-      await apiService.updateCMSContentItem(loadedCmsContent.cmsType, loadedCmsContent.id, { title, content });
+      const resp = await apiService.updateCMSContentItem(
+        loadedCmsContent.cmsType,
+        loadedCmsContent.id,
+        { title, content },
+        { 
+          autoGenerateSchema: autoGenerateSchema, 
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema
+        }
+      );
+      const payload = resp?.data || resp;
+      const maybePermalink = payload?.permalink || payload?.post?.link || null;
       alert('Content updated successfully!');
       setLoadedCmsContent(prev => prev ? { ...prev, title } : null);
+      // Post-publish follow-up: validate schema and re-audit
+      try {
+        await postPublishFollowup(loadedCmsContent.cmsType, maybePermalink || undefined);
+      } catch (e) {
+        console.warn('Post-publish follow-up failed:', e);
+      }
     } catch (error) {
       console.error("Failed to update CMS content:", error);
       alert('Failed to update content.');
@@ -442,15 +481,37 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     setIsPushing(true);
     try {
       if (loadedCmsContent.cmsType === 'wordpress') {
-        await apiService.publishToWordPress({ title, content, status: 'draft', autoGenerateSchema });
-      } else {
-        await apiService.publishToShopify({
-          product: { title, body_html: content },
-          autoGenerateSchema
+        const resp = await apiService.publishToWordPress({ 
+          title, 
+          content, 
+          status: 'draft', 
+          autoGenerateSchema,
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema
         });
+        const payload = resp?.data || resp;
+        const maybePermalink = payload?.permalink || payload?.post?.link || null;
+        await postPublishFollowup('wordpress', maybePermalink || undefined);
+      } else {
+        const resp = await apiService.publishToShopify({
+          product: { title, body_html: content },
+          autoGenerateSchema,
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema
+        });
+        const payload = resp?.data || resp;
+        const maybePermalink = payload?.permalink || null;
+        await postPublishFollowup('shopify', maybePermalink || undefined);
       }
       alert('New content pushed successfully as a draft!');
       setLoadedCmsContent(null);
+      try {
+        await postPublishFollowup(loadedCmsContent.cmsType);
+      } catch (e) {
+        console.warn('Post-publish follow-up failed:', e);
+      }
     } catch (error) {
       console.error("Failed to push new content:", error);
       alert('Failed to push new content.');
@@ -469,9 +530,31 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     try {
       let result: any;
       if (cmsType === 'wordpress') {
-        result = await apiService.publishToWordPress({ title, content, status: 'draft', autoGenerateSchema });
+        const resp = await apiService.publishToWordPress({ 
+          title, 
+          content, 
+          status: 'draft', 
+          autoGenerateSchema,
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema
+        });
+        const payload = resp?.data || resp;
+        const maybePermalink = payload?.permalink || payload?.post?.link || null;
+        await postPublishFollowup('wordpress', maybePermalink || undefined);
+        result = resp;
       } else {
-        result = await apiService.publishToShopify({ product: { title, body_html: content }, autoGenerateSchema });
+        const resp = await apiService.publishToShopify({ 
+          product: { title, body_html: content }, 
+          autoGenerateSchema,
+          projectId: selectedProjectId,
+          pageUrl: (currentUrl || context?.url),
+          useInsertedSchema
+        });
+        const payload = resp?.data || resp;
+        const maybePermalink = payload?.permalink || null;
+        await postPublishFollowup('shopify', maybePermalink || undefined);
+        result = resp;
       }
       const maybeUrl = result?.data?.url || result?.data?.permalink || result?.data?.product_url || result?.data?.admin_url;
       onToast?.({
@@ -481,6 +564,11 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         duration: 4000
       });
       try {
+        await postPublishFollowup(cmsType, maybeUrl);
+      } catch (e) {
+        console.warn('Post-publish follow-up failed:', e);
+      }
+      try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) await userDataService.saveLastCmsTarget(user.id, cmsType);
       } catch {}
@@ -489,6 +577,101 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       onToast?.({ type: 'error', title: 'Publish failed', message: e?.message || 'Failed to publish draft. Please check your integration.', duration: 7000 });
     } finally {
       setIsPushing(false);
+    }
+  };
+
+  // Post-publish validation and re-audit
+  const postPublishFollowup = async (cmsType: 'wordpress' | 'shopify', permalink?: string) => {
+    try {
+      const usedSchema = (useInsertedSchema && hasAppliedSchemaForContext)
+        ? 'inserted'
+        : (autoGenerateSchema ? 'generator' : 'none');
+
+      let schemaValid: boolean | null = null;
+      let issues: Array<{ path?: string; message: string }> = [];
+
+      if (usedSchema !== 'none') {
+        try {
+          if (useInsertedSchema && hasAppliedSchemaForContext && schemaJson?.trim()) {
+            const res = await apiService.validateSchema(schemaJson);
+            schemaValid = !!res.valid;
+            issues = Array.isArray(res.issues) ? res.issues : [];
+          } else if (autoGenerateSchema && selectedProjectId) {
+            const gen = await apiService.generateSchema(
+              selectedProjectId,
+              permalink || currentUrl || context?.url || '',
+              contentType,
+              content,
+              entitiesAccepted
+            );
+            const candidate = gen?.schema || gen?.markup || gen?.schemaMarkup || gen;
+            const jsonStr = typeof candidate === 'string' ? candidate : JSON.stringify(candidate);
+            const res = await apiService.validateSchema(jsonStr);
+            schemaValid = !!res.valid;
+            issues = Array.isArray(res.issues) ? res.issues : [];
+          }
+        } catch (e) {
+          console.warn('Schema validation after publish failed:', e);
+        }
+      }
+
+      // Re-audit
+      let afterScore: number | null = null;
+      let delta: number | null = null;
+      try {
+        if (selectedProjectId) {
+          const auditUrl = permalink || currentUrl || context?.url || 'https://example.com';
+          const res = await apiService.runAudit(selectedProjectId, auditUrl, content);
+          afterScore = res?.overallScore ?? null;
+          if (analysis?.overallScore != null && afterScore != null) {
+            delta = Math.round(afterScore - analysis.overallScore);
+          }
+        }
+      } catch (e) {
+        console.warn('Re-audit after publish failed:', e);
+      }
+
+      // Toast summary
+      const schemaMsg = usedSchema === 'none'
+        ? 'Schema: none'
+        : (schemaValid === true ? 'Schema: valid' : (schemaValid === false ? `Schema: invalid (${issues.length} issues)` : 'Schema: checked'));
+      const auditMsg = afterScore != null
+        ? `Visibility: ${afterScore}${delta != null && delta !== 0 ? (delta > 0 ? ` (▲${delta})` : ` (▼${Math.abs(delta)})`) : ''}`
+        : 'Visibility: checked';
+      onToast?.({
+        type: 'success',
+        title: `Post-publish checks (${cmsType})`,
+        message: `${schemaMsg} • ${auditMsg}`,
+        duration: 6000
+      });
+
+      // Track activity
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && selectedProjectId) {
+          await userDataService.trackActivity({
+            user_id: user.id,
+            activity_type: 'post_publish_validation',
+            tool_id: selectedProjectId,
+            website_url: permalink || currentUrl || context?.url,
+            created_at: new Date().toISOString(),
+            activity_data: {
+              cms_type: cmsType,
+              cms_item_id: loadedCmsContent?.id,
+              usedSchema,
+              schemaValid,
+              schemaIssueCount: issues.length,
+              afterScore,
+              delta,
+              permalink
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to track post-publish activity:', e);
+      }
+    } catch (e) {
+      console.warn('postPublishFollowup error:', e);
     }
   };
 
@@ -542,6 +725,36 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         setShowOptimized(true);
         setOptimizedViewMode('optimized');
         onToast?.({ type: 'success', title: 'Optimization ready', message: 'Review and apply the optimized draft.', duration: 3500 });
+
+        // Trigger entity analysis on the optimized draft
+        try {
+          if (selectedProjectId) {
+            const entityRes = await apiService.analyzeEntityCoverage(selectedProjectId, currentUrl || '', optimized);
+            const analysis = (entityRes?.data) ? entityRes.data : entityRes; // normalize
+            const suggested = Array.isArray(analysis?.mentionedEntities) ? analysis.mentionedEntities : [];
+            const missing = Array.isArray(analysis?.missingEntities) ? analysis.missingEntities : [];
+            setEntitiesSuggested(suggested);
+            setEntitiesMissing(missing);
+            if (typeof analysis?.coverageScore === 'number') setEntityCoverageScore(analysis.coverageScore);
+            if (typeof analysis?.strategicSummary === 'string') setEntitySummary(analysis.strategicSummary);
+            setShowEntitiesPanel(true);
+
+            // Persist draft (without changing accepted selection)
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user && selectedProjectId && (currentUrl || context?.url)) {
+                await userDataService.saveEntitiesDraft({
+                  userId: user.id,
+                  projectId: selectedProjectId,
+                  websiteUrl: (currentUrl || context?.url)!,
+                  draft: { suggested, missing, accepted: entitiesAccepted }
+                });
+              }
+            } catch {}
+          }
+        } catch (e) {
+          console.warn('Entity analysis failed or returned no data:', e);
+        }
       } else {
         onToast?.({ type: 'info', title: 'No changes suggested', message: 'The optimizer did not return a rewritten draft.', duration: 4000 });
       }
@@ -551,6 +764,182 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     } finally {
       setIsOptimizing(false);
     }
+  };
+
+  // Load persisted entities draft for current project + URL
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!selectedProjectId || !(currentUrl || context?.url)) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const draft = await userDataService.getEntitiesDraft(user.id, selectedProjectId, (currentUrl || context?.url)!);
+        if (draft) {
+          setEntitiesSuggested(Array.isArray(draft.suggested) ? draft.suggested as any : []);
+          setEntitiesMissing(Array.isArray(draft.missing) ? draft.missing as any : []);
+          setEntitiesAccepted(Array.isArray(draft.accepted) ? draft.accepted : []);
+        }
+        const schemaDraft = await userDataService.getSchemaDraft(
+          user.id,
+          selectedProjectId,
+          (currentUrl || context?.url)!,
+          loadedCmsContent ? { cms_type: loadedCmsContent.cmsType, cms_item_id: loadedCmsContent.id } : undefined
+        );
+        if (schemaDraft?.schema) {
+          const jsonStr = typeof schemaDraft.schema === 'string' ? schemaDraft.schema : JSON.stringify(schemaDraft.schema, null, 2);
+          setSchemaJson(jsonStr);
+          setSchemaValid(typeof schemaDraft.valid === 'boolean' ? schemaDraft.valid : null);
+          setSchemaIssues(Array.isArray(schemaDraft.issues) ? schemaDraft.issues : []);
+          setSchemaApplied(!!schemaDraft.applied);
+          setHasAppliedSchemaForContext(!!schemaDraft.applied);
+        } else {
+          setHasAppliedSchemaForContext(false);
+        }
+      } catch (e) {
+        console.warn('Failed to load entities draft:', e);
+      }
+    })();
+  }, [selectedProjectId, currentUrl, context?.url]);
+
+  // Load recent Publish Impact entries (post_publish_validation) for this context
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const entries = await userDataService.getRecentActivity(user.id, 30);
+        const keyUrl = (currentUrl || context?.url) || '';
+        const cmsMatchId = loadedCmsContent?.id;
+        const filtered = (entries || []).filter((e: any) => e.activity_type === 'post_publish_validation' && (
+          (e.website_url && keyUrl && e.website_url === keyUrl) ||
+          (e.activity_data?.cms_item_id && cmsMatchId && String(e.activity_data.cms_item_id) === String(cmsMatchId))
+        ));
+        setRecentImpacts(filtered.slice(0, 3));
+      } catch (e) {
+        console.warn('Failed to load recent publish impact entries:', e);
+      }
+    })();
+  }, [selectedProjectId, currentUrl, context?.url, loadedCmsContent?.id]);
+
+  const toggleAcceptEntity = (name: string) => {
+    setEntitiesAccepted(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+  };
+
+  const acceptAllEntities = () => {
+    const names = [
+      ...entitiesSuggested.map(e => e.name),
+      ...entitiesMissing.map(e => e.name)
+    ];
+    const unique = Array.from(new Set(names.filter(Boolean)));
+    setEntitiesAccepted(unique);
+  };
+
+  const saveEntitiesDraft = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !selectedProjectId || !(currentUrl || context?.url)) return;
+      await userDataService.saveEntitiesDraft({
+        userId: user.id,
+        projectId: selectedProjectId,
+        websiteUrl: (currentUrl || context?.url)!,
+        draft: { suggested: entitiesSuggested, missing: entitiesMissing, accepted: entitiesAccepted }
+      });
+      onToast?.({ type: 'success', title: 'Entities saved', message: 'Draft saved to your project context.', duration: 2500 });
+    } catch (e: any) {
+      onToast?.({ type: 'error', title: 'Save failed', message: e?.message || 'Could not save entities draft.', duration: 4000 });
+    }
+  };
+
+  // Schema helpers
+  const generateSchema = async () => {
+    if (!selectedProjectId) {
+      onToast?.({ type: 'warning', title: 'Missing project', message: 'Select a website first.', duration: 3000 });
+      return;
+    }
+    try {
+      const output = await apiService.generateSchema(
+        selectedProjectId,
+        currentUrl || context?.url || '',
+        contentType,
+        (optimizedContent && showOptimized) ? optimizedContent : content,
+        entitiesAccepted
+      );
+      const schemaObj = output?.schema || output?.markup || output?.schemaMarkup || output;
+      const jsonStr = typeof schemaObj === 'string' ? schemaObj : JSON.stringify(schemaObj, null, 2);
+      setSchemaJson(jsonStr);
+      setSchemaValid(null);
+      setSchemaIssues([]);
+      setSchemaApplied(false);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && selectedProjectId && (currentUrl || context?.url)) {
+          await userDataService.saveSchemaDraft({
+            userId: user.id,
+            projectId: selectedProjectId,
+            websiteUrl: (currentUrl || context?.url)!,
+            draft: {
+              schema: typeof schemaObj === 'string' ? JSON.parse(schemaObj) : schemaObj,
+              cms_type: loadedCmsContent?.cmsType,
+              cms_item_id: loadedCmsContent?.id
+            }
+          });
+        }
+      } catch {}
+      onToast?.({ type: 'success', title: 'Schema generated', message: 'Review, validate, then insert.', duration: 2500 });
+    } catch (e: any) {
+      onToast?.({ type: 'error', title: 'Generation failed', message: e?.message || 'Could not generate schema.', duration: 4000 });
+    }
+  };
+
+  const validateSchema = async () => {
+    try {
+      const res = await apiService.validateSchema(schemaJson);
+      setSchemaValid(!!res.valid);
+      setSchemaIssues(Array.isArray(res.issues) ? res.issues : []);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && selectedProjectId && (currentUrl || context?.url)) {
+          await userDataService.saveSchemaDraft({
+            userId: user.id,
+            projectId: selectedProjectId,
+            websiteUrl: (currentUrl || context?.url)!,
+            draft: {
+              schema: JSON.parse(schemaJson),
+              valid: !!res.valid,
+              issues: res.issues || [],
+              cms_type: loadedCmsContent?.cmsType,
+              cms_item_id: loadedCmsContent?.id
+            }
+          });
+        }
+      } catch {}
+    } catch (e: any) {
+      onToast?.({ type: 'error', title: 'Validation failed', message: e?.message || 'Could not validate schema.', duration: 4000 });
+    }
+  };
+
+  const insertSchemaIntoDraft = async () => {
+    try {
+      setSchemaApplied(true);
+      onToast?.({ type: 'success', title: 'Schema inserted', message: 'Will be included when publishing.', duration: 2500 });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && selectedProjectId && (currentUrl || context?.url)) {
+        await userDataService.saveSchemaDraft({
+          userId: user.id,
+          projectId: selectedProjectId,
+          websiteUrl: (currentUrl || context?.url)!,
+          draft: {
+            applied: true,
+            schema: JSON.parse(schemaJson),
+            valid: schemaValid ?? undefined,
+            issues: schemaIssues,
+            cms_type: loadedCmsContent?.cmsType,
+            cms_item_id: loadedCmsContent?.id
+          }
+        });
+        setHasAppliedSchemaForContext(true);
+      }
+    } catch {}
   };
 
   const copyToClipboard = (text: string) => {
@@ -719,6 +1108,39 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
             }
             return null;
           })()}
+          {/* Schema application status + quick actions */}
+          <div className="hidden md:flex items-center space-x-2 text-xs text-gray-700">
+            <span
+              className={`px-2 py-1 rounded border ${
+                (useInsertedSchema && hasAppliedSchemaForContext)
+                  ? 'bg-green-50 border-green-200 text-green-700'
+                  : (autoGenerateSchema ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600')
+              }`}
+            >
+              Applied schema: {(useInsertedSchema && hasAppliedSchemaForContext) ? 'Inserted' : (autoGenerateSchema ? 'Auto-generate' : 'None')}
+            </span>
+            <button
+              onClick={() => setShowSchemaPanel(true)}
+              className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+              title="View or edit schema draft"
+            >View</button>
+            <button
+              onClick={() => {
+                const next = !useInsertedSchema;
+                setUseInsertedSchema(next);
+                onToast?.({
+                  type: 'success',
+                  title: 'Schema preference',
+                  message: next ? 'Will prefer inserted schema if available.' : 'Will use generator when publishing.',
+                  duration: 2500
+                });
+              }}
+              className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+              title="Toggle between using inserted schema and generator"
+            >
+              {useInsertedSchema ? 'Switch to generator' : 'Switch to inserted'}
+            </button>
+          </div>
           <button
             onClick={optimizeContent}
             disabled={isOptimizing || !content.trim()}
@@ -940,6 +1362,23 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                     Replace Current Content
                   </button>
                   <button
+                    onClick={() => setShowEntitiesPanel(v => !v)}
+                    className={`px-3 py-1 text-sm rounded border ${showEntitiesPanel ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                    title="View and manage suggested entities"
+                  >
+                    Entities{entitiesAccepted.length ? ` (${entitiesAccepted.length})` : ''}
+                  </button>
+                  <button
+                    onClick={() => setShowSchemaPanel(v => !v)}
+                    className={`px-3 py-1 text-sm rounded border ${showSchemaPanel ? 'bg-green-50 border-green-200 text-green-700' : 'border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                    title="Generate and validate JSON-LD schema"
+                  >
+                    <span className="inline-flex items-center space-x-1">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Schema</span>
+                    </span>
+                  </button>
+                  <button
                     onClick={() => {
                       setShowOptimized(false);
                       setOptimizedContent('');
@@ -1030,6 +1469,131 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
               )}
             </div>
           )}
+
+          {showEntitiesPanel && (
+            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-3">
+                  <h4 className="font-medium text-gray-900">Entities</h4>
+                  {typeof entityCoverageScore === 'number' && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">Coverage: {entityCoverageScore}</span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={acceptAllEntities}
+                    className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Accept All
+                  </button>
+                  <button
+                    onClick={() => setTargetKeywords(entitiesAccepted.join(', '))}
+                    className="px-2.5 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700"
+                    title="Use accepted entities as target keywords"
+                  >
+                    Use as Keywords
+                  </button>
+                  <button
+                    onClick={saveEntitiesDraft}
+                    className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+              {entitySummary && (
+                <p className="text-xs text-gray-600 mb-3">{entitySummary}</p>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Mentioned</div>
+                  <div className="flex flex-wrap gap-2">
+                    {entitiesSuggested.length === 0 && <span className="text-xs text-gray-400">None detected yet.</span>}
+                    {entitiesSuggested.map((e, idx) => (
+                      <button
+                        key={`s-${idx}`}
+                        onClick={() => toggleAcceptEntity(e.name)}
+                        className={`text-xs px-2 py-1 rounded border ${entitiesAccepted.includes(e.name) ? 'bg-green-50 border-green-200 text-green-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                        title={e.description || e.type}
+                      >
+                        {e.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Missing</div>
+                  <div className="flex flex-wrap gap-2">
+                    {entitiesMissing.length === 0 && <span className="text-xs text-gray-400">No gaps identified.</span>}
+                    {entitiesMissing.map((e, idx) => (
+                      <button
+                        key={`m-${idx}`}
+                        onClick={() => toggleAcceptEntity(e.name)}
+                        className={`text-xs px-2 py-1 rounded border ${entitiesAccepted.includes(e.name) ? 'bg-yellow-50 border-yellow-200 text-yellow-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                        title={e.reasoning || e.type}
+                      >
+                        {e.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showSchemaPanel && (
+            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-3">
+                  <h4 className="font-medium text-gray-900">Schema</h4>
+                  {schemaValid === true && (<span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Valid</span>)}
+                  {schemaValid === false && (<span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Invalid</span>)}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button onClick={generateSchema} className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50">Generate</button>
+                  <button onClick={validateSchema} className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50">Validate</button>
+                  <button onClick={() => { try { navigator.clipboard.writeText(schemaJson); onToast?.({ type: 'success', title: 'Copied', message: 'Schema JSON copied.' }); } catch {} }} className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50">Copy</button>
+                  <button onClick={insertSchemaIntoDraft} className={`px-2.5 py-1 text-xs font-medium rounded ${schemaApplied ? 'bg-green-600 text-white' : 'bg-purple-600 text-white hover:bg-purple-700'}`}>{schemaApplied ? 'Inserted' : 'Insert Into Draft'}</button>
+                </div>
+              </div>
+              {!!schemaIssues?.length && (
+                <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                  {schemaIssues.length} issue(s): {schemaIssues.map((i, idx) => i.message).join('; ')}
+                </div>
+              )}
+              <textarea value={schemaJson} onChange={(e) => setSchemaJson(e.target.value)} rows={12} className="w-full border border-gray-200 rounded p-3 text-xs font-mono bg-gray-50" placeholder='{"@context":"https://schema.org","@type":"Article",...}' />
+            </div>
+          )}
+
+          {/* Publish Impact panel */}
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium text-gray-900">Publish Impact</h4>
+              <span className="text-xs text-gray-500">Last {recentImpacts.length || 0}</span>
+            </div>
+            {recentImpacts.length === 0 ? (
+              <p className="text-xs text-gray-500">No recent publish checks yet. Publish to see schema validation and visibility changes.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentImpacts.map((it: any, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-gray-600">{new Date(it.created_at).toLocaleString()}</span>
+                      <span className={`px-1.5 py-0.5 rounded ${it.activity_data?.schemaValid ? 'bg-green-100 text-green-700' : (it.activity_data?.usedSchema === 'none' ? 'bg-gray-100 text-gray-700' : 'bg-red-100 text-red-700')}`}>
+                        {it.activity_data?.usedSchema === 'none' ? 'Schema: none' : (it.activity_data?.schemaValid ? 'Schema: valid' : 'Schema: invalid')}
+                      </span>
+                      {typeof it.activity_data?.afterScore === 'number' && (
+                        <span className="text-gray-700">Visibility: {it.activity_data.afterScore}{typeof it.activity_data?.delta === 'number' && it.activity_data.delta !== 0 ? (it.activity_data.delta > 0 ? ` (▲${it.activity_data.delta})` : ` (▼${Math.abs(it.activity_data.delta)})`) : ''}</span>
+                      )}
+                    </div>
+                    {it.activity_data?.permalink && (
+                      <a href={it.activity_data.permalink} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">View</a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-4">

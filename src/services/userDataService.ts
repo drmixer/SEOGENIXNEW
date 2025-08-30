@@ -191,6 +191,111 @@ export const userDataService = {
     return profilePromise;
   },
 
+  // Entities draft persistence using user_activity (no new tables)
+  async saveEntitiesDraft(params: { userId: string; projectId: string; websiteUrl: string; draft: { suggested?: any[]; missing?: any[]; accepted?: string[] } }): Promise<void> {
+    const { userId, projectId, websiteUrl, draft } = params;
+    if (!userId || !projectId || !websiteUrl) {
+      console.error('saveEntitiesDraft called with missing identifiers');
+      return;
+    }
+    try {
+      await supabase.from('user_activity').insert({
+        user_id: userId,
+        activity_type: 'entities_draft',
+        website_url: websiteUrl,
+        tool_id: projectId, // reuse tool_id to hold project id
+        activity_data: { ...draft, updatedAt: new Date().toISOString() },
+        created_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Failed to save entities draft:', e);
+    }
+  },
+
+  async getEntitiesDraft(userId: string, projectId: string, websiteUrl: string): Promise<{ suggested?: any[]; missing?: any[]; accepted?: string[]; updatedAt?: string } | null> {
+    if (!userId || !projectId || !websiteUrl) {
+      console.error('getEntitiesDraft called with missing identifiers');
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('user_activity')
+        .select('activity_data, created_at')
+        .eq('user_id', userId)
+        .eq('activity_type', 'entities_draft')
+        .eq('website_url', websiteUrl)
+        .eq('tool_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        return data[0].activity_data || null;
+      }
+      return null;
+    } catch (e) {
+      console.warn('Failed to fetch entities draft:', e);
+      return null;
+    }
+  },
+
+  // Schema draft persistence using user_activity
+  async saveSchemaDraft(params: { userId: string; projectId: string; websiteUrl: string; draft: { schema?: any; valid?: boolean; issues?: Array<{ path?: string; message: string }>; applied?: boolean; cms_type?: 'wordpress' | 'shopify'; cms_item_id?: string | number } }): Promise<void> {
+    const { userId, projectId, websiteUrl, draft } = params;
+    if (!userId || !projectId || !websiteUrl) {
+      console.error('saveSchemaDraft called with missing identifiers');
+      return;
+    }
+    try {
+      await supabase.from('user_activity').insert({
+        user_id: userId,
+        activity_type: 'schema_draft',
+        website_url: websiteUrl,
+        tool_id: projectId,
+        activity_data: { ...draft, updatedAt: new Date().toISOString() },
+        created_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Failed to save schema draft:', e);
+    }
+  },
+
+  async getSchemaDraft(
+    userId: string,
+    projectId: string,
+    websiteUrl: string,
+    opts?: { cms_type?: 'wordpress' | 'shopify'; cms_item_id?: string | number }
+  ): Promise<{ schema?: any; valid?: boolean; issues?: Array<{ path?: string; message: string }>; applied?: boolean; updatedAt?: string; cms_type?: 'wordpress' | 'shopify'; cms_item_id?: string | number } | null> {
+    if (!userId || !projectId || !websiteUrl) {
+      console.error('getSchemaDraft called with missing identifiers');
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('user_activity')
+        .select('activity_data, website_url, created_at')
+        .eq('user_id', userId)
+        .eq('activity_type', 'schema_draft')
+        .eq('tool_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      const rows = data || [];
+      // Prefer exact CMS item match
+      const byItem = opts?.cms_item_id
+        ? rows.find(r => r?.activity_data?.cms_item_id == opts.cms_item_id && r?.activity_data?.applied && r?.activity_data?.schema)
+        : null;
+      if (byItem) return byItem.activity_data || null;
+      // Else prefer website URL match
+      const byUrl = rows.find(r => r?.website_url === websiteUrl && r?.activity_data?.applied && r?.activity_data?.schema);
+      if (byUrl) return byUrl.activity_data || null;
+      // Else return latest draft if any
+      return rows[0]?.activity_data || null;
+    } catch (e) {
+      console.warn('Failed to fetch schema draft:', e);
+      return null;
+    }
+  },
+
   async createUserProfile(profile: Partial<UserProfile>): Promise<UserProfile | null> {
     if (!profile.user_id) {
       console.error('createUserProfile called with empty user_id');

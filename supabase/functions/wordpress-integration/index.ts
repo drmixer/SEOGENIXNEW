@@ -60,7 +60,7 @@ export const wordpressService = async (req, supabase)=>{
   }
   let runId = null;
   try {
-    const { action, projectId, siteUrl, username, applicationPassword, content, postId, page, search, title, status, autoGenerateSchema } = await req.json();
+    const { action, projectId, siteUrl, username, applicationPassword, content, postId, page, search, title, status, autoGenerateSchema, pageUrl, useInsertedSchema } = await req.json();
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header required');
     const token = authHeader.replace('Bearer ', '');
@@ -77,6 +77,40 @@ export const wordpressService = async (req, supabase)=>{
       });
     }
     let integration;
+
+    // Helper: prefer user-inserted schema draft, fallback to null
+    async function getAppliedSchemaImplementation(projectId?: string, pageUrlHint?: string, cmsItemId?: string | number): Promise<string | null> {
+      try {
+        if (!projectId) return null;
+        let query = supabase
+          .from('user_activity')
+          .select('activity_data, website_url, created_at')
+          .eq('user_id', user.id)
+          .eq('activity_type', 'schema_draft')
+          .eq('tool_id', projectId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+        if (pageUrlHint) {
+          query = query.eq('website_url', pageUrlHint);
+        }
+        const { data, error } = await query;
+        if (error) {
+          console.warn('Failed to fetch schema draft:', error.message);
+          return null;
+        }
+        const rows = data || [];
+        const picked = (cmsItemId != null)
+          ? rows.find(r => r?.activity_data?.applied && r?.activity_data?.schema && r?.activity_data?.cms_item_id == cmsItemId)
+          : rows.find(r => r?.activity_data?.applied && r?.activity_data?.schema);
+        if (!picked) return null;
+        const schemaObj = picked.activity_data.schema;
+        const json = typeof schemaObj === 'string' ? schemaObj : JSON.stringify(schemaObj, null, 2);
+        return `<script type="application/ld+json">${json}</script>`;
+      } catch (e) {
+        console.warn('getAppliedSchemaImplementation error:', e?.message || e);
+        return null;
+      }
+    }
     if (action !== 'connect') {
       console.log('Fetching existing WordPress integration...');
       const { data, error } = await supabase.from('cms_integrations').select('*').eq('user_id', user.id).eq('cms_type', 'wordpress').single();
@@ -119,12 +153,36 @@ export const wordpressService = async (req, supabase)=>{
       case 'publish':
         if (!content || !title) throw new Error('Title and content are required for publishing.');
         let finalContent = content;
-        if (autoGenerateSchema) {
+        // Prefer inserted schema draft if available
+        if (useInsertedSchema !== false) {
+          const impl = await getAppliedSchemaImplementation(projectId, pageUrl);
+          if (impl) {
+            finalContent += `\n\n${impl}`;
+          } else if (autoGenerateSchema) {
+            console.log('Auto-generating schema for WordPress post...');
+            try {
+              const { data: schemaData, error: schemaError } = await supabase.functions.invoke('schema-generator', {
+                body: {
+                  url: pageUrl || integration.site_url,
+                  contentType: 'Article',
+                  content: content
+                }
+              });
+              if (schemaError) throw schemaError;
+              if (schemaData.output.implementation) {
+                finalContent += `\n\n${schemaData.output.implementation}`;
+                console.log('Schema markup added to post');
+              }
+            } catch (e) {
+              console.error("Schema generation failed, publishing without schema:", e.message);
+            }
+          }
+        } else if (autoGenerateSchema) {
           console.log('Auto-generating schema for WordPress post...');
           try {
             const { data: schemaData, error: schemaError } = await supabase.functions.invoke('schema-generator', {
               body: {
-                url: integration.site_url,
+                url: pageUrl || integration.site_url,
                 contentType: 'Article',
                 content: content
               }
@@ -155,7 +213,8 @@ export const wordpressService = async (req, supabase)=>{
         const publishedPost = await pubResponse.json();
         output = {
           success: true,
-          post: publishedPost
+          post: publishedPost,
+          permalink: publishedPost?.link || publishedPost?.guid?.rendered || null
         };
         break;
       case 'get_posts':
@@ -232,6 +291,32 @@ export const wordpressService = async (req, supabase)=>{
       case 'update_content':
         if (!postId || !content) throw new Error('postId and content are required');
         console.log(`Updating content for post/page: ${postId}`);
+        // Normalize inputs: content may arrive as string or { title, content }
+        const incomingTitle = (typeof content === 'object' && content?.title) ? content.title : (title || undefined);
+        let finalUpdateContent = (typeof content === 'object' && typeof content?.content === 'string') ? content.content : (typeof content === 'string' ? content : '');
+        // Prefer inserted schema draft if available; else generate when allowed
+        const appliedImpl = (useInsertedSchema !== false) ? await getAppliedSchemaImplementation(projectId, pageUrl, postId) : null;
+        if (appliedImpl) {
+          finalUpdateContent += `\n\n${appliedImpl}`;
+        } else if (autoGenerateSchema && typeof finalUpdateContent === 'string') {
+          try {
+            console.log('Auto-generating schema for WordPress update...');
+            const { data: schemaData, error: schemaError } = await supabase.functions.invoke('schema-generator', {
+              body: {
+                url: pageUrl || integration.site_url,
+                contentType: 'Article',
+                content: finalUpdateContent
+              }
+            });
+            if (schemaError) throw schemaError;
+            if (schemaData?.output?.implementation) {
+              finalUpdateContent += `\n\n${schemaData.output.implementation}`;
+              console.log('Schema markup appended for update');
+            }
+          } catch (e) {
+            console.error('Schema generation failed on update:', e?.message || e);
+          }
+        }
         let updateResponse = await fetch(`${integration.site_url}/wp-json/wp/v2/posts/${postId}`, {
           method: 'POST',
           headers: {
@@ -239,8 +324,8 @@ export const wordpressService = async (req, supabase)=>{
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            title: title,
-            content: content
+            title: incomingTitle,
+            content: finalUpdateContent
           })
         });
         if (!updateResponse.ok) {
@@ -252,11 +337,11 @@ export const wordpressService = async (req, supabase)=>{
                 'Authorization': getAuthHeader(integration.credentials),
                 'Content-Type': 'application/json'
               },
-              body: JSON.stringify({
-                title: title,
-                content: content
-              })
-            });
+          body: JSON.stringify({
+            title: incomingTitle,
+            content: finalUpdateContent
+          })
+        });
           } else {
             throw new Error(errorText);
           }
@@ -265,7 +350,8 @@ export const wordpressService = async (req, supabase)=>{
         const updatedPost = await updateResponse.json();
         output = {
           success: true,
-          post: updatedPost
+          post: updatedPost,
+          permalink: updatedPost?.link || updatedPost?.guid?.rendered || null
         };
         break;
       case 'disconnect':
@@ -326,4 +412,3 @@ Deno.serve(async (req)=>{
   const supabase = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
   return await wordpressService(req, supabase);
 });
-
