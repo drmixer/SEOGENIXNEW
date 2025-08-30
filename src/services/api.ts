@@ -240,8 +240,8 @@ export const apiService = {
   },
 
   // Content Optimizer
-  async optimizeContent(content: string, targetKeywords: string[], contentType: string) {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/content-optimizer`, { content, targetKeywords, contentType });
+  async optimizeContent(projectId: string, content: string, targetKeywords: string[], contentType: string) {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/content-optimizer`, { projectId, content, targetKeywords, contentType });
     
     if (pendingApiRequests.has(cacheKey)) {
       console.log('Content optimizer request already in progress, returning existing promise');
@@ -250,7 +250,7 @@ export const apiService = {
     
     const optimizePromise = apiCall(`${API_BASE_URL}/content-optimizer`, {
       method: 'POST',
-      body: JSON.stringify({ content, targetKeywords, contentType })
+      body: JSON.stringify({ projectId, content, targetKeywords, contentType })
     }).then(response => {
       if (response.output) {
         return response.output;
@@ -698,10 +698,11 @@ export const apiService = {
   },
 
   async fetchUrlContent(url: string): Promise<{ content: string }> {
+    // Use authenticated call to satisfy functions that require JWT
     const result = await apiCall(`${API_BASE_URL}/url-fetcher`, {
       method: 'POST',
       body: JSON.stringify({ url })
-    }, false);
+    }, true);
     return result.data || result;
   },
 

@@ -9,6 +9,7 @@ interface ContentEditorProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
   context?: { url?: string; content?: string; title?: string; keywords?: string; contentType?: 'article' | 'product' | 'faq' | 'meta' };
   onToast?: (toast: { type: 'success' | 'error' | 'info' | 'warning'; title: string; message?: string; duration?: number }) => void;
+  selectedProjectId?: string;
 }
 
 interface ContentAnalysis {
@@ -35,7 +36,7 @@ interface RealTimeSuggestion {
 
 type Integration = { id: string; cms_type: 'wordpress' | 'shopify'; cms_name: string; site_url: string };
 
-const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToast }) => {
+const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToast, selectedProjectId }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
@@ -144,23 +145,49 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     setIsAnalyzing(true);
     try {
       const keywords = targetKeywords.split(',').map(k => k.trim()).filter(k => k);
-      const result = await apiService.analyzeContentRealTime(content, keywords);
-      setRealTimeSuggestions(result.suggestions || []);
-      const auditResult = await apiService.runAudit('https://example.com', content);
-      const contentAnalysis: ContentAnalysis = {
-        overallScore: auditResult.overallScore,
-        subscores: auditResult.subscores,
-        suggestions: auditResult.recommendations.slice(0, 5),
-        keywordDensity: calculateKeywordDensity(content, targetKeywords),
-        readabilityScore: calculateReadabilityScore(content)
-      };
-      setAnalysis(contentAnalysis);
+      if (!selectedProjectId) {
+        // If missing, do a graceful no-op and avoid calling the API
+        setRealTimeSuggestions([]);
+      } else {
+        const result = await apiService.analyzeContentRealTime(selectedProjectId, content, keywords);
+        setRealTimeSuggestions(result.suggestions || []);
+      }
+      // Best-effort analysis summary without blocking if audit fails
+      try {
+        if (selectedProjectId) {
+          const auditResult = await apiService.runAudit(selectedProjectId, context?.url || 'https://example.com', content);
+          const contentAnalysis: ContentAnalysis = {
+            overallScore: auditResult.overallScore,
+            subscores: auditResult.subscores,
+            suggestions: auditResult.recommendations?.slice(0, 5) || [],
+            keywordDensity: calculateKeywordDensity(content, targetKeywords),
+            readabilityScore: calculateReadabilityScore(content)
+          };
+          setAnalysis(contentAnalysis);
+        } else {
+          setAnalysis({
+            overallScore: 0,
+            subscores: { aiUnderstanding: 0, citationLikelihood: 0, conversationalReadiness: 0, contentStructure: 0 },
+            suggestions: [],
+            keywordDensity: calculateKeywordDensity(content, targetKeywords),
+            readabilityScore: calculateReadabilityScore(content)
+          });
+        }
+      } catch {
+        setAnalysis({
+          overallScore: 0,
+          subscores: { aiUnderstanding: 0, citationLikelihood: 0, conversationalReadiness: 0, contentStructure: 0 },
+          suggestions: [],
+          keywordDensity: calculateKeywordDensity(content, targetKeywords),
+          readabilityScore: calculateReadabilityScore(content)
+        });
+      }
     } catch (error) {
       console.error('Error analyzing content:', error);
     } finally {
       setIsAnalyzing(false);
     }
-  }, [content, targetKeywords, contentType]);
+  }, [content, targetKeywords, contentType, selectedProjectId, context?.url]);
 
   useEffect(() => {
     if (analysisTimeoutRef.current) clearTimeout(analysisTimeoutRef.current);
@@ -294,15 +321,19 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
 
   const optimizeContent = async () => {
     if (!content.trim()) return;
+    if (!selectedProjectId) {
+      onToast?.({ type: 'warning', title: 'Missing project', message: 'Please select a website before optimizing.', duration: 5000 });
+      return;
+    }
     setIsOptimizing(true);
     try {
       const keywords = targetKeywords.split(',').map(k => k.trim()).filter(k => k);
-      const result = await apiService.optimizeContent(content, keywords, contentType);
+      const result = await apiService.optimizeContent(selectedProjectId, content, keywords, contentType);
       setOptimizedContent(result.optimizedContent);
       setShowOptimized(true);
     } catch (error) {
       console.error('Error optimizing content:', error);
-      alert('Failed to optimize content. Please try again.');
+      onToast?.({ type: 'error', title: 'Optimization failed', message: 'Failed to optimize content. Please try again.', duration: 6000 });
     } finally {
       setIsOptimizing(false);
     }

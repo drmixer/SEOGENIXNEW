@@ -654,7 +654,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         return <ReportGenerator userPlan={effectivePlan} />;
       
       case 'editor':
-        return <ContentEditor userPlan={effectivePlan} context={toolContext} onToast={addToast} />;
+        return <ContentEditor userPlan={effectivePlan} context={toolContext} onToast={addToast} selectedProjectId={selectedProjectId || ''} />;
       
       case 'competitive-viz':
         return <CompetitiveVisualization userPlan={effectivePlan} />;
