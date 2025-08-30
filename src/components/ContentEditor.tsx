@@ -120,7 +120,12 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           }
         } catch (error) {
           console.error("Failed to fetch URL content:", error);
-          alert(`Failed to load content from ${context.url}. Please check the URL or paste the content manually.`);
+          onToast?.({
+            type: 'warning',
+            title: 'Could not load page content',
+            message: `Failed to load ${context.url}. Paste content manually or try another URL.`,
+            duration: 6000
+          });
         } finally {
           setIsLoadingUrl(false);
         }

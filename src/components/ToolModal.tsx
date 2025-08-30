@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader, Copy, Download, ExternalLink, CheckCircle, AlertCircle, Target, FileText, Search, Mic, Globe, Users, Zap, TrendingUp, Lightbulb, BarChart3, Radar, Shield } from 'lucide-react';
 import { apiService } from '../services/api';
+import { mapRecommendationToTool } from '../utils/fixItRouter';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 
@@ -134,93 +135,15 @@ const ToolModal: React.FC<ToolModalProps> = ({
 
   // Map recommendations to tools (mirror ToolsGrid logic)
   const handleFixItRouting = (recommendation: any) => {
-    const lower = (s: any) => (typeof s === 'string' ? s.toLowerCase() : '');
-    const action = lower(recommendation?.action_type);
-    const title = lower(recommendation?.title);
-    const desc = lower(recommendation?.description);
-    const text = `${title} ${desc}`;
-
-    const open = (destToolId: string, ctx: any = {}) => {
-      if (onSwitchTool) {
-        onClose();
-        onSwitchTool(destToolId, {
-          source: 'fixit',
-          fromRecommendation: recommendation,
-          ...(selectedWebsite ? { url: selectedWebsite } : {}),
-          ...ctx,
-        });
-      }
-    };
-
-    // Schema / Structured Data first
-    if (
-      action.includes('schema') ||
-      text.includes('schema') ||
-      text.includes('structured data') ||
-      text.includes('json-ld')
-    ) {
-      open('schema', { contentType: 'Article' });
-      return;
+    const route = mapRecommendationToTool(recommendation, { selectedWebsite });
+    if (onSwitchTool) {
+      onClose();
+      onSwitchTool(route.toolId, {
+        source: 'fixit',
+        fromRecommendation: recommendation,
+        ...(route.context || {}),
+      });
     }
-
-    // Content/editor (meta/headings etc.) — avoid hijacking schema mentions
-    if (
-      text.includes('heading') ||
-      (text.includes('meta') && !text.includes('schema')) ||
-      action.includes('content') ||
-      text.includes('optimiz') ||
-      text.includes('readability') ||
-      text.includes('structure')
-    ) {
-      open('editor', { url: selectedWebsite, hint: recommendation?.title });
-      return;
-    }
-
-    // Entities
-    if (action.includes('entity') || text.includes('entity') || text.includes('entities') || text.includes('topic')) {
-      open('entities', {});
-      return;
-    }
-
-    // Citations / Mentions
-    if (action.includes('citation') || text.includes('citation') || text.includes('mention')) {
-      open('citations', {});
-      return;
-    }
-
-    // Voice / Conversational
-    if (action.includes('voice') || text.includes('voice') || text.includes('assistant') || text.includes('conversational')) {
-      open('voice', {});
-      return;
-    }
-
-    // Prompts
-    if (action.includes('prompt') || text.includes('prompt')) {
-      try {
-        const domain = selectedWebsite ? new URL(selectedWebsite).hostname.replace('www.', '') : '';
-        open('prompts', { topic: domain });
-      } catch {
-        open('prompts', {});
-      }
-      return;
-    }
-
-    // Generator
-    if (action.includes('generate') || text.includes('generate') || text.includes('faq') || text.includes('snippet')) {
-      try {
-        const domain = selectedWebsite ? new URL(selectedWebsite).hostname.replace('www.', '') : '';
-        open('generator', {
-          topic: recommendation?.title || (domain ? `Content for ${domain}` : 'New content'),
-          targetKeywords: ''
-        });
-      } catch {
-        open('generator', { topic: recommendation?.title || 'New content' });
-      }
-      return;
-    }
-
-    // Fallback
-    open('editor', { url: selectedWebsite, hint: recommendation?.title });
   };
 
   // Normalize different result structures into consistent format (matching ToolsGrid)
