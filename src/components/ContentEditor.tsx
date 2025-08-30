@@ -77,6 +77,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [schemaApplied, setSchemaApplied] = useState<boolean>(false);
   const [hasAppliedSchemaForContext, setHasAppliedSchemaForContext] = useState<boolean>(false);
   const [useInsertedSchema, setUseInsertedSchema] = useState<boolean>(true);
+  // Publish Impact
+  const [recentImpacts, setRecentImpacts] = useState<Array<any>>([]);
 
   // CMS Integration State
   const [connectedIntegrations, setConnectedIntegrations] = useState<Integration[]>([]);
@@ -445,7 +447,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     if (!loadedCmsContent) return;
     setIsPushing(true);
     try {
-      await apiService.updateCMSContentItem(
+      const resp = await apiService.updateCMSContentItem(
         loadedCmsContent.cmsType,
         loadedCmsContent.id,
         { title, content },
@@ -456,11 +458,13 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           useInsertedSchema
         }
       );
+      const payload = resp?.data || resp;
+      const maybePermalink = payload?.permalink || payload?.post?.link || null;
       alert('Content updated successfully!');
       setLoadedCmsContent(prev => prev ? { ...prev, title } : null);
       // Post-publish follow-up: validate schema and re-audit
       try {
-        await postPublishFollowup(loadedCmsContent.cmsType);
+        await postPublishFollowup(loadedCmsContent.cmsType, maybePermalink || undefined);
       } catch (e) {
         console.warn('Post-publish follow-up failed:', e);
       }
@@ -477,7 +481,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     setIsPushing(true);
     try {
       if (loadedCmsContent.cmsType === 'wordpress') {
-        await apiService.publishToWordPress({ 
+        const resp = await apiService.publishToWordPress({ 
           title, 
           content, 
           status: 'draft', 
@@ -486,14 +490,20 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           pageUrl: (currentUrl || context?.url),
           useInsertedSchema
         });
+        const payload = resp?.data || resp;
+        const maybePermalink = payload?.permalink || payload?.post?.link || null;
+        await postPublishFollowup('wordpress', maybePermalink || undefined);
       } else {
-        await apiService.publishToShopify({
+        const resp = await apiService.publishToShopify({
           product: { title, body_html: content },
           autoGenerateSchema,
           projectId: selectedProjectId,
           pageUrl: (currentUrl || context?.url),
           useInsertedSchema
         });
+        const payload = resp?.data || resp;
+        const maybePermalink = payload?.permalink || null;
+        await postPublishFollowup('shopify', maybePermalink || undefined);
       }
       alert('New content pushed successfully as a draft!');
       setLoadedCmsContent(null);
@@ -520,7 +530,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     try {
       let result: any;
       if (cmsType === 'wordpress') {
-        result = await apiService.publishToWordPress({ 
+        const resp = await apiService.publishToWordPress({ 
           title, 
           content, 
           status: 'draft', 
@@ -529,14 +539,22 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           pageUrl: (currentUrl || context?.url),
           useInsertedSchema
         });
+        const payload = resp?.data || resp;
+        const maybePermalink = payload?.permalink || payload?.post?.link || null;
+        await postPublishFollowup('wordpress', maybePermalink || undefined);
+        result = resp;
       } else {
-        result = await apiService.publishToShopify({ 
+        const resp = await apiService.publishToShopify({ 
           product: { title, body_html: content }, 
           autoGenerateSchema,
           projectId: selectedProjectId,
           pageUrl: (currentUrl || context?.url),
           useInsertedSchema
         });
+        const payload = resp?.data || resp;
+        const maybePermalink = payload?.permalink || null;
+        await postPublishFollowup('shopify', maybePermalink || undefined);
+        result = resp;
       }
       const maybeUrl = result?.data?.url || result?.data?.permalink || result?.data?.product_url || result?.data?.admin_url;
       onToast?.({
@@ -639,6 +657,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
             created_at: new Date().toISOString(),
             activity_data: {
               cms_type: cmsType,
+              cms_item_id: loadedCmsContent?.id,
               usedSchema,
               schemaValid,
               schemaIssueCount: issues.length,
@@ -781,6 +800,26 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       }
     })();
   }, [selectedProjectId, currentUrl, context?.url]);
+
+  // Load recent Publish Impact entries (post_publish_validation) for this context
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const entries = await userDataService.getRecentActivity(user.id, 30);
+        const keyUrl = (currentUrl || context?.url) || '';
+        const cmsMatchId = loadedCmsContent?.id;
+        const filtered = (entries || []).filter((e: any) => e.activity_type === 'post_publish_validation' && (
+          (e.website_url && keyUrl && e.website_url === keyUrl) ||
+          (e.activity_data?.cms_item_id && cmsMatchId && String(e.activity_data.cms_item_id) === String(cmsMatchId))
+        ));
+        setRecentImpacts(filtered.slice(0, 3));
+      } catch (e) {
+        console.warn('Failed to load recent publish impact entries:', e);
+      }
+    })();
+  }, [selectedProjectId, currentUrl, context?.url, loadedCmsContent?.id]);
 
   const toggleAcceptEntity = (name: string) => {
     setEntitiesAccepted(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
@@ -1525,6 +1564,36 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
               <textarea value={schemaJson} onChange={(e) => setSchemaJson(e.target.value)} rows={12} className="w-full border border-gray-200 rounded p-3 text-xs font-mono bg-gray-50" placeholder='{"@context":"https://schema.org","@type":"Article",...}' />
             </div>
           )}
+
+          {/* Publish Impact panel */}
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium text-gray-900">Publish Impact</h4>
+              <span className="text-xs text-gray-500">Last {recentImpacts.length || 0}</span>
+            </div>
+            {recentImpacts.length === 0 ? (
+              <p className="text-xs text-gray-500">No recent publish checks yet. Publish to see schema validation and visibility changes.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentImpacts.map((it: any, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-gray-600">{new Date(it.created_at).toLocaleString()}</span>
+                      <span className={`px-1.5 py-0.5 rounded ${it.activity_data?.schemaValid ? 'bg-green-100 text-green-700' : (it.activity_data?.usedSchema === 'none' ? 'bg-gray-100 text-gray-700' : 'bg-red-100 text-red-700')}`}>
+                        {it.activity_data?.usedSchema === 'none' ? 'Schema: none' : (it.activity_data?.schemaValid ? 'Schema: valid' : 'Schema: invalid')}
+                      </span>
+                      {typeof it.activity_data?.afterScore === 'number' && (
+                        <span className="text-gray-700">Visibility: {it.activity_data.afterScore}{typeof it.activity_data?.delta === 'number' && it.activity_data.delta !== 0 ? (it.activity_data.delta > 0 ? ` (▲${it.activity_data.delta})` : ` (▼${Math.abs(it.activity_data.delta)})`) : ''}</span>
+                      )}
+                    </div>
+                    {it.activity_data?.permalink && (
+                      <a href={it.activity_data.permalink} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">View</a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-4">

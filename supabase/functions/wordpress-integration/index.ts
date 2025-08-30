@@ -213,7 +213,8 @@ export const wordpressService = async (req, supabase)=>{
         const publishedPost = await pubResponse.json();
         output = {
           success: true,
-          post: publishedPost
+          post: publishedPost,
+          permalink: publishedPost?.link || publishedPost?.guid?.rendered || null
         };
         break;
       case 'get_posts':
@@ -349,7 +350,8 @@ export const wordpressService = async (req, supabase)=>{
         const updatedPost = await updateResponse.json();
         output = {
           success: true,
-          post: updatedPost
+          post: updatedPost,
+          permalink: updatedPost?.link || updatedPost?.guid?.rendered || null
         };
         break;
       case 'disconnect':

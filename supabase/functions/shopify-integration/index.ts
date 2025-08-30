@@ -209,7 +209,8 @@ export const shopifyService = async (req, supabase)=>{
         const createdProduct = await pubResponse.json();
         output = {
           success: true,
-          product: createdProduct.product
+          product: createdProduct.product,
+          permalink: createdProduct?.product?.handle ? `${integration.site_url.replace(/\/$/, '')}/products/${createdProduct.product.handle}` : null
         };
         break;
       case 'get_products':
@@ -298,7 +299,8 @@ export const shopifyService = async (req, supabase)=>{
         const updatedProduct = await updateResponse.json();
         output = {
           success: true,
-          product: updatedProduct.product
+          product: updatedProduct.product,
+          permalink: updatedProduct?.product?.handle ? `${integration.site_url.replace(/\/$/, '')}/products/${updatedProduct.product.handle}` : null
         };
         break;
       case 'disconnect':
