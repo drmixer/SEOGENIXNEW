@@ -117,6 +117,10 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         setGeneratorTopic(context.topic || `Responding to: "${context.citation.snippet}"`);
         setGeneratorKeywords(context.targetKeywords || '');
         setGeneratorContentType('faq'); // Default to FAQ for citation responses
+      } else {
+        if (context?.topic) setGeneratorTopic(context.topic);
+        if (context?.targetKeywords) setGeneratorKeywords(context.targetKeywords);
+        if (context?.contentType) setGeneratorContentType(context.contentType);
       }
     }
     if (activeToolId === 'competitive' && context?.competitors) {
@@ -603,9 +607,80 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   };
 
   const handleFixItClick = (recommendation: any) => {
-    if (recommendation.action_type === 'content-optimizer') {
-      onSwitchTool('editor', { url: selectedWebsite });
+    const lower = (s: any) => (typeof s === 'string' ? s.toLowerCase() : '');
+    const action = lower(recommendation?.action_type);
+    const title = lower(recommendation?.title);
+    const desc = lower(recommendation?.description);
+    const text = `${title} ${desc}`;
+
+    const open = (toolId: string, ctx: any = {}) => {
+      onSwitchTool(toolId, {
+        source: 'fixit',
+        fromRecommendation: recommendation,
+        ...ctx,
+      });
+    };
+
+    // Content optimization/editor
+    if (
+      action.includes('content-optimizer') ||
+      action.includes('content') ||
+      text.includes('optimiz') ||
+      text.includes('readability') ||
+      text.includes('structure') ||
+      text.includes('heading') ||
+      text.includes('meta')
+    ) {
+      open('editor', { url: selectedWebsite, hint: recommendation?.title });
+      return;
     }
+
+    // Schema / Structured Data
+    if (
+      action.includes('schema') ||
+      text.includes('schema') ||
+      text.includes('structured data') ||
+      text.includes('json-ld')
+    ) {
+      open('schema', { contentType: 'Article' });
+      return;
+    }
+
+    // Entity Coverage
+    if (action.includes('entity') || text.includes('entity') || text.includes('entities') || text.includes('topic')) {
+      open('entities', {});
+      return;
+    }
+
+    // Citations / Mentions
+    if (action.includes('citation') || text.includes('citation') || text.includes('mention')) {
+      open('citations', {});
+      return;
+    }
+
+    // Voice / Conversational
+    if (action.includes('voice') || text.includes('voice') || text.includes('assistant') || text.includes('conversational')) {
+      open('voice', {});
+      return;
+    }
+
+    // Prompts
+    if (action.includes('prompt') || text.includes('prompt')) {
+      open('prompts', { topic: extractDomain(selectedWebsite || '') });
+      return;
+    }
+
+    // Content Generator (FAQs, snippets, etc.)
+    if (action.includes('generate') || text.includes('generate') || text.includes('faq') || text.includes('snippet')) {
+      open('generator', {
+        topic: recommendation?.title || `Content for ${extractDomain(selectedWebsite || '')}`,
+        targetKeywords: ''
+      });
+      return;
+    }
+
+    // Fallback: editor
+    open('editor', { url: selectedWebsite, hint: recommendation?.title });
   };
 
   const handleGenerateWithEntities = (entitiesToInclude: string[]) => {
@@ -1043,6 +1118,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 onGenerateWithEntities={handleGenerateWithEntities}
                 onCreateContentFromCitation={handleCreateContentFromCitation}
                 onSwitchTool={onSwitchTool}
+                userProfile={userProfile}
+                selectedWebsite={selectedWebsite}
               />
               
               <div className="mt-6">
@@ -1131,11 +1208,30 @@ const ToolResultsDisplay: React.FC<{
   onGenerateWithEntities: (entitiesToInclude: string[]) => void;
   onCreateContentFromCitation: (citation: any) => void;
   onSwitchTool: (toolId: string, context: any) => void;
-}> = ({ toolId, data, onFixItClick, onGenerateWithEntities, onCreateContentFromCitation, onSwitchTool }) => {
+  userProfile?: any;
+  selectedWebsite?: string;
+}> = ({ toolId, data, onFixItClick, onGenerateWithEntities, onCreateContentFromCitation, onSwitchTool, userProfile, selectedWebsite }) => {
   
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
+
+  // Lightweight state for a simple Fixes Playlist walkthrough (persisted per website)
+  const [playlistIndex, setPlaylistIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    const loadProgress = async () => {
+      if (toolId !== 'audit' || !userProfile?.user_id || !selectedWebsite) return;
+      try {
+        const prog = await userDataService.getFixesPlaylistProgress(userProfile.user_id, selectedWebsite);
+        if (prog && typeof prog.index === 'number' && data?.recommendations?.length) {
+          const bounded = Math.min(Math.max(0, prog.index), data.recommendations.length - 1);
+          setPlaylistIndex(bounded);
+        }
+      } catch {}
+    };
+    loadProgress();
+  }, [toolId, userProfile?.user_id, selectedWebsite, data?.recommendations?.length]);
 
   switch (toolId) {
     case 'audit':
@@ -1175,16 +1271,88 @@ const ToolResultsDisplay: React.FC<{
                         <p className="text-sm text-green-800 ml-6">{rec.description}</p>
                       )}
                     </div>
-                    {rec.action_type === 'content-optimizer' && (
-                      <button
-                        onClick={() => onFixItClick(rec)}
-                        className="ml-4 px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
-                      >
-                        Fix it
-                      </button>
-                    )}
+                    <button
+                      onClick={() => onFixItClick(rec)}
+                      className="ml-4 px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
+                    >
+                      Fix it
+                    </button>
                   </div>
                 ))}
+              </div>
+              {/* Simple Fixes Playlist */}
+              <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h5 className="font-medium text-gray-900">Fixes Playlist</h5>
+                  <span className="text-xs text-gray-500">Step {Math.min(playlistIndex + 1, data.recommendations.length)} of {data.recommendations.length}</span>
+                </div>
+                {data.recommendations[playlistIndex] && (
+                  <div className="flex items-start justify-between">
+                    <div className="pr-4">
+                      <div className="font-medium text-gray-800">{data.recommendations[playlistIndex].title || String(data.recommendations[playlistIndex])}</div>
+                      {data.recommendations[playlistIndex].description && (
+                        <p className="text-sm text-gray-600 mt-1">{data.recommendations[playlistIndex].description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={async () => {
+                          const nextIndex = Math.max(0, playlistIndex - 1);
+                          setPlaylistIndex(nextIndex);
+                          if (userProfile?.user_id && selectedWebsite) {
+                            await userDataService.saveFixesPlaylistProgress({
+                              userId: userProfile.user_id,
+                              websiteUrl: selectedWebsite,
+                              index: nextIndex,
+                              total: data.recommendations.length,
+                              note: 'prev'
+                            });
+                          }
+                        }}
+                        className="px-3 py-1 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        disabled={playlistIndex === 0}
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (userProfile?.user_id && selectedWebsite) {
+                            await userDataService.saveFixesPlaylistProgress({
+                              userId: userProfile.user_id,
+                              websiteUrl: selectedWebsite,
+                              index: playlistIndex,
+                              total: data.recommendations.length,
+                              note: 'do-it-now'
+                            });
+                          }
+                          onFixItClick(data.recommendations[playlistIndex]);
+                        }}
+                        className="px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700"
+                      >
+                        Do it now
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const nextIndex = Math.min(data.recommendations.length - 1, playlistIndex + 1);
+                          setPlaylistIndex(nextIndex);
+                          if (userProfile?.user_id && selectedWebsite) {
+                            await userDataService.saveFixesPlaylistProgress({
+                              userId: userProfile.user_id,
+                              websiteUrl: selectedWebsite,
+                              index: nextIndex,
+                              total: data.recommendations.length,
+                              note: 'next'
+                            });
+                          }
+                        }}
+                        className="px-3 py-1 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        disabled={playlistIndex >= data.recommendations.length - 1}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1483,6 +1651,44 @@ const ToolResultsDisplay: React.FC<{
               </button>
             </div>
             
+            {/* Open in Editor CTA */}
+            <div className="mb-4">
+              <button
+                onClick={() => {
+                  // Build plain content for editor context
+                  let contentText = '';
+                  let titleText = 'Generated Content';
+                  let keywordsText = '';
+                  const gc = data.generatedContent;
+                  if (gc?.faqs) {
+                    titleText = 'FAQs';
+                    contentText = gc.faqs.map((f: any) => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n');
+                  } else if (gc?.metaTags) {
+                    titleText = gc.metaTags.title || 'Meta Tags';
+                    contentText = `Title: ${gc.metaTags.title}\n\nDescription: ${gc.metaTags.description}\n\nKeywords: ${gc.metaTags.keywords || ''}`;
+                    keywordsText = gc.metaTags.keywords || '';
+                  } else if (typeof gc === 'string') {
+                    contentText = gc;
+                  } else if (gc?.raw || gc?.snippet || gc?.description || gc?.headings) {
+                    contentText = gc.raw || gc.snippet || gc.description || (Array.isArray(gc.headings) ? gc.headings.join('\n') : String(gc.headings));
+                  } else {
+                    contentText = JSON.stringify(gc, null, 2);
+                  }
+
+                  onSwitchTool('editor', {
+                    source: 'generator-open-in-editor',
+                    content: contentText,
+                    title: titleText,
+                    keywords: keywordsText,
+                    contentType: data.contentType || 'content'
+                  });
+                }}
+                className="px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
+              >
+                Open in Editor
+              </button>
+            </div>
+
             {data.generatedContent?.faqs && (
               <div className="space-y-4">
                 <h5 className="font-medium text-gray-800">Generated FAQs:</h5>

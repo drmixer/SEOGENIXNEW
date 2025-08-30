@@ -862,6 +862,89 @@ export const userDataService = {
     }
   },
 
+  // Persist simple per-website Fixes Playlist progress using user_activity to avoid new tables
+  async saveFixesPlaylistProgress(params: { userId: string; websiteUrl: string; index: number; total: number; note?: string }): Promise<void> {
+    const { userId, websiteUrl, index, total, note } = params;
+    if (!userId || !websiteUrl) {
+      console.error('saveFixesPlaylistProgress called with empty userId or websiteUrl');
+      return;
+    }
+    try {
+      await supabase.from('user_activity').insert({
+        user_id: userId,
+        activity_type: 'fixes_playlist_progress',
+        website_url: websiteUrl,
+        activity_data: { index, total, note },
+        created_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Failed to save Fixes Playlist progress:', e);
+    }
+  },
+
+  async getFixesPlaylistProgress(userId: string, websiteUrl: string): Promise<{ index: number; total?: number } | null> {
+    if (!userId || !websiteUrl) {
+      console.error('getFixesPlaylistProgress called with empty userId or websiteUrl');
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('user_activity')
+        .select('activity_data, created_at')
+        .eq('user_id', userId)
+        .eq('activity_type', 'fixes_playlist_progress')
+        .eq('website_url', websiteUrl)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        const ad = data[0].activity_data || {};
+        if (typeof ad.index === 'number') {
+          return { index: ad.index, total: ad.total };
+        }
+      }
+      return null;
+    } catch (e) {
+      console.warn('Failed to fetch Fixes Playlist progress:', e);
+      return null;
+    }
+  },
+
+  // Remember last-used CMS publish target without new tables
+  async saveLastCmsTarget(userId: string, target: 'wordpress' | 'shopify'): Promise<void> {
+    if (!userId) return;
+    try {
+      await supabase.from('user_activity').insert({
+        user_id: userId,
+        activity_type: 'last_cms_target',
+        activity_data: { target },
+        created_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Failed to save last CMS target:', e);
+    }
+  },
+
+  async getLastCmsTarget(userId: string): Promise<'wordpress' | 'shopify' | null> {
+    if (!userId) return null;
+    try {
+      const { data, error } = await supabase
+        .from('user_activity')
+        .select('activity_data, created_at')
+        .eq('user_id', userId)
+        .eq('activity_type', 'last_cms_target')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      const target = data?.[0]?.activity_data?.target;
+      if (target === 'wordpress' || target === 'shopify') return target;
+      return null;
+    } catch (e) {
+      console.warn('Failed to fetch last CMS target:', e);
+      return null;
+    }
+  },
+
   async saveReport(report: Partial<Report>): Promise<Report | null> {
     if (!report.user_id) {
       console.error('saveReport called with empty user_id');
