@@ -48,3 +48,6 @@
   import_map = "./functions/voice-assistant-tester/deno.json"
 [functions.wordpress-integration]
   import_map = "./functions/wordpress-integration/deno.json"
+
+[functions.prerender-fetch]
+  # No import map required for simple fetch-only function
