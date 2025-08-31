@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Shield, CheckCircle, AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
+import { apiService } from '../../services/api';
 import { supabase } from '../../lib/supabase';
 
 interface SchemaPortfolioProps {
@@ -19,6 +20,8 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [validating, setValidating] = useState<boolean>(false);
+  const [coverage, setCoverage] = useState<{ total: number; applied: number; valid: number; invalid: number }>({ total: 0, applied: 0, valid: 0, invalid: 0 });
 
   useEffect(() => {
     (async () => {
@@ -53,7 +56,13 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
           prev.lastChecked = prev.lastChecked || a.created_at;
           byUrl.set(url, prev);
         }
-        setRows(Array.from(byUrl.values()));
+        const arr = Array.from(byUrl.values());
+        setRows(arr);
+        const total = arr.length;
+        const applied = arr.filter(r => r.schemaApplied).length;
+        const valid = arr.filter(r => r.schemaValid === true).length;
+        const invalid = arr.filter(r => r.schemaValid === false).length;
+        setCoverage({ total, applied, valid, invalid });
       } catch (e: any) {
         setError(e?.message || 'Failed to load schema portfolio');
       } finally {
@@ -70,15 +79,67 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
           <h2 className="text-lg font-semibold text-gray-900">Schema Portfolio</h2>
         </div>
         <button
-          onClick={() => {
-            // Placeholder for future: batch validate
+          onClick={async () => {
+            if (!selectedProjectId) return;
+            setValidating(true);
+            try {
+              const updated: Row[] = [];
+              for (const r of rows) {
+                // fetch latest schema_draft for URL
+                const { data, error } = await supabase
+                  .from('user_activity')
+                  .select('activity_data')
+                  .eq('tool_id', selectedProjectId)
+                  .eq('activity_type', 'schema_draft')
+                  .eq('website_url', r.url)
+                  .order('created_at', { ascending: false })
+                  .limit(1);
+                if (!error && data && data[0]?.activity_data?.schema) {
+                  const schemaObj = data[0].activity_data.schema;
+                  const resp = await apiService.validateSchema(schemaObj);
+                  updated.push({ ...r, schemaValid: resp.valid, issues: Array.isArray(resp.issues) ? resp.issues.length : r.issues });
+                } else {
+                  updated.push(r);
+                }
+              }
+              setRows(updated);
+              const total = updated.length;
+              const applied = updated.filter(x => x.schemaApplied).length;
+              const valid = updated.filter(x => x.schemaValid === true).length;
+              const invalid = updated.filter(x => x.schemaValid === false).length;
+              setCoverage({ total, applied, valid, invalid });
+            } catch (e: any) {
+              setError(e?.message || 'Batch validation failed');
+            } finally {
+              setValidating(false);
+            }
           }}
-          className="inline-flex items-center space-x-2 px-3 py-1.5 rounded border border-gray-300 text-sm text-gray-700 hover:bg-gray-50"
-          title="Batch validation coming soon"
+          className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded border text-sm ${validating ? 'border-gray-200 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+          disabled={validating}
+          title="Validate schema for pages with saved drafts"
         >
           <RefreshCw className="w-4 h-4" />
           <span>Batch Validate</span>
         </button>
+      </div>
+
+      <div className="grid grid-cols-4 gap-4">
+        <div className="bg-gray-50 p-3 rounded border text-center">
+          <div className="text-xl font-bold text-gray-900">{coverage.total}</div>
+          <div className="text-xs text-gray-600">Pages</div>
+        </div>
+        <div className="bg-blue-50 p-3 rounded border border-blue-200 text-center">
+          <div className="text-xl font-bold text-blue-700">{coverage.applied}</div>
+          <div className="text-xs text-blue-700">With Schema</div>
+        </div>
+        <div className="bg-green-50 p-3 rounded border border-green-200 text-center">
+          <div className="text-xl font-bold text-green-700">{coverage.valid}</div>
+          <div className="text-xs text-green-700">Valid</div>
+        </div>
+        <div className="bg-red-50 p-3 rounded border border-red-200 text-center">
+          <div className="text-xl font-bold text-red-700">{coverage.invalid}</div>
+          <div className="text-xs text-red-700">Invalid</div>
+        </div>
       </div>
 
       {error && (
@@ -130,4 +191,3 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
 };
 
 export default SchemaPortfolio;
-

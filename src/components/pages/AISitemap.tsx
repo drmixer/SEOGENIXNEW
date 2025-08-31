@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Globe, Download, Loader, Copy } from 'lucide-react';
+import { Globe, Download, Loader, Copy, UploadCloud } from 'lucide-react';
 import { apiService } from '../../services/api';
+import { supabase } from '../../lib/supabase';
 
 interface AISitemapProps {
   selectedProjectId?: string;
@@ -40,6 +41,20 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
     URL.revokeObjectURL(url);
   };
 
+  const uploadToStorage = async () => {
+    if (!selectedProjectId || !json) return;
+    try {
+      const content = JSON.stringify(json, null, 2);
+      const path = `${selectedProjectId}/ai.json`;
+      const { error } = await supabase.storage.from('ai-sitemaps').upload(path, new Blob([content], { type: 'application/json' }), { upsert: true, contentType: 'application/json' as any });
+      if (error) throw error;
+      const { data } = supabase.storage.from('ai-sitemaps').getPublicUrl(path);
+      alert(`Uploaded to storage. Public URL: ${data.publicUrl}`);
+    } catch (e: any) {
+      alert(`Upload failed: ${e?.message || 'Storage bucket missing? Create bucket ai-sitemaps.'}`);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -67,10 +82,11 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
         <div className="bg-gray-900 text-green-200 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs text-gray-300">ai.json preview</div>
-            <div className="space-x-2">
-              <button onClick={copy} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 text-gray-100"><Copy className="w-4 h-4"/> <span>Copy</span></button>
-              <button onClick={download} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 text-gray-100"><Download className="w-4 h-4"/> <span>Download</span></button>
-            </div>
+          <div className="space-x-2">
+            <button onClick={copy} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 text-gray-100"><Copy className="w-4 h-4"/> <span>Copy</span></button>
+            <button onClick={download} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 text-gray-100"><Download className="w-4 h-4"/> <span>Download</span></button>
+            <button onClick={uploadToStorage} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 text-gray-100"><UploadCloud className="w-4 h-4"/> <span>Upload</span></button>
+          </div>
           </div>
           <pre className="text-xs overflow-auto max-h-[420px]">{JSON.stringify(json, null, 2)}</pre>
         </div>
@@ -80,4 +96,3 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
 };
 
 export default AISitemap;
-

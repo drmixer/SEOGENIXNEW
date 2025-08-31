@@ -321,6 +321,21 @@ export const apiService = {
     return voicePromise;
   },
 
+  // Assistant Testbench (multi-provider)
+  async runAssistantTestbench(projectId: string, query: string, providers: string[]): Promise<{ results: VoiceTestResult[] }> {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/assistant-testbench`, { query, providers, projectId });
+    if (pendingApiRequests.has(cacheKey)) {
+      return pendingApiRequests.get(cacheKey);
+    }
+    const p = apiCall(`${API_BASE_URL}/assistant-testbench`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId, query, providers })
+    }).then((resp) => resp.output || resp.data || resp);
+    pendingApiRequests.set(cacheKey, p);
+    p.finally(() => pendingApiRequests.delete(cacheKey));
+    return p;
+  },
+
   // AI Sitemap
   async generateAISitemap(projectId: string, urls?: string[], fetchContent: boolean = false): Promise<any> {
     const result = await apiCall(`${API_BASE_URL}/ai-sitemap`, {

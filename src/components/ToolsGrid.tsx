@@ -164,8 +164,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     },
     {
       id: 'voice',
-      name: 'Voice Assistant Tester',
-      description: 'Test how voice assistants respond to queries about your business',
+      name: 'Assistant Testbench',
+      description: 'Probe multiple providers (OpenAI, Perplexity, Bing, Google) for mentions/citations.',
       icon: Mic,
       color: 'from-indigo-500 to-indigo-600',
       planRequired: 'core'
@@ -333,7 +333,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           break;
 
         case 'voice':
-          result = await apiService.testVoiceAssistants(voiceQuery, selectedAssistants);
+          if (!selectedProjectId) throw new Error('Select a website first');
+          result = await apiService.runAssistantTestbench(selectedProjectId, voiceQuery, selectedAssistants);
           break;
 
         case 'summaries':
@@ -919,7 +920,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             <div className="mb-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Voice Query
+                  Assistant Test Query
                 </label>
                 <input
                   type="text"
@@ -929,14 +930,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
                 <p className="mt-1 text-sm text-gray-500">
-                  Enter the question users might ask voice assistants about your business
+                  Enter the question users might ask assistants about your business
                 </p>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Voice Assistants</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Providers</label>
                 <div className="space-y-2">
-                  {['siri', 'alexa', 'google'].map(assistant => (
+                  {['openai', 'perplexity', 'bing', 'google'].map(assistant => (
                     <label key={assistant} className="flex items-center">
                       <input
                         type="checkbox"
