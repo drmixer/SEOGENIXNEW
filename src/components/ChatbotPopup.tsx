@@ -36,32 +36,52 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [userData, setUserData] = useState<any>(null);
+  const [sessionId, setSessionId] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load user data for personalization
   useEffect(() => {
-    const loadUserData = async () => {
+    const load = async () => {
       if (type === 'dashboard' && user) {
         try {
-          const profile = await userDataService.getUserProfile(user.id);
-          const recentActivity = await userDataService.getRecentActivity(user.id, 10);
-          const auditHistory = await userDataService.getAuditHistory(user.id, 3);
-          
-          setUserData({
-            websites: profile?.websites || [],
-            industry: profile?.industry,
-            recentActivity,
-            lastAuditScore: auditHistory[0]?.overall_score,
-            lastAuditRecommendations: auditHistory[0]?.recommendations || []
-          });
+          const data = await userDataService.getChatbotUserData(user.id);
+          setUserData(data);
         } catch (error) {
           console.error('Error loading user data:', error);
         }
       }
     };
 
-    loadUserData();
+    load();
   }, [type, user]);
+
+  useEffect(() => {
+    let stored = localStorage.getItem('genieSessionId');
+    if (!stored) {
+      stored = crypto.randomUUID();
+      localStorage.setItem('genieSessionId', stored);
+    }
+    setSessionId(stored);
+  }, []);
+
+  const refreshUserData = async () => {
+    if (type === 'dashboard' && user) {
+      try {
+        const updated = await userDataService.getChatbotUserData(user.id);
+        setUserData(updated);
+      } catch (error) {
+        console.error('Error refreshing user data:', error);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleToolRunCompleted = () => {
+      refreshUserData();
+    };
+    window.addEventListener('toolRunCompleted', handleToolRunCompleted);
+    return () => window.removeEventListener('toolRunCompleted', handleToolRunCompleted);
+  }, [user]);
 
   // Scroll to bottom of messages when new messages are added
   useEffect(() => {
@@ -123,7 +143,7 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
         type,
         userPlan,
         conversationHistory,
-        userData
+        userData ? { ...userData, sessionId } : { sessionId }
       );
 
       const botMessage: Message = {
