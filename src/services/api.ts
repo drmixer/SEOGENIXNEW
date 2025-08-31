@@ -63,12 +63,20 @@ const apiCall = async (url: string, options: RequestInit, authRequired: boolean 
     console.log(`API response from ${url}:`, data);
     
     // Handle different response formats from edge functions
-    if (data.success === false) {
-      throw new Error(data.error?.message || 'API returned error');
+    if (typeof data?.success !== 'undefined') {
+      if (data.success === false) {
+        throw new Error(data.error?.message || 'API returned error');
+      }
+      // success: true — normalize common payload keys
+      // Prefer explicit payload properties, otherwise return the full object
+      if (typeof data.data !== 'undefined') return data.data;
+      if (typeof data.output !== 'undefined') return data.output;
+      if (typeof data.result !== 'undefined') return data.result;
+      return data;
     }
     
-    // Some functions return { success: true, data: ... }, others return direct data
-    return data.success ? data.data : data;
+    // No success flag — return parsed body as-is
+    return data;
   } catch (error) {
     console.error(`API call failed for ${url}:`, error);
     throw error;
@@ -673,7 +681,8 @@ export const apiService = {
             ...options
         })
     });
-    return result.data;
+    // Normalized apiCall returns the output payload directly
+    return result?.items ? result.items : result;
   },
 
   async getCMSContentItem(cmsType: 'wordpress' | 'shopify', itemId: number | string) {
@@ -686,7 +695,8 @@ export const apiService = {
               [idKey]: itemId
           })
       });
-      return result.data;
+      // Normalized apiCall returns the output payload directly
+      return result;
   },
 
   async updateCMSContentItem(

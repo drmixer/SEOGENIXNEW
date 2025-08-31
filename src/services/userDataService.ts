@@ -87,6 +87,13 @@ export interface SavedCitationPrompt {
   created_at: string;
 }
 
+export interface SavedCitationsUsage {
+  citations?: Array<{ title: string; url: string; anchorText?: string; used?: boolean; relNofollow?: boolean }>;
+  insertedAnchors?: boolean;
+  insertedReferences?: boolean;
+  updatedAt?: string;
+}
+
 export interface FingerprintPhrase {
   id: string;
   user_id: string;
@@ -624,6 +631,61 @@ export const userDataService = {
     } catch (error) {
       console.error('Error deleting saved citation prompt:', error);
       return false;
+    }
+  },
+
+  async saveCitationsUsage(params: { userId: string; projectId: string; websiteUrl: string; usage: SavedCitationsUsage }): Promise<void> {
+    const { userId, projectId, websiteUrl, usage } = params;
+    if (!userId || !projectId || !websiteUrl) {
+      console.error('saveCitationsUsage called with missing identifiers');
+      return;
+    }
+    try {
+      // Remove prior entries for this context to keep only the latest
+      await supabase
+        .from('user_activity')
+        .delete()
+        .eq('user_id', userId)
+        .eq('activity_type', 'citations_usage')
+        .eq('website_url', websiteUrl)
+        .eq('tool_id', projectId);
+
+      await supabase.from('user_activity').insert({
+        user_id: userId,
+        activity_type: 'citations_usage',
+        website_url: websiteUrl,
+        tool_id: projectId,
+        activity_data: { ...usage, updatedAt: new Date().toISOString() },
+        created_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Failed to save citations usage:', e);
+    }
+  },
+
+  async getCitationsUsage(userId: string, projectId: string, websiteUrl: string): Promise<SavedCitationsUsage | null> {
+    if (!userId || !projectId || !websiteUrl) {
+      console.error('getCitationsUsage called with missing identifiers');
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('user_activity')
+        .select('activity_data, created_at')
+        .eq('user_id', userId)
+        .eq('activity_type', 'citations_usage')
+        .eq('website_url', websiteUrl)
+        .eq('tool_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        return data[0].activity_data as SavedCitationsUsage;
+      }
+      return null;
+    } catch (e) {
+      console.warn('Failed to load citations usage:', e);
+      return null;
     }
   },
 
