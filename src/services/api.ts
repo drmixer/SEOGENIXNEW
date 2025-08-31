@@ -681,7 +681,8 @@ export const apiService = {
             ...options
         })
     });
-    return result.data;
+    // Normalized apiCall returns the output payload directly
+    return result?.items ? result.items : result;
   },
 
   async getCMSContentItem(cmsType: 'wordpress' | 'shopify', itemId: number | string) {
@@ -694,7 +695,8 @@ export const apiService = {
               [idKey]: itemId
           })
       });
-      return result.data;
+      // Normalized apiCall returns the output payload directly
+      return result;
   },
 
   async updateCMSContentItem(

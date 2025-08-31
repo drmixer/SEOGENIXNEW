@@ -492,7 +492,28 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         });
         const payload = resp?.data || resp;
         const maybePermalink = payload?.permalink || payload?.post?.link || null;
-        await postPublishFollowup('wordpress', maybePermalink || undefined);
+        const newId = payload?.post?.id;
+        // Upsert schema draft with the new cms_item_id for future matches
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && selectedProjectId && newId != null) {
+            const websiteUrl = (maybePermalink || currentUrl || context?.url || '') as string;
+            const draft: any = { cms_type: 'wordpress', cms_item_id: newId };
+            if (hasAppliedSchemaForContext && schemaJson?.trim()) {
+              draft.applied = true;
+              draft.schema = JSON.parse(schemaJson);
+              if (schemaValid != null) draft.valid = schemaValid;
+              if (schemaIssues?.length) draft.issues = schemaIssues;
+            }
+            await userDataService.saveSchemaDraft({
+              userId: user.id,
+              projectId: selectedProjectId,
+              websiteUrl,
+              draft
+            });
+          }
+        } catch (e) { console.warn('Failed to upsert schema draft with cms_item_id:', e); }
+        await postPublishFollowup('wordpress', maybePermalink || undefined, newId);
       } else {
         const resp = await apiService.publishToShopify({
           product: { title, body_html: content },
@@ -503,7 +524,28 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         });
         const payload = resp?.data || resp;
         const maybePermalink = payload?.permalink || null;
-        await postPublishFollowup('shopify', maybePermalink || undefined);
+        const newId = payload?.product?.id;
+        // Upsert schema draft with the new cms_item_id for future matches
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && selectedProjectId && newId != null) {
+            const websiteUrl = (maybePermalink || currentUrl || context?.url || '') as string;
+            const draft: any = { cms_type: 'shopify', cms_item_id: newId };
+            if (hasAppliedSchemaForContext && schemaJson?.trim()) {
+              draft.applied = true;
+              draft.schema = JSON.parse(schemaJson);
+              if (schemaValid != null) draft.valid = schemaValid;
+              if (schemaIssues?.length) draft.issues = schemaIssues;
+            }
+            await userDataService.saveSchemaDraft({
+              userId: user.id,
+              projectId: selectedProjectId,
+              websiteUrl,
+              draft
+            });
+          }
+        } catch (e) { console.warn('Failed to upsert schema draft with cms_item_id:', e); }
+        await postPublishFollowup('shopify', maybePermalink || undefined, newId);
       }
       alert('New content pushed successfully as a draft!');
       setLoadedCmsContent(null);
@@ -541,7 +583,28 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         });
         const payload = resp?.data || resp;
         const maybePermalink = payload?.permalink || payload?.post?.link || null;
-        await postPublishFollowup('wordpress', maybePermalink || undefined);
+        const newId = payload?.post?.id;
+        // Upsert schema draft with cms_item_id for future exact matches
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && selectedProjectId && newId != null) {
+            const websiteUrl = (maybePermalink || currentUrl || context?.url || '') as string;
+            const draft: any = { cms_type: 'wordpress', cms_item_id: newId };
+            if (hasAppliedSchemaForContext && schemaJson?.trim()) {
+              draft.applied = true;
+              draft.schema = JSON.parse(schemaJson);
+              if (schemaValid != null) draft.valid = schemaValid;
+              if (schemaIssues?.length) draft.issues = schemaIssues;
+            }
+            await userDataService.saveSchemaDraft({
+              userId: user.id,
+              projectId: selectedProjectId,
+              websiteUrl,
+              draft
+            });
+          }
+        } catch (e) { console.warn('Failed to upsert schema draft with cms_item_id:', e); }
+        await postPublishFollowup('wordpress', maybePermalink || undefined, newId);
         result = resp;
       } else {
         const resp = await apiService.publishToShopify({ 
@@ -553,7 +616,28 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         });
         const payload = resp?.data || resp;
         const maybePermalink = payload?.permalink || null;
-        await postPublishFollowup('shopify', maybePermalink || undefined);
+        const newId = payload?.product?.id;
+        // Upsert schema draft with cms_item_id for future exact matches
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && selectedProjectId && newId != null) {
+            const websiteUrl = (maybePermalink || currentUrl || context?.url || '') as string;
+            const draft: any = { cms_type: 'shopify', cms_item_id: newId };
+            if (hasAppliedSchemaForContext && schemaJson?.trim()) {
+              draft.applied = true;
+              draft.schema = JSON.parse(schemaJson);
+              if (schemaValid != null) draft.valid = schemaValid;
+              if (schemaIssues?.length) draft.issues = schemaIssues;
+            }
+            await userDataService.saveSchemaDraft({
+              userId: user.id,
+              projectId: selectedProjectId,
+              websiteUrl,
+              draft
+            });
+          }
+        } catch (e) { console.warn('Failed to upsert schema draft with cms_item_id:', e); }
+        await postPublishFollowup('shopify', maybePermalink || undefined, newId);
         result = resp;
       }
       const maybeUrl = result?.data?.url || result?.data?.permalink || result?.data?.product_url || result?.data?.admin_url;
@@ -581,7 +665,11 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   };
 
   // Post-publish validation and re-audit
-  const postPublishFollowup = async (cmsType: 'wordpress' | 'shopify', permalink?: string) => {
+  const postPublishFollowup = async (
+    cmsType: 'wordpress' | 'shopify',
+    permalink?: string,
+    cmsItemIdOverride?: string | number
+  ) => {
     try {
       const usedSchema = (useInsertedSchema && hasAppliedSchemaForContext)
         ? 'inserted'
@@ -657,7 +745,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
             created_at: new Date().toISOString(),
             activity_data: {
               cms_type: cmsType,
-              cms_item_id: loadedCmsContent?.id,
+              cms_item_id: (cmsItemIdOverride != null ? cmsItemIdOverride : loadedCmsContent?.id),
               usedSchema,
               schemaValid,
               schemaIssueCount: issues.length,
@@ -1262,6 +1350,28 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                     <span>{content.length} characters</span>
                     {isAnalyzing && <div className="flex items-center space-x-1"><RefreshCw className="w-3 h-3 animate-spin" /><span>Analyzing...</span></div>}
                   </div>
+                </div>
+                {/* Schema preference pill */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs px-2 py-1 rounded-full border border-gray-200 bg-gray-50 text-gray-700">
+                    Applied schema: {hasAppliedSchemaForContext && useInsertedSchema ? 'Inserted' : (autoGenerateSchema ? 'Auto-generate' : 'None')}
+                  </span>
+                  <button
+                    onClick={() => setShowSchemaPanel(true)}
+                    className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+                  >View</button>
+                  <button
+                    onClick={() => {
+                      if (hasAppliedSchemaForContext) {
+                        setUseInsertedSchema(prev => !prev);
+                        onToast?.({ type: 'info', title: 'Schema preference', message: !useInsertedSchema ? 'Using inserted schema' : 'Using generator', duration: 2500 });
+                      } else {
+                        setAutoGenerateSchema(prev => !prev);
+                        onToast?.({ type: 'info', title: 'Schema preference', message: !autoGenerateSchema ? 'Auto-generate enabled' : 'Auto-generate disabled', duration: 2500 });
+                      }
+                    }}
+                    className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+                  >Switch</button>
                 </div>
               </div>
             </div>
