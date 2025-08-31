@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Globe, Target, ArrowRight, Building, FileText, Loader } from 'lucide-react';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
+import Modal from './ui/Modal';
 
 interface OnboardingModalProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -244,26 +245,26 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
 
   return (
     <Modal isOpen={true} onClose={onClose} header={header} size="2xl">
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="p-4 sm:p-6 pb-0">
-            {/* Progress indicator */}
-            <div className="flex items-center mb-8">
-              {[1, 2, 3, 4].map((stepNumber) => (
-                <React.Fragment key={stepNumber}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    step >= stepNumber ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
-                  }`}>
-                    {stepNumber}
-                  </div>
-                  {stepNumber < totalSteps && (
-                    <div className={`flex-1 h-1 mx-4 ${step > stepNumber ? 'bg-purple-600' : 'bg-gray-200'}`}></div>
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="p-4 sm:p-6 pb-0">
+          {/* Progress indicator */}
+          <div className="flex items-center mb-8">
+            {[1, 2, 3, 4].map((stepNumber) => (
+              <React.Fragment key={stepNumber}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                  step >= stepNumber ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
+                }`}>
+                  {stepNumber}
+                </div>
+                {stepNumber < totalSteps && (
+                  <div className={`flex-1 h-1 mx-4 ${step > stepNumber ? 'bg-purple-600' : 'bg-gray-200'}`}></div>
+                )}
+              </React.Fragment>
+            ))}
           </div>
+        </div>
 
-          <div className="flex-1 overflow-y-auto px-6">
+        <div className="flex-1 overflow-y-auto px-6">
             {step === 1 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
@@ -503,9 +504,9 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                 )}
               </div>
             )}
-          </div>
+        </div>
 
-          <div className="flex items-center justify-end space-x-3 p-6 pt-4 border-t border-gray-200">
+        <div className="flex items-center justify-end space-x-3 p-6 pt-4 border-t border-gray-200">
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
@@ -534,10 +535,9 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
                 </>
               )}
             </button>
-          </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 
