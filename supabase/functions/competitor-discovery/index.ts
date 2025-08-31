@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "node:crypto";
 import { getDomain } from "https://esm.sh/tldts@6";
-import { ok, fail } from "../_shared/response.ts";
+import { ok, fail } from "./response.ts";
 // --- CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
