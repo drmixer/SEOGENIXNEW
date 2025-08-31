@@ -3,7 +3,6 @@ import {
   FileText,
   Shield,
   Search,
-  Mic,
   Globe,
   Users,
   Zap,
@@ -97,9 +96,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   // Entity to Content specific state
   const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
 
-  // Voice Assistant specific state
-  const [voiceQuery, setVoiceQuery] = useState('');
-  const [selectedAssistants, setSelectedAssistants] = useState<string[]>(['siri', 'alexa', 'google']);
   // Discovery rules manager state
   const [showRulesManager, setShowRulesManager] = useState(false);
   const [domainRules, setDomainRules] = useState<Array<{ id: string; type: 'allow'|'block'; pattern: string; reason?: string; created_at?: string }>>([]);
@@ -165,14 +161,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       description: 'Monitor when AI systems mention your content',
       icon: Search,
       color: 'from-purple-500 to-purple-600',
-      planRequired: 'core'
-    },
-    {
-      id: 'voice',
-      name: 'Assistant Testbench',
-      description: 'Probe multiple providers (OpenAI, Perplexity, Bing, Google) for mentions/citations.',
-      icon: Mic,
-      color: 'from-indigo-500 to-indigo-600',
       planRequired: 'core'
     },
     {
@@ -264,10 +252,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         setPromptTopic(domain);
       }
 
-      if (toolId === 'voice' && selectedWebsite) {
-        const domain = extractDomain(selectedWebsite);
-        setVoiceQuery(`What is ${domain}?`);
-      }
     }
   };
 
@@ -284,20 +268,19 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     if (loading || !toolId) return true;
 
     // Most tools require a project and website
-    if (!['voice', 'generator'].includes(toolId) && (!projectId || !website)) {
+    if (toolId !== 'generator' && (!projectId || !website)) {
       return true;
     }
 
     // Tool-specific validation
     if (toolId === 'generator' && (!generatorTopic || !generatorKeywords)) return true;
     if (toolId === 'prompts' && !promptTopic) return true;
-    if (toolId === 'voice' && !voiceQuery) return true;
 
     return false;
   };
 
   const handleRunTool = async (toolId: string) => {
-    if (!selectedWebsite && toolId !== 'generator' && toolId !== 'voice') {
+    if (!selectedWebsite && toolId !== 'generator') {
       setError('Please select a website first');
       return;
     }
@@ -338,11 +321,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             citationKeywordsList.length > 0 ? citationKeywordsList : ['AI visibility', 'SEO'],
             fingerprintList.length > 0 ? fingerprintList : undefined
           );
-          break;
-
-        case 'voice':
-          if (!selectedProjectId) throw new Error('Select a website first');
-          result = await apiService.runAssistantTestbench(selectedProjectId, voiceQuery, selectedAssistants);
           break;
 
         case 'summaries':
@@ -393,7 +371,9 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           selectedWebsite!,
           userProfile?.industry,
           userProfile?.business_description,
-          userProfile?.competitors?.map((c: any) => c.url) || []
+          userProfile?.competitors?.map((c: any) => c.url) || [],
+          'comprehensive',
+          { preferNiche: true }
         );
         break;
 
@@ -545,17 +525,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           keywords: result.keywords || []
         };
 
-      case 'voice':
-        return {
-          results: result.results || result.assistantResults || [],
-          summary: {
-            totalMentions: result.summary?.totalMentions || 0,
-            averageRanking: result.summary?.averageRanking || 0,
-            averageConfidence: result.summary?.averageConfidence || 0
-          },
-          query: result.query || voiceQuery
-        };
-
       case 'summaries':
         return {
           summary: result.summary || result.generatedSummary || 'Summary generated successfully',
@@ -605,11 +574,17 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         };
 
       case 'discovery':
+        const suggestions =
+          result.competitorSuggestions ||
+          result.suggestions ||
+          result.competitors ||
+          result.results || [];
         return {
-          competitorSuggestions: result.competitorSuggestions || result.suggestions || result.competitors || [],
-          totalSuggestions: result.totalSuggestions || (result.competitorSuggestions ? result.competitorSuggestions.length : 0),
+          competitorSuggestions: suggestions,
+          totalSuggestions: result.totalSuggestions || suggestions.length,
           averageRelevance: result.averageRelevance || 0,
-          competitiveIntensity: result.competitiveIntensity || 'Medium'
+          competitiveIntensity: result.competitiveIntensity || 'Medium',
+          rejectedSummary: result.rejectedSummary || result.filteredSummary
         };
 
       default:
@@ -921,49 +896,6 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                 <p className="mt-1 text-sm text-gray-500">
                   Unique phrases that can be used to detect when your content is being cited
                 </p>
-              </div>
-            </div>
-          )}
-
-          {activeToolId === 'voice' && (
-            <div className="mb-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Assistant Test Query
-                </label>
-                <input
-                  type="text"
-                  value={voiceQuery}
-                  onChange={(e) => setVoiceQuery(e.target.value)}
-                  placeholder="What is your business about?"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-                <p className="mt-1 text-sm text-gray-500">
-                  Enter the question users might ask assistants about your business
-                </p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Providers</label>
-                <div className="space-y-2">
-                  {['openai', 'perplexity', 'bing', 'google'].map(assistant => (
-                    <label key={assistant} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedAssistants.includes(assistant)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedAssistants([...selectedAssistants, assistant]);
-                          } else {
-                            setSelectedAssistants(selectedAssistants.filter(a => a !== assistant));
-                          }
-                        }}
-                        className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                      />
-                      <span className="ml-2 text-sm text-gray-700 capitalize">{assistant}</span>
-                    </label>
-                  ))}
-                </div>
               </div>
             </div>
           )}
@@ -1295,52 +1227,6 @@ const ToolResultsDisplay: React.FC<{
   const [playlistIndex, setPlaylistIndex] = React.useState(0);
   // Selection for adding discovered competitors
   const [selectedToAdd, setSelectedToAdd] = React.useState<string[]>([]);
-  // Assistant Testbench view state (provider filters + mention context)
-  const [visibleProviders, setVisibleProviders] = React.useState<string[] | null>(null);
-  const [mentionContext, setMentionContext] = React.useState<{ hasSchemaApplied: boolean; schemaValid: boolean | null; hasCitations: boolean; entitiesAcceptedCount: number } | null>(null);
-  React.useEffect(() => {
-    (async () => {
-      try {
-        if (!userProfile?.user_id || !selectedWebsite) return;
-        const keyUrl = selectedWebsite;
-        // Load schema draft (latest for this URL)
-        const { data: schemaRows } = await supabase
-          .from('user_activity')
-          .select('activity_data, created_at')
-          .eq('user_id', userProfile.user_id)
-          .eq('activity_type', 'schema_draft')
-          .eq('website_url', keyUrl)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        const schemaData = schemaRows && schemaRows[0]?.activity_data;
-        const hasSchemaApplied = !!schemaData?.applied;
-        const schemaValid = typeof schemaData?.valid === 'boolean' ? schemaData.valid : null;
-        // Citations usage
-        const { data: citeRows } = await supabase
-          .from('user_activity')
-          .select('activity_data, created_at')
-          .eq('user_id', userProfile.user_id)
-          .eq('activity_type', 'citations_usage')
-          .eq('website_url', keyUrl)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        const hasCitations = !!(citeRows && citeRows[0]?.activity_data?.citations?.length);
-        // Entities accepted
-        const { data: entRows } = await supabase
-          .from('user_activity')
-          .select('activity_data, created_at')
-          .eq('user_id', userProfile.user_id)
-          .eq('activity_type', 'entities_draft')
-          .eq('website_url', keyUrl)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        const entitiesAcceptedCount = Array.isArray(entRows && entRows[0]?.activity_data?.accepted) ? entRows![0].activity_data.accepted.length : 0;
-        setMentionContext({ hasSchemaApplied, schemaValid, hasCitations, entitiesAcceptedCount });
-      } catch {
-        setMentionContext(null);
-      }
-    })();
-  }, [userProfile?.user_id, selectedWebsite, toolId]);
 
   React.useEffect(() => {
     const loadProgress = async () => {
@@ -1608,112 +1494,6 @@ const ToolResultsDisplay: React.FC<{
                         <span>View Source</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-
-    case 'voice':
-      return (
-        <div className="space-y-6">
-          {Array.isArray(data?.results) && data.results.length > 0 && (
-            <div className="flex items-center flex-wrap gap-3">
-              <div className="text-sm text-gray-700">Show providers:</div>
-              {Array.from(new Set((data.results || []).map((r: any) => r.assistant))).map((prov: string) => (
-                <label key={prov} className="flex items-center text-xs text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={!visibleProviders || visibleProviders.includes(prov)}
-                    onChange={(e) => {
-                      setVisibleProviders((prev) => {
-                        if (!prev) return e.target.checked ? [prov] : [];
-                        return e.target.checked ? Array.from(new Set([...prev, prov])) : prev.filter(p => p !== prov);
-                      });
-                    }}
-                    className="mr-1"
-                  />
-                  <span className="capitalize">{prov}</span>
-                </label>
-              ))}
-              <button onClick={() => setVisibleProviders(null)} className="text-xs px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">All</button>
-            </div>
-          )}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-blue-600">{data.summary?.totalMentions || 0}</div>
-              <div className="text-sm text-blue-800">Mentions</div>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-green-600">{data.summary?.averageRanking || 0}</div>
-              <div className="text-sm text-green-800">Avg Ranking</div>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-purple-600">{data.summary?.averageConfidence || 0}%</div>
-              <div className="text-sm text-purple-800">Confidence</div>
-            </div>
-          </div>
-          
-              {data.results && data.results.length > 0 && (
-                <div className="space-y-4">
-                  <h4 className="font-medium text-gray-900">Assistant Responses:</h4>
-                  {data.results
-                    .filter((voiceResult: any) => !visibleProviders || visibleProviders.includes(voiceResult.assistant))
-                    .map((voiceResult: any, index: number) => (
-                    <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-800 capitalize">{voiceResult.assistant || 'provider'}</span>
-                      {voiceResult.error && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-800">Error</span>
-                      )}
-                      {voiceResult.skipped && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">Skipped</span>
-                      )}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={`text-xs px-2 py-0.5 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                        {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
-                      </span>
-                      {voiceResult.citationUrl && (
-                        <a href={voiceResult.citationUrl} target="_blank" rel="noopener noreferrer" className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">View Citation</a>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-2">{voiceResult.response || voiceResult.text || 'No response available'}</p>
-                  {!voiceResult.mentioned && (
-                    <div className="mt-2 text-xs text-gray-700 bg-yellow-50 border border-yellow-200 rounded p-2">
-                      <div className="font-medium text-yellow-800 mb-1">Improve mention/citation odds:</div>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <button onClick={() => onSwitchTool('schema', {})} className="px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">Check Schema</button>
-                        <button onClick={() => onSwitchTool('entities', {})} className="px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">Boost Entities</button>
-                        <button onClick={() => onSwitchTool('citations', {})} className="px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">Add Citations</button>
-                      </div>
-                      {mentionContext && (
-                        <ul className="list-disc pl-5 space-y-1">
-                          {!mentionContext.hasSchemaApplied && (
-                            <li>Schema not applied in this context. Insert schema in Editor → Schema.</li>
-                          )}
-                          {mentionContext.schemaValid === false && (
-                            <li>Schema appears invalid. Run validation and fix issues.</li>
-                          )}
-                          {!mentionContext.hasCitations && (
-                            <li>No outgoing citations saved. Add reputable sources in Citations.</li>
-                          )}
-                          {mentionContext.entitiesAcceptedCount === 0 && (
-                            <li>No accepted entities yet. Accept key entities to improve understanding.</li>
-                          )}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                    <span>Confidence: {voiceResult.confidence || 0}%</span>
-                    {voiceResult.mentioned && voiceResult.ranking && (
-                      <span>Ranking: #{voiceResult.ranking}</span>
                     )}
                   </div>
                 </div>

@@ -63,17 +63,19 @@ export function mapRecommendationToTool(
     return { toolId: 'citations' };
   }
 
-  // 5) Voice / Conversational
-  if (action.includes('voice') || text.includes('voice') || text.includes('assistant') || text.includes('conversational')) {
-    return { toolId: 'voice' };
-  }
-
-  // 6) Prompts
-  if (action.includes('prompt') || text.includes('prompt')) {
+  // 5) Prompts / Conversational
+  if (
+    action.includes('voice') ||
+    text.includes('voice') ||
+    text.includes('assistant') ||
+    text.includes('conversational') ||
+    action.includes('prompt') ||
+    text.includes('prompt')
+  ) {
     return { toolId: 'prompts', context: domain ? { topic: domain } : {} };
   }
 
-  // 7) Generator (FAQs/snippets/etc.)
+  // 6) Generator (FAQs/snippets/etc.)
   if (action.includes('generate') || text.includes('generate') || text.includes('faq') || text.includes('snippet')) {
     return {
       toolId: 'generator',

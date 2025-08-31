@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BookOpen, Target, TrendingUp, Users, Zap, CheckCircle, ArrowRight, Clock, Star, RefreshCw, AlertTriangle, Brain, FileText, Lightbulb } from 'lucide-react';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
+import { apiService } from '../services/api';
 
 interface OptimizationPlaybooksProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';

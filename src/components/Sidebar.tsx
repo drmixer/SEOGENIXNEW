@@ -1,12 +1,11 @@
 import React from 'react';
 import { 
-  BarChart3, 
-  FileText, 
-  Shield, 
-  Search, 
-  Mic, 
-  Globe, 
-  Users, 
+  BarChart3,
+  FileText,
+  Shield,
+  Search,
+  Globe,
+  Users,
   Zap,
   TrendingUp,
   Lightbulb,
@@ -48,7 +47,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'audit', label: 'AI Visibility Audit', icon: FileText, available: isDevelopment || userPlan !== 'free' },
     { id: 'schema', label: 'Schema Generator', icon: Shield, available: isDevelopment || userPlan !== 'free' },
     { id: 'citations', label: 'Citation Tracker', icon: Search, available: isDevelopment || userPlan !== 'free' },
-    { id: 'voice', label: 'Assistant Testbench', icon: Mic, available: isDevelopment || userPlan !== 'free' },
     { id: 'summaries', label: 'LLM Site Summaries', icon: Globe, available: isDevelopment || userPlan !== 'free' },
     { id: 'entities', label: 'Entity Coverage', icon: Users, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'generator', label: 'AI Content Generator', icon: Zap, available: true },
@@ -62,7 +60,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     const toolMap: Record<string, string[]> = {
       'increase_citations': ['citations', 'editor', 'generator'],
       'improve_understanding': ['entities', 'summaries', 'editor'],
-      'voice_search': ['voice', 'prompts', 'generator'],
+      'voice_search': ['prompts', 'generator'],
       'competitive_edge': ['competitive', 'discovery', 'audit'],
       'content_structure': ['schema', 'editor', 'audit']
     };

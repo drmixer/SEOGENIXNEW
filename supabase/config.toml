@@ -14,9 +14,6 @@
   import_map = "./functions/competitive-analysis/deno.json"
 [functions.competitor-discovery]
   import_map = "./functions/competitor-discovery/deno.json"
-[functions.assistant-testbench]
-  import_map = "./functions/assistant-testbench/deno.json"
-  verify_jwt = true
 [functions.schema-batch-validator]
   # Batch validate stored schema drafts for a project
   verify_jwt = true

@@ -4,7 +4,6 @@ import {
   Search, 
   Shield, 
   TrendingUp, 
-  Mic, 
   FileText, 
   Users, 
   Zap,
@@ -35,11 +34,6 @@ const Features = () => {
       icon: Search,
       title: 'Citation Tracker',
       description: 'Monitor when your content gets mentioned by LLMs, Google, Reddit, and other platforms.'
-    },
-    {
-      icon: Mic,
-      title: 'Voice Assistant Tester',
-      description: 'Simulate voice queries through Siri, Alexa, and Google Assistant to optimize for voice search.'
     },
     {
       icon: Globe,

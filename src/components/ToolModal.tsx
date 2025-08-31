@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader, Copy, Download, ExternalLink, CheckCircle, AlertCircle, Target, FileText, Search, Mic, Globe, Users, Zap, TrendingUp, Lightbulb, BarChart3, Radar, Shield } from 'lucide-react';
+import { X, Loader, Copy, Download, ExternalLink, CheckCircle, AlertCircle, Target, FileText, Search, Globe, Users, Zap, TrendingUp, Lightbulb, BarChart3, Radar, Shield } from 'lucide-react';
 import { apiService } from '../services/api';
 import { mapRecommendationToTool } from '../utils/fixItRouter';
 import { userDataService } from '../services/userDataService';
@@ -59,17 +59,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
             }
           }
           break;
-        case 'voice':
-          if (selectedWebsite) {
-            try {
-              const domain = new URL(selectedWebsite).hostname.replace('www.', '');
-              defaults.query = `What is ${domain}?`;
-            } catch (e) {
-              defaults.query = 'What is your website about?';
-            }
-          }
-          defaults.assistants = ['siri', 'alexa', 'google'];
-          break;
         case 'prompts':
           if (selectedWebsite) {
             try {
@@ -105,7 +94,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
       audit: FileText,
       schema: Shield,
       citations: Search,
-      voice: Mic,
       summaries: Globe,
       entities: Users,
       generator: Zap,
@@ -122,7 +110,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
       audit: 'from-blue-500 to-blue-600',
       schema: 'from-green-500 to-green-600',
       citations: 'from-purple-500 to-purple-600',
-      voice: 'from-indigo-500 to-indigo-600',
       summaries: 'from-teal-500 to-teal-600',
       entities: 'from-pink-500 to-pink-600',
       generator: 'from-yellow-500 to-yellow-600',
@@ -196,17 +183,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
           confidenceBreakdown: result.confidenceBreakdown || { high: 0, medium: 0, low: 0 },
           timeframe: result.timeframe || '30 days',
           keywords: result.keywords || []
-        };
-
-      case 'voice':
-        return {
-          results: result.results || result.assistantResults || [],
-          summary: {
-            totalMentions: result.summary?.totalMentions || 0,
-            averageRanking: result.summary?.averageRanking || 0,
-            averageConfidence: result.summary?.averageConfidence || 0
-          },
-          query: result.query || formData.query || 'Unknown query'
         };
 
       case 'summaries':
@@ -325,16 +301,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
           break;
         }
 
-        case 'voice': {
-          const voiceQuery = formData.query || `What is ${websiteUrl}?`;
-          const assistants = formData.assistants || ['siri', 'alexa', 'google'];
-          result = await apiService.testVoiceAssistants(voiceQuery, assistants);
-          break;
-        }
-
         case 'summaries': {
           result = await apiService.generateLLMSummary(
-            selectedProjectId, 
+            selectedProjectId,
             websiteUrl, 
             formData.summaryType || 'overview'
           );
@@ -600,44 +569,6 @@ const ToolModal: React.FC<ToolModalProps> = ({
           </div>
         );
       
-      case 'voice':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Voice Query</label>
-              <input
-                type="text"
-                value={formData.query || ''}
-                onChange={(e) => setFormData({ ...formData, query: e.target.value })}
-                placeholder="What is your website about?"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Voice Assistants</label>
-              <div className="space-y-2">
-                {['siri', 'alexa', 'google'].map(assistant => (
-                  <label key={assistant} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.assistants ? formData.assistants.includes(assistant) : true}
-                      onChange={(e) => {
-                        const current = formData.assistants || ['siri', 'alexa', 'google'];
-                        if (e.target.checked) {
-                          setFormData({ ...formData, assistants: [...current.filter((a: string) => a !== assistant), assistant] });
-                        } else {
-                          setFormData({ ...formData, assistants: current.filter((a: string) => a !== assistant) });
-                        }
-                      }}
-                      className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700 capitalize">{assistant}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        );
 
       case 'summaries':
         return (
@@ -1221,48 +1152,6 @@ const ToolResultsDisplay: React.FC<{
         </div>
       );
 
-    case 'voice':
-      return (
-        <div className="space-y-6">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-blue-600">{data.summary?.totalMentions || 0}</div>
-              <div className="text-sm text-blue-800">Mentions</div>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-green-600">{data.summary?.averageRanking || 0}</div>
-              <div className="text-sm text-green-800">Avg Ranking</div>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg text-center">
-              <div className="text-xl font-bold text-purple-600">{data.summary?.averageConfidence || 0}%</div>
-              <div className="text-sm text-purple-800">Confidence</div>
-            </div>
-          </div>
-          
-          {data.results && data.results.length > 0 && (
-            <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">Assistant Responses:</h4>
-              {data.results.map((voiceResult: any, index: number) => (
-                <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-900 capitalize">{voiceResult.assistant}</span>
-                    <span className={`text-sm px-2 py-1 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                      {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-2">{voiceResult.response || 'No response available'}</p>
-                  <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                    <span>Confidence: {voiceResult.confidence || 0}%</span>
-                    {voiceResult.mentioned && voiceResult.ranking && (
-                      <span>Ranking: #{voiceResult.ranking}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
 
     case 'summaries':
       return (
