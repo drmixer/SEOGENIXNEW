@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 import { ok, fail } from "./response.ts";
 // --- CORS Headers ---
 const corsHeaders = {
@@ -8,33 +9,58 @@ const corsHeaders = {
 };
 
 function toPlain(text: string): string {
-  try {
-    // Very light HTML strip
-    const withoutTags = text.replace(/<[^>]*>/g, ' ');
-    return withoutTags.replace(/\s+/g, ' ').trim();
-  } catch {
-    return (text || '').toString();
-  }
+  try {
+    // Very light HTML strip
+    const withoutTags = text.replace(/<[^>]*>/g, ' ');
+    return withoutTags.replace(/\s+/g, ' ').trim();
+  } catch {
+    return (text || '').toString();
+  }
+}
+
+function extractMainText(html: string): string {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    if (!doc) return toPlain(html);
+    doc.querySelectorAll('script,style').forEach((el: any) => el.remove());
+    const container = doc.querySelector('article') || doc.querySelector('main') || doc.body;
+    const text = container?.textContent || '';
+    return toPlain(text);
+  } catch {
+    return toPlain(html);
+  }
 }
 
 function pickHeadline(content?: string): string | undefined {
-  if (!content) return undefined;
-  // try to find <h1>
-  const h1 = content.match(/<h1[^>]*>(.*?)<\/h1>/i);
-  if (h1 && h1[1]) return toPlain(h1[1]).slice(0, 110);
-  // fallback to first non-empty line
-  const firstLine = toPlain(content).split(/\n|\.\s/).map(s => s.trim()).find(Boolean);
-  return firstLine ? firstLine.slice(0, 110) : undefined;
+  if (!content) return undefined;
+  // try to find <h1>
+  const h1 = content.match(/<h1[^>]*>(.*?)<\/h1>/i);
+  if (h1 && h1[1]) return toPlain(h1[1]).slice(0, 110);
+  // fallback to first non-empty line
+  const firstLine = toPlain(content).split(/\n|\.\s/).map(s => s.trim()).find(Boolean);
+  return firstLine ? firstLine.slice(0, 110) : undefined;
 }
 
-function buildArticle(url?: string, content?: string, acceptedEntities?: string[]) {
-  const articleBody = toPlain(content || '');
-  const headline = pickHeadline(content) || 'Article';
-  const about = Array.isArray(acceptedEntities) && acceptedEntities.length
-    ? acceptedEntities.map(name => ({ '@type': 'Thing', name })).slice(0, 20)
-    : undefined;
-  const schema: any = {
-    '@context': 'https://schema.org',
+function replaceSiteName(text: string, siteName?: string): string {
+  if (!siteName) return text;
+  try {
+    const escaped = siteName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'gi');
+    return text.replace(regex, siteName);
+  } catch {
+    return text;
+  }
+}
+
+function buildArticle(url?: string, content?: string, acceptedEntities?: string[], siteName?: string) {
+  const articleBody = replaceSiteName(extractMainText(content || ''), siteName);
+  const headline = replaceSiteName(pickHeadline(content) || 'Article', siteName);
+  const about = Array.isArray(acceptedEntities) && acceptedEntities.length
+    ? acceptedEntities.map(name => ({ '@type': 'Thing', name })).slice(0, 20)
+    : undefined;
+  const schema: any = {
+    '@context': 'https://schema.org',
     '@type': 'Article',
     headline,
     datePublished: new Date().toISOString(),
@@ -45,7 +71,7 @@ function buildArticle(url?: string, content?: string, acceptedEntities?: string[
   return schema;
 }
 
-function buildFAQ(url?: string, content?: string) {
+function buildFAQ(url?: string, content?: string, siteName?: string) {
   // Very lightweight Q&A detection: lines starting with Q: / A:
   const lines = toPlain(content || '').split(/\n+/);
   const pairs: Array<{ q: string; a: string }> = [];
@@ -61,11 +87,11 @@ function buildFAQ(url?: string, content?: string) {
       }
     }
   }
-  const mainEntity = pairs.map(p => ({
-    '@type': 'Question',
-    name: p.q,
-    acceptedAnswer: { '@type': 'Answer', text: p.a }
-  }));
+  const mainEntity = pairs.map(p => ({
+    '@type': 'Question',
+    name: replaceSiteName(p.q, siteName),
+    acceptedAnswer: { '@type': 'Answer', text: replaceSiteName(p.a, siteName) }
+  }));
   const schema: any = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -75,15 +101,15 @@ function buildFAQ(url?: string, content?: string) {
   return schema;
 }
 
-function buildProduct(url?: string, content?: string, acceptedEntities?: string[]) {
-  const description = toPlain(content || '');
-  const name = pickHeadline(content) || 'Product';
-  const schema: any = {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    name,
-    description
-  };
+function buildProduct(url?: string, content?: string, acceptedEntities?: string[], siteName?: string) {
+  const description = replaceSiteName(toPlain(content || ''), siteName);
+  const name = replaceSiteName(pickHeadline(content) || 'Product', siteName);
+  const schema: any = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name,
+    description
+  };
   if (Array.isArray(acceptedEntities) && acceptedEntities.length) {
     schema.brand = { '@type': 'Brand', name: acceptedEntities[0] };
   }
@@ -91,22 +117,41 @@ function buildProduct(url?: string, content?: string, acceptedEntities?: string[
   return schema;
 }
 
-function buildHowTo(url?: string, content?: string) {
-  const lines = toPlain(content || '').split(/\n+/);
-  const steps = lines
-    .map(l => l.trim())
-    .filter(l => /^\d+\./.test(l))
-    .map(l => l.replace(/^\d+\.\s*/, ''))
-    .map(text => ({ '@type': 'HowToStep', text }));
-  const name = pickHeadline(content) || 'HowTo';
-  const schema: any = {
-    '@context': 'https://schema.org',
-    '@type': 'HowTo',
-    name,
-    step: steps
-  };
-  if (url) schema.mainEntityOfPage = { '@type': 'WebPage', '@id': url };
-  return schema;
+function buildHowTo(url?: string, content?: string, siteName?: string) {
+  const steps: Array<{ '@type': 'HowToStep'; text: string }> = [];
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(content || '', 'text/html');
+    if (doc) {
+      doc.querySelectorAll('script,style').forEach((el: any) => el.remove());
+      const list = doc.querySelector('ol, ul');
+      if (list) {
+        list.querySelectorAll('li').forEach((li: any) => {
+          const text = replaceSiteName(toPlain(li.textContent || ''), siteName);
+          if (text) steps.push({ '@type': 'HowToStep', text });
+        });
+      }
+    }
+  } catch {}
+  if (steps.length === 0) {
+    const lines = toPlain(content || '').split(/\n+/);
+    lines
+      .map(l => l.trim())
+      .filter(l => /^\d+\./.test(l))
+      .map(l => l.replace(/^\d+\.\s*/, ''))
+      .forEach(text => {
+        steps.push({ '@type': 'HowToStep', text: replaceSiteName(text, siteName) });
+      });
+  }
+  const name = replaceSiteName(pickHeadline(content) || 'HowTo', siteName);
+  const schema: any = {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name,
+    step: steps
+  };
+  if (url) schema.mainEntityOfPage = { '@type': 'WebPage', '@id': url };
+  return schema;
 }
 
 function stringifyImplementation(obj: unknown): string {
@@ -215,135 +260,142 @@ Strictly return a single JSON object inside a \`\`\`json block matching this sha
   const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   const m = text.match(/```json\s*([\s\S]*?)\s*```/);
   if (!m || !m[1]) throw new Error('No JSON block found in LLM response');
-  const parsed = JSON.parse(m[1]);
-  return parsed;
+  const parsed = JSON.parse(m[1]);
+  return parsed;
 }
 
+export const schemaGeneratorService = async (req: Request, supabase: any) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  try {
+    const body = await req.json().catch(() => ({}));
+    const {
+      projectId,
+      url,
+      contentType = 'Article',
+      content = '',
+      acceptedEntities,
+      mode = 'auto', // 'auto' | 'lean' | 'rich' | 'auto_no_llm'
+      siteName
+    } = body || {};
+
+    let runId: string | null = null;
+    const logRun = async (status: 'running' | 'completed' | 'error', payload?: any, errMsg?: string) => {
+      try {
+        if (!projectId) return;
+        if (!runId && status === 'running') {
+          const { data, error } = await supabase.from('tool_runs').insert({
+            project_id: projectId,
+            tool_name: 'schema-generator',
+            input_payload: { url, contentType, mode, hasContent: !!content, contentLength: content?.length || 0 },
+            status: 'running',
+            created_at: new Date().toISOString()
+          }).select('id').single();
+          if (!error) runId = data?.id || null;
+        } else if (runId && status !== 'running') {
+          await supabase.from('tool_runs').update({
+            status,
+            completed_at: new Date().toISOString(),
+            output_payload: errMsg ? { error: errMsg } : (payload || null),
+            error_message: errMsg || null
+          }).eq('id', runId);
+        }
+      } catch {}
+    };
+
+    await logRun('running');
+
+    // If no explicit content provided, try fetching from the URL
+    let pageContent = content;
+    if (!pageContent && url) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          pageContent = await res.text();
+        }
+      } catch {}
+    }
+
+    let schema: any;
+    const typeNorm = String(contentType || 'Article').replace(/\s+/g, '').toLowerCase();
+    let built: any;
+    if (typeNorm.includes('faq')) {
+      built = buildFAQ(url, pageContent, siteName);
+    } else if (typeNorm.includes('product')) {
+      built = buildProduct(url, pageContent, acceptedEntities, siteName);
+    } else if (typeNorm.includes('howto')) {
+      built = buildHowTo(url, pageContent, siteName);
+    } else {
+      built = buildArticle(url, pageContent, acceptedEntities, siteName);
+    }
+
+    // Validate lean candidate
+    let validatorResult = await validateWithFunction(supabase, built);
+    const leanOk = !!validatorResult?.valid;
+
+    const allowLLM = mode === 'rich' || mode === 'auto';
+    const disallowLLM = mode === 'lean' || mode === 'auto_no_llm';
+    let usedPath: 'lean' | 'rich' | 'lean_fallback' = 'lean';
+
+    // Decide if we should try LLM fallback
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+    const needsFallback = !leanOk ||
+      (typeNorm.includes('faq') && (!built.mainEntity || built.mainEntity.length === 0)) ||
+      (typeNorm.includes('howto') && (!built.step || built.step.length === 0));
+    schema = built;
+    if (!disallowLLM && allowLLM && geminiKey && needsFallback) {
+      try {
+        const llmType = typeNorm.includes('faq')
+          ? 'FAQPage'
+          : typeNorm.includes('product')
+            ? 'Product'
+            : typeNorm.includes('howto')
+              ? 'HowTo'
+              : 'Article';
+        const llmSchema = await runLLM(url || '', llmType, content || '', geminiKey);
+        const llmValidation = await validateWithFunction(supabase, llmSchema);
+        if (llmValidation?.valid) {
+          schema = llmSchema;
+          validatorResult = llmValidation;
+          usedPath = 'rich';
+        } else {
+          usedPath = leanOk ? 'lean' : 'lean_fallback';
+        }
+      } catch {
+        schema = built;
+        usedPath = leanOk ? 'lean' : 'lean_fallback';
+      }
+    } else {
+      schema = built;
+      usedPath = leanOk ? 'lean' : 'lean_fallback';
+    }
+
+    const implementation = stringifyImplementation(schema);
+    const response = {
+      schema,
+      implementation,
+      schemaType: schema['@type'] || contentType,
+      valid: !!validatorResult?.valid,
+      issues: Array.isArray(validatorResult?.issues) ? validatorResult.issues : [],
+      modeUsed: usedPath,
+      instructions: [
+        'Copy the <script type="application/ld+json"> block and paste it into the <head> or before the closing </body>.',
+        'In WordPress or other CMSs, use a header or footer script area or theme template.',
+        'Include only one schema block per page.'
+      ]
+    };
+    await logRun('completed', response, null);
+    return new Response(JSON.stringify(ok(response)), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    await logRun('error', null, msg);
+    return new Response(JSON.stringify(fail(msg)), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+};
+
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  try {
-    const body = await req.json().catch(() => ({}));
-    const {
-      projectId,
-      url,
-      contentType = 'Article',
-      content = '',
-      acceptedEntities,
-      mode = 'auto' // 'auto' | 'lean' | 'rich' | 'auto_no_llm'
-    } = body || {};
-
-    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-    let runId: string | null = null;
-    const logRun = async (status: 'running' | 'completed' | 'error', payload?: any, errMsg?: string) => {
-      try {
-        if (!projectId) return;
-        if (!runId && status === 'running') {
-          const { data, error } = await supabase.from('tool_runs').insert({
-            project_id: projectId,
-            tool_name: 'schema-generator',
-            input_payload: { url, contentType, mode, hasContent: !!content, contentLength: content?.length || 0 },
-            status: 'running',
-            created_at: new Date().toISOString()
-          }).select('id').single();
-          if (!error) runId = data?.id || null;
-        } else if (runId && status !== 'running') {
-          await supabase.from('tool_runs').update({
-            status,
-            completed_at: new Date().toISOString(),
-            output_payload: errMsg ? { error: errMsg } : (payload || null),
-            error_message: errMsg || null
-          }).eq('id', runId);
-        }
-      } catch {}
-    };
-
-    await logRun('running');
-
-    // If no explicit content provided, try fetching from the URL
-    let pageContent = content;
-    if (!pageContent && url) {
-      try {
-        const res = await fetch(url);
-        if (res.ok) {
-          pageContent = await res.text();
-        }
-      } catch {}
-    }
-
-    let schema: any;
-    const typeNorm = String(contentType || 'Article').replace(/\s+/g, '').toLowerCase();
-    let built: any;
-    if (typeNorm.includes('faq')) {
-      built = buildFAQ(url, pageContent);
-    } else if (typeNorm.includes('product')) {
-      built = buildProduct(url, pageContent, acceptedEntities);
-    } else if (typeNorm.includes('howto')) {
-      built = buildHowTo(url, pageContent);
-    } else {
-      built = buildArticle(url, pageContent, acceptedEntities);
-    }
-
-    // Validate lean candidate
-    let validatorResult = await validateWithFunction(supabase, built);
-    const leanOk = !!validatorResult?.valid;
-
-    const allowLLM = mode === 'rich' || mode === 'auto';
-    const disallowLLM = mode === 'lean' || mode === 'auto_no_llm';
-    let usedPath: 'lean' | 'rich' | 'lean_fallback' = 'lean';
-
-    // Decide if we should try LLM fallback
-    const geminiKey = Deno.env.get('GEMINI_API_KEY');
-    const needsFallback = !leanOk || (typeNorm.includes('faq') && (!built.mainEntity || built.mainEntity.length === 0));
-    schema = built;
-    if (!disallowLLM && allowLLM && geminiKey && needsFallback) {
-      try {
-        const llmType = typeNorm.includes('faq')
-          ? 'FAQPage'
-          : typeNorm.includes('product')
-            ? 'Product'
-            : typeNorm.includes('howto')
-              ? 'HowTo'
-              : 'Article';
-        const llmSchema = await runLLM(url || '', llmType, content || '', geminiKey);
-        const llmValidation = await validateWithFunction(supabase, llmSchema);
-        if (llmValidation?.valid) {
-          schema = llmSchema;
-          validatorResult = llmValidation;
-          usedPath = 'rich';
-        } else {
-          usedPath = leanOk ? 'lean' : 'lean_fallback';
-        }
-      } catch {
-        schema = built;
-        usedPath = leanOk ? 'lean' : 'lean_fallback';
-      }
-    } else {
-      schema = built;
-      usedPath = leanOk ? 'lean' : 'lean_fallback';
-    }
-
-    const implementation = stringifyImplementation(schema);
-    const response = {
-      schema,
-      implementation,
-      schemaType: schema['@type'] || contentType,
-      valid: !!validatorResult?.valid,
-      issues: Array.isArray(validatorResult?.issues) ? validatorResult.issues : [],
-      modeUsed: usedPath,
-      instructions: [
-        'Copy the <script type="application/ld+json"> block and paste it into the <head> or before the closing </body>.',
-        'In WordPress or other CMSs, use a header or footer script area or theme template.',
-        'Include only one schema block per page.'
-      ]
-    };
-    await logRun('completed', response, null);
-    return new Response(JSON.stringify(ok(response)), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    await logRun('error', null, msg);
-    return new Response(JSON.stringify(fail(msg)), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
+  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  return await schemaGeneratorService(req, supabase);
 });

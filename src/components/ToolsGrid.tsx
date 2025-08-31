@@ -316,11 +316,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           break;
 
         case 'schema':
+          const siteName = userProfile?.websites?.find((w: any) => w.id === selectedProjectId)?.name;
           result = await apiService.generateSchema(
             selectedProjectId!,
             schemaInputType === 'url' ? selectedWebsite! : '',
             schemaContentType,
-            schemaInputType === 'text' ? schemaContent : undefined
+            schemaInputType === 'text' ? schemaContent : undefined,
+            undefined,
+            siteName
           );
           break;
 

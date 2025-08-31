@@ -304,11 +304,14 @@ const ToolModal: React.FC<ToolModalProps> = ({
         }
 
         case 'schema': {
+          const siteName = userProfile?.websites?.find((w: any) => w.id === selectedProjectId)?.name;
           result = await apiService.generateSchema(
             selectedProjectId,
             formData.inputType === 'url' ? websiteUrl : '',
             formData.contentType || 'article',
-            formData.inputType === 'text' ? formData.content : undefined
+            formData.inputType === 'text' ? formData.content : undefined,
+            undefined,
+            siteName
           );
           break;
         }
