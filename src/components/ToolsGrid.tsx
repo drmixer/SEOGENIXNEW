@@ -1121,6 +1121,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
         <CompetitiveAnalysisModal
           userWebsites={userProfile?.websites || []}
           userCompetitors={context?.competitors || toolData?.competitorSuggestions || userProfile?.competitors || []}
+          maxSelectable={{ free: 1, core: 3, pro: 10, agency: 25 }[(userProfile?.plan || 'free') as 'free'|'core'|'pro'|'agency']}
           onClose={() => setShowCompetitiveAnalysisModal(false)}
           onAnalysisComplete={(results) => {
             setToolData(results);
@@ -1151,6 +1152,8 @@ const ToolResultsDisplay: React.FC<{
 
   // Lightweight state for a simple Fixes Playlist walkthrough (persisted per website)
   const [playlistIndex, setPlaylistIndex] = React.useState(0);
+  // Selection for adding discovered competitors
+  const [selectedToAdd, setSelectedToAdd] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     const loadProgress = async () => {
@@ -1342,7 +1345,7 @@ const ToolResultsDisplay: React.FC<{
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-medium text-gray-900">Generated Schema Markup</h4>
               <button
-                onClick={() => copyToClipboard(data.schema)}
+                onClick={() => copyToClipboard(typeof data.schema === 'string' ? data.schema : JSON.stringify(data.schema, null, 2))}
                 className="text-blue-600 hover:text-blue-700 p-1 rounded"
                 title="Copy to clipboard"
               >
@@ -1350,12 +1353,12 @@ const ToolResultsDisplay: React.FC<{
               </button>
             </div>
             <div className="bg-gray-800 text-green-400 p-4 rounded-lg overflow-x-auto mb-4">
-              <pre className="text-sm">{data.schema}</pre>
+              <pre className="text-sm">{typeof data.schema === 'string' ? data.schema : JSON.stringify(data.schema, null, 2)}</pre>
             </div>
             <p className="text-gray-700 mb-2">{data.instructions}</p>
             {data.implementation && (
               <button
-                onClick={() => copyToClipboard(data.implementation)}
+                onClick={() => copyToClipboard(typeof data.implementation === 'string' ? data.implementation : JSON.stringify(data.implementation, null, 2))}
                 className="text-purple-600 hover:text-purple-800 text-sm font-medium"
               >
                 Copy Implementation Code
@@ -1832,7 +1835,30 @@ const ToolResultsDisplay: React.FC<{
       );
 
     case 'discovery':
-        const competitorUrls = (data.competitorSuggestions || []).map(c => c.url).filter(Boolean).slice(0, 5);
+        const currentCompetitors: Array<{ url: string; name?: string }> = userProfile?.competitors || [];
+        const plan = (userProfile?.plan || 'free') as 'free' | 'core' | 'pro' | 'agency';
+        const planLimitMap: Record<'free'|'core'|'pro'|'agency', number> = { free: 1, core: 3, pro: 10, agency: 25 };
+        const maxCompetitors = planLimitMap[plan];
+        const usedSlots = currentCompetitors.length;
+        const remainingSlots = Math.max(0, maxCompetitors - usedSlots);
+        const suggestions: Array<{ url: string; name?: string; reason?: string }> = (data.competitorSuggestions || []).slice(0, 10);
+        const alreadyTracked = (url: string) => currentCompetitors.some(c => c.url?.replace(/\/$/, '') === (url || '').replace(/\/$/, ''));
+        const toggleSelect = (url: string) => {
+          setSelectedToAdd(prev => prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url]);
+        };
+        const handleAddSelected = async () => {
+          if (!userProfile?.user_id) return;
+          const unique = suggestions.filter(s => selectedToAdd.includes(s.url) && !alreadyTracked(s.url));
+          const toAdd = unique.slice(0, remainingSlots).map(s => ({ url: s.url, name: (s.name || new URL(s.url).hostname) }));
+          if (toAdd.length === 0) return;
+          const updated = [...currentCompetitors, ...toAdd];
+          try {
+            await userDataService.updateUserProfile(userProfile.user_id, { competitors: updated });
+          } catch (e) {
+            console.warn('Failed to add competitors:', e);
+          }
+          setSelectedToAdd([]);
+        };
         return (
             <div className="space-y-6">
                 <div className="grid grid-cols-3 gap-4">
@@ -1850,10 +1876,11 @@ const ToolResultsDisplay: React.FC<{
                     </div>
                 </div>
 
-                {data.competitorSuggestions && data.competitorSuggestions.length > 0 && (
+                {suggestions && suggestions.length > 0 && (
                     <div className="space-y-4">
                         <h4 className="font-medium text-gray-900">New Competitors Discovered:</h4>
-                        {data.competitorSuggestions.slice(0, 5).map((competitor: any, index: number) => (
+                        <div className="text-xs text-gray-600">Tracked: {usedSlots}/{maxCompetitors} • Available slots: {remainingSlots}</div>
+                        {suggestions.map((competitor: any, index: number) => (
                             <div key={index} className="bg-gray-50 p-4 rounded-lg">
                                 <div className="flex items-center justify-between">
                                     <span className="font-medium text-gray-900">{competitor.name || new URL(competitor.url).hostname}</span>
@@ -1870,15 +1897,48 @@ const ToolResultsDisplay: React.FC<{
                                     )}
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1">{competitor.reason || 'Similar content and entity profile detected.'}</p>
+                                <div className="mt-2 flex items-center justify-between">
+                                  <label className="flex items-center space-x-2 text-xs text-gray-700">
+                                    <input
+                                      type="checkbox"
+                                      disabled={alreadyTracked(competitor.url) || remainingSlots === 0}
+                                      checked={selectedToAdd.includes(competitor.url) || alreadyTracked(competitor.url)}
+                                      onChange={() => toggleSelect(competitor.url)}
+                                    />
+                                    <span>{alreadyTracked(competitor.url) ? 'Already tracked' : 'Select to add'}</span>
+                                  </label>
+                                  {!alreadyTracked(competitor.url) && (
+                                    <button
+                                      disabled={remainingSlots === 0}
+                                      onClick={async () => {
+                                        if (!userProfile?.user_id || remainingSlots === 0) return;
+                                        try {
+                                          const updated = [...currentCompetitors, { url: competitor.url, name: competitor.name || new URL(competitor.url).hostname }];
+                                          await userDataService.updateUserProfile(userProfile.user_id, { competitors: updated });
+                                        } catch (e) { console.warn('Failed to add competitor:', e); }
+                                      }}
+                                      className={`text-xs px-2 py-1 rounded border ${remainingSlots === 0 ? 'border-gray-200 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+                                    >Add</button>
+                                  )}
+                                </div>
                             </div>
                         ))}
-                        <button
-                            onClick={() => onSwitchTool('competitive', { competitors: competitorUrls })}
-                            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 mt-4 rounded-lg font-semibold hover:shadow-lg transition-all duration-300 inline-flex items-center justify-center space-x-2"
-                        >
-                            <BarChart3 className="w-5 h-5" />
-                            <span>Analyze These Competitors</span>
-                        </button>
+                        <div className="flex items-center justify-between">
+                          <button
+                              onClick={handleAddSelected}
+                              disabled={selectedToAdd.length === 0 || remainingSlots === 0}
+                              className={`px-4 py-2 rounded font-medium ${selectedToAdd.length === 0 || remainingSlots === 0 ? 'bg-gray-200 text-gray-500' : 'bg-gray-900 text-white hover:bg-black'}`}
+                          >
+                              Add Selected Competitors
+                          </button>
+                          <button
+                              onClick={() => onSwitchTool('competitive', {})}
+                              className="px-4 py-2 rounded font-medium bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-lg inline-flex items-center space-x-2"
+                          >
+                              <BarChart3 className="w-5 h-5" />
+                              <span>Open Competitor Analysis</span>
+                          </button>
+                        </div>
                     </div>
                 )}
             </div>
