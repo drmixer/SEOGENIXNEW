@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { ok, fail } from "./response.ts";
 // --- CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,6 +91,24 @@ function buildProduct(url?: string, content?: string, acceptedEntities?: string[
   return schema;
 }
 
+function buildHowTo(url?: string, content?: string) {
+  const lines = toPlain(content || '').split(/\n+/);
+  const steps = lines
+    .map(l => l.trim())
+    .filter(l => /^\d+\./.test(l))
+    .map(l => l.replace(/^\d+\.\s*/, ''))
+    .map(text => ({ '@type': 'HowToStep', text }));
+  const name = pickHeadline(content) || 'HowTo';
+  const schema: any = {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name,
+    step: steps
+  };
+  if (url) schema.mainEntityOfPage = { '@type': 'WebPage', '@id': url };
+  return schema;
+}
+
 function stringifyImplementation(obj: unknown): string {
   const json = JSON.stringify(obj, null, 2);
   return `<script type="application/ld+json">\n${json}\n</script>`;
@@ -111,6 +130,9 @@ function quickValidate(obj: any): { valid: boolean; issues: Array<{ path?: strin
   if (type === 'article') {
     if (!obj.headline) issues.push({ path: 'headline', message: 'Missing headline' });
     if (!obj.datePublished) issues.push({ path: 'datePublished', message: 'Missing datePublished' });
+    if (!obj.articleBody || !String(obj.articleBody).trim()) {
+      issues.push({ path: 'articleBody', message: 'Missing articleBody' });
+    }
   } else if (type === 'faqpage') {
     if (!Array.isArray(obj.mainEntity) || obj.mainEntity.length === 0) {
       issues.push({ path: 'mainEntity', message: 'FAQ requires at least one Q/A' });
@@ -118,6 +140,10 @@ function quickValidate(obj: any): { valid: boolean; issues: Array<{ path?: strin
   } else if (type === 'product') {
     if (!obj.name) issues.push({ path: 'name', message: 'Missing product name' });
     if (!obj.description) issues.push({ path: 'description', message: 'Missing product description' });
+  } else if (type === 'howto') {
+    if (!Array.isArray(obj.step) || obj.step.length === 0) {
+      issues.push({ path: 'step', message: 'HowTo requires at least one step' });
+    }
   }
   return { valid: issues.length === 0, issues };
 }
@@ -233,14 +259,27 @@ Deno.serve(async (req) => {
 
     await logRun('running');
 
+    // If no explicit content provided, try fetching from the URL
+    let pageContent = content;
+    if (!pageContent && url) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          pageContent = await res.text();
+        }
+      } catch {}
+    }
+
     let schema: any;
-    const typeNorm = String(contentType || 'Article').toLowerCase();
+    const typeNorm = String(contentType || 'Article').replace(/\s+/g, '').toLowerCase();
     if (typeNorm.includes('faq')) {
-      schema = buildFAQ(url, content);
+      schema = buildFAQ(url, pageContent);
     } else if (typeNorm.includes('product')) {
-      schema = buildProduct(url, content, acceptedEntities);
+      schema = buildProduct(url, pageContent, acceptedEntities);
+    } else if (typeNorm.includes('howto')) {
+      schema = buildHowTo(url, pageContent);
     } else {
-      schema = buildArticle(url, content, acceptedEntities);
+      schema = buildArticle(url, pageContent, acceptedEntities);
     }
 
     // Validate lean candidate
@@ -256,7 +295,14 @@ Deno.serve(async (req) => {
     const needsFallback = !leanOk || (typeNorm.includes('faq') && (!schema.mainEntity || schema.mainEntity.length === 0));
     if (!disallowLLM && allowLLM && geminiKey && needsFallback) {
       try {
-        const llmSchema = await runLLM(url || '', (typeNorm.includes('faq') ? 'FAQPage' : (typeNorm.includes('product') ? 'Product' : 'Article')), content || '', geminiKey);
+        const llmType = typeNorm.includes('faq')
+          ? 'FAQPage'
+          : typeNorm.includes('product')
+            ? 'Product'
+            : typeNorm.includes('howto')
+              ? 'HowTo'
+              : 'Article';
+        const llmSchema = await runLLM(url || '', llmType, content || '', geminiKey);
         const llmValidation = await validateWithFunction(supabase, llmSchema);
         if (llmValidation?.valid) {
           schema = llmSchema;
@@ -271,23 +317,22 @@ Deno.serve(async (req) => {
     }
 
     const implementation = stringifyImplementation(schema);
-    const response = {
-      success: true,
-      output: {
-        schema,
-        implementation,
-        schemaType: schema['@type'] || contentType,
-        valid: !!validatorResult?.valid,
-        issues: Array.isArray(validatorResult?.issues) ? validatorResult.issues : [],
-        modeUsed: usedPath,
-        instructions: 'Place JSON-LD in your HTML head or body once per page.'
-      }
+    const out = {
+      schema,
+      implementation,
+      schemaType: schema['@type'] || contentType,
+      valid: !!validatorResult?.valid,
+      issues: Array.isArray(validatorResult?.issues) ? validatorResult.issues : [],
+      modeUsed: usedPath,
+      instructions:
+        '1. Copy the <script type="application/ld+json"> block.\n2. In raw HTML, paste it inside <head> or before </body>.\n3. In WordPress or other CMSs, add it via a header/footer script area or theme template.\n4. Use one schema block per page.'
     };
-    await logRun('completed', response.output, null);
-    return new Response(JSON.stringify(response), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    await logRun('completed', out, null);
+    return new Response(JSON.stringify(ok(out)), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    return new Response(JSON.stringify({ success: false, error: { message: msg } }), {
+    await logRun('error', null, msg);
+    return new Response(JSON.stringify(fail(msg)), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
