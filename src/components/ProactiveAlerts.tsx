@@ -621,8 +621,8 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
 
       {/* Alert Details Modal */}
       {selectedAlert && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl shadow-2xl flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div className="flex items-center space-x-3">
                 <div className={`p-2 rounded-lg ${getSeverityColor(selectedAlert.severity)}`}>
@@ -646,7 +646,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
               </button>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
               <div className="space-y-6">
                 <div className={`p-4 rounded-lg ${getSeverityColor(selectedAlert.severity)}`}>
                   <p className="text-base">{selectedAlert.message}</p>
@@ -732,7 +732,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
               </div>
             </div>
             
-            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+            <div className="flex items-center justify-end space-x-3 p-4 sm:p-6 border-t border-gray-200">
               <button
                 onClick={() => {
                   markAsRead(selectedAlert.id);
