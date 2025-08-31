@@ -128,9 +128,9 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
 
       const botMessage: Message = {
         type: 'bot',
-        content: response.data.responseText,
+        content: response.response_to_user,
         timestamp: new Date(),
-        actionSuggestions: response.data.suggestedFollowUps?.map((suggestion: string) => ({
+        actionSuggestions: response.suggested_follow_ups?.map((suggestion: string) => ({
           type: 'suggestion',
           label: suggestion,
         })) || []

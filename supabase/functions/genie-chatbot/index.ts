@@ -7,9 +7,7 @@ const corsHeaders = {
 };
 // --- Inline Logging Functions (to avoid import issues) ---
 async function logToolRun(supabase, projectId, toolName, inputPayload) {
-  if (!projectId) {
-    throw new Error("logToolRun error: projectId is required.");
-  }
+  if (!projectId) return null;
   console.log(`Logging tool run: ${toolName} for project: ${projectId}`);
   const { data, error } = await supabase.from("tool_runs").insert({
     project_id: projectId,
@@ -20,11 +18,11 @@ async function logToolRun(supabase, projectId, toolName, inputPayload) {
   }).select("id").single();
   if (error) {
     console.error("Error logging tool run:", error);
-    throw new Error(`Failed to log tool run. Supabase error: ${error.message}`);
+    return null;
   }
   if (!data || !data.id) {
     console.error("No data or data.id returned from tool_runs insert.");
-    throw new Error("Failed to log tool run: No data returned after insert.");
+    return null;
   }
   console.log(`Tool run logged with ID: ${data.id}`);
   return data.id;
@@ -120,11 +118,11 @@ const chatbotService = async (req, supabase)=>{
   try {
     const requestBody = await req.json();
     const { projectId, userId, message, conversationHistory } = requestBody;
-    if (!projectId || !message) {
+    if (!message) {
       return new Response(JSON.stringify({
         success: false,
         error: {
-          message: '`projectId` and `message` are required.'
+          message: '`message` is required.'
         }
       }), {
         status: 400,
@@ -134,7 +132,7 @@ const chatbotService = async (req, supabase)=>{
         }
       });
     }
-    // Log tool run
+    // Log tool run (if projectId provided)
     runId = await logToolRun(supabase, projectId, 'genie-chatbot-request', {
       userId,
       messageLength: message.length,
