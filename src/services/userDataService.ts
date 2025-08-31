@@ -1079,6 +1079,30 @@ export const userDataService = {
     }
   },
 
+  async getChatbotUserData(userId: string): Promise<any> {
+    if (!userId) {
+      console.error('getChatbotUserData called with empty userId');
+      return null;
+    }
+    try {
+      const [profile, recentActivity, auditHistory] = await Promise.all([
+        this.getUserProfile(userId, true),
+        this.getRecentActivity(userId, 10),
+        this.getAuditHistory(userId, 3)
+      ]);
+      return {
+        websites: profile?.websites || [],
+        industry: profile?.industry,
+        recentActivity,
+        lastAuditScore: auditHistory[0]?.overall_score,
+        lastAuditRecommendations: auditHistory[0]?.recommendations || []
+      };
+    } catch (error) {
+      console.error('Error in getChatbotUserData:', error);
+      return null;
+    }
+  },
+
   // Persist simple per-website Fixes Playlist progress using user_activity to avoid new tables
   async saveFixesPlaylistProgress(params: { userId: string; websiteUrl: string; index: number; total: number; note?: string }): Promise<void> {
     const { userId, websiteUrl, index, total, note } = params;

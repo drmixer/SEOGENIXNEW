@@ -117,7 +117,8 @@ const chatbotService = async (req, supabase)=>{
   let runId = null;
   try {
     const requestBody = await req.json();
-    const { projectId, userId, message, conversationHistory } = requestBody;
+    const { projectId, userId, message, conversationHistory, userData, sessionId: bodySessionId } = requestBody;
+    const sessionId = bodySessionId || userData?.sessionId;
     if (!message) {
       return new Response(JSON.stringify({
         success: false,
@@ -133,12 +134,13 @@ const chatbotService = async (req, supabase)=>{
       });
     }
     // Log tool run (if projectId provided)
-    runId = await logToolRun(supabase, projectId, 'genie-chatbot-request', {
-      userId,
-      messageLength: message.length,
-      hasConversationHistory: !!conversationHistory?.length
-    });
-    // Fetch user context data
+      runId = await logToolRun(supabase, projectId, 'genie-chatbot-request', {
+        userId,
+        messageLength: message.length,
+        hasConversationHistory: !!conversationHistory?.length,
+        sessionId
+      });
+      // Fetch user context data
     let userDataSummary = {
       note: "User is not logged in."
     };
@@ -151,8 +153,11 @@ const chatbotService = async (req, supabase)=>{
       } catch (error) {
         console.error('Error fetching user data for chatbot:', error);
       }
+      }
+    if (userData) {
+      userDataSummary = userData;
     }
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+      const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     if (!geminiApiKey) {
       console.warn('Gemini API key not configured, using fallback response');
       const fallbackResponse = generateFallbackResponse(message);
