@@ -814,6 +814,22 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
       )}
 
+      <button
+        onClick={() => setShowChatbot(true)}
+        className="fixed bottom-6 right-6 bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 z-40"
+      >
+        <MessageSquare className="w-6 h-6" />
+      </button>
+
+      {showChatbot && (
+        <ChatbotPopup
+          onClose={() => setShowChatbot(false)}
+          type="dashboard"
+          userPlan={userPlan}
+          user={user}
+        />
+      )}
+
       <ToastContainer toasts={toasts} onRemoveToast={removeToast} />
     </div>
   );
