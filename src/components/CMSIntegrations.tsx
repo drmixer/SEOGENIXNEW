@@ -632,6 +632,7 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
                     <li>• Consistent SEO implementation</li>
                   </ul>
                 </div>
+            </div>
           </Modal>
         );
       })()}
