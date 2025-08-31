@@ -2093,10 +2093,23 @@ const ToolResultsDisplay: React.FC<{
                     </div>
                 </div>
 
+                {data.rejectedSummary && (
+                  <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+                    <div className="text-sm font-medium text-yellow-800 mb-1">Filtered out during discovery</div>
+                    <div className="text-xs text-yellow-700 flex flex-wrap gap-3">
+                      {Object.entries(data.rejectedSummary).map(([reason, count]: any) => (
+                        <span key={reason} className="px-2 py-0.5 bg-white border border-yellow-200 rounded">
+                          {reason.replace(/_/g,' ')}: {count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {suggestions && suggestions.length > 0 && (
-                    <div className="space-y-4">
-                        <h4 className="font-medium text-gray-900">New Competitors Discovered:</h4>
-                        <div className="text-xs text-gray-600">Tracked: {usedSlots}/{maxCompetitors} • Available slots: {remainingSlots}</div>
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-gray-900">New Competitors Discovered:</h4>
+                    <div className="text-xs text-gray-600">Tracked: {usedSlots}/{maxCompetitors} • Available slots: {remainingSlots}</div>
                         {suggestions.map((competitor: any, index: number) => (
                             <div key={index} className="bg-gray-50 p-4 rounded-lg">
                                 <div className="flex items-center justify-between">

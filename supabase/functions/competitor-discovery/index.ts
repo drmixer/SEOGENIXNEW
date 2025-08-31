@@ -154,6 +154,9 @@ export const competitorDiscoveryService = async (req, supabase)=>{
     }
     const searchResults = await googleResponse.json();
 
+    // Track filtered items for explainability
+    const rejected: Array<{ url?: string; root?: string; reason: string }> = [];
+
     // Filter out irrelevant/broad domains and existing competitors; dedupe to root domains
     const blocklist = [
       'wikipedia.org','forbes.com','investopedia.com','bloomberg.com','businessinsider.com',
@@ -180,9 +183,9 @@ export const competitorDiscoveryService = async (req, supabase)=>{
         const host = url.hostname.replace(/^www\./,'');
         const root = (getDomain(host) || host).toLowerCase();
         if (!root) continue;
-        if (blocklist.includes(root)) continue;
-        if (userRoot && root === userRoot) continue; // exclude the user's own domain
-        if (existingRoots.has(root)) continue;
+        if (blocklist.includes(root)) { rejected.push({ url: item.link, root, reason: 'blocked_domain' }); continue; }
+        if (userRoot && root === userRoot) { rejected.push({ url: item.link, root, reason: 'self_domain' }); continue; }
+        if (existingRoots.has(root)) { rejected.push({ url: item.link, root, reason: 'already_tracked' }); continue; }
         // Avoid common non-homepage subdomains by normalizing to root homepage URL
         const homepage = `https://${root}`;
         if (!domainMap.has(root)) {
@@ -267,7 +270,8 @@ export const competitorDiscoveryService = async (req, supabase)=>{
         const url = competitor.link;
         const relevanceInfo = relevanceMap.get(url);
         const minScore = preferNiche ? 60 : 45;
-        if (!relevanceInfo || relevanceInfo.relevanceScore < minScore) continue; // threshold based on mode
+        if (!relevanceInfo) { rejected.push({ url, root: new URL(url).hostname.replace(/^www\./,''), reason: 'no_relevance_match' }); continue; }
+        if (relevanceInfo.relevanceScore < minScore) { rejected.push({ url, root: new URL(url).hostname.replace(/^www\./,''), reason: 'below_threshold' }); continue; } // threshold based on mode
         const domain = new URL(url).hostname.replace(/^www\./,'');
         // Get Moz domain authority
         const expires = Math.floor(Date.now() / 1000) + 300;
@@ -304,8 +308,15 @@ export const competitorDiscoveryService = async (req, supabase)=>{
     }
     // Sort by relevance score and limit results
     competitors.sort((a, b)=>b.relevanceScore - a.relevanceScore);
+    // Summarize rejections
+    const rejectedSummary = rejected.reduce((acc: Record<string, number>, r) => {
+      acc[r.reason] = (acc[r.reason] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
     const output = {
-      competitorSuggestions: competitors.slice(0, 10)
+      competitorSuggestions: competitors.slice(0, 10),
+      rejectedSummary,
+      rejectedSamples: rejected.slice(0, 20)
     };
     await updateToolRun(supabase, runId, 'completed', output, null);
     return new Response(JSON.stringify({
