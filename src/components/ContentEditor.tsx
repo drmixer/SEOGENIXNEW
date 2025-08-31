@@ -54,6 +54,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [realTimeSuggestions, setRealTimeSuggestions] = useState<RealTimeSuggestion[]>([]);
   // URL resolved from Fix It context or selected project
   const [currentUrl, setCurrentUrl] = useState<string | undefined>(context?.url);
+  const [siteName, setSiteName] = useState<string>('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<RealTimeSuggestion | null>(null);
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -356,11 +357,12 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         setIsLoadingUrl(true);
         const { data, error } = await supabase
           .from('projects')
-          .select('url')
+          .select('url, name')
           .eq('id', selectedProjectId)
           .single();
         if (error) throw error;
         const siteUrl: string | undefined = data?.url;
+        if (data?.name) setSiteName(data.name);
         if (!siteUrl) return;
         setCurrentUrl(siteUrl);
         setLoadedCmsContent(null);
@@ -724,7 +726,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
               permalink || currentUrl || context?.url || '',
               contentType,
               content,
-              entitiesAccepted
+              entitiesAccepted,
+              siteName
             );
             const candidate = gen?.schema || gen?.markup || gen?.schemaMarkup || gen;
             const jsonStr = typeof candidate === 'string' ? candidate : JSON.stringify(candidate);
@@ -1089,7 +1092,8 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         currentUrl || context?.url || '',
         contentType,
         (optimizedContent && showOptimized) ? optimizedContent : content,
-        entitiesAccepted
+        entitiesAccepted,
+        siteName
       );
       const schemaObj = output?.schema || output?.markup || output?.schemaMarkup || output;
       const jsonStr = typeof schemaObj === 'string' ? schemaObj : JSON.stringify(schemaObj, null, 2);

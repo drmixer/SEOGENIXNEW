@@ -200,8 +200,8 @@ export const apiService = {
   },
 
   // Schema Generator
-  async generateSchema(projectId: string, url: string, contentType: string, content?: string, acceptedEntities?: string[]) {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/schema-generator`, { projectId, url, contentType, content });
+  async generateSchema(projectId: string, url: string, contentType: string, content?: string, acceptedEntities?: string[], siteName?: string) {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/schema-generator`, { projectId, url, contentType, content, siteName });
     
     if (pendingApiRequests.has(cacheKey)) {
       console.log('Schema generator request already in progress, returning existing promise');
@@ -210,7 +210,7 @@ export const apiService = {
     
     const schemaPromise = apiCall(`${API_BASE_URL}/schema-generator`, {
       method: 'POST',
-      body: JSON.stringify({ projectId, url, contentType, content, acceptedEntities })
+      body: JSON.stringify({ projectId, url, contentType, content, acceptedEntities, siteName })
     }).then(response => {
       // Handle the response structure correctly
       if (response.output) {
