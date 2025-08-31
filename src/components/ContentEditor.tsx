@@ -77,6 +77,10 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [schemaApplied, setSchemaApplied] = useState<boolean>(false);
   const [hasAppliedSchemaForContext, setHasAppliedSchemaForContext] = useState<boolean>(false);
   const [useInsertedSchema, setUseInsertedSchema] = useState<boolean>(true);
+  // Citations (lean)
+  const [showCitationsPanel, setShowCitationsPanel] = useState<boolean>(false);
+  const [citations, setCitations] = useState<Array<{ title: string; url: string; anchorText?: string; used?: boolean; relNofollow?: boolean }>>([]);
+  const [relNofollowDefault, setRelNofollowDefault] = useState<boolean>(true);
   // Publish Impact
   const [recentImpacts, setRecentImpacts] = useState<Array<any>>([]);
 
@@ -883,6 +887,28 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
         } else {
           setHasAppliedSchemaForContext(false);
         }
+        // Load citations usage and/or seed suggestions from accepted entities
+        try {
+          const usage = await userDataService.getCitationsUsage(user.id, selectedProjectId, (currentUrl || context?.url)!);
+          if (usage?.citations?.length) {
+            setCitations(usage.citations);
+            if (typeof usage.citations[0]?.relNofollow === 'boolean') setRelNofollowDefault(!!usage.citations[0].relNofollow);
+          } else if (entitiesAccepted.length) {
+            const suggestions: Array<{ title: string; url: string; anchorText?: string; used?: boolean; relNofollow?: boolean }> = [];
+            const pushUnique = (title: string, url: string, anchor?: string) => {
+              if (!url) return;
+              if (suggestions.find(s => s.url === url)) return;
+              suggestions.push({ title, url, anchorText: anchor || title, used: false, relNofollow: relNofollowDefault });
+            };
+            entitiesAccepted.forEach(name => {
+              const slug = encodeURIComponent(name.replace(/\s+/g, '_'));
+              pushUnique(`Wikipedia: ${name}`, `https://en.wikipedia.org/wiki/${slug}`, name);
+              const q = encodeURIComponent(`${name} official site`);
+              pushUnique(`${name} (official site search)`, `https://www.google.com/search?q=${q}`, name);
+            });
+            setCitations(suggestions);
+          }
+        } catch {}
       } catch (e) {
         console.warn('Failed to load entities draft:', e);
       }
@@ -936,6 +962,89 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
     } catch (e: any) {
       onToast?.({ type: 'error', title: 'Save failed', message: e?.message || 'Could not save entities draft.', duration: 4000 });
     }
+  };
+
+  // Citations helpers
+  const saveCitations = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !selectedProjectId || !(currentUrl || context?.url)) return;
+      await userDataService.saveCitationsUsage({
+        userId: user.id,
+        projectId: selectedProjectId,
+        websiteUrl: (currentUrl || context?.url)!,
+        usage: { citations, insertedAnchors: false, insertedReferences: false }
+      });
+      onToast?.({ type: 'success', title: 'Citations saved', message: 'Saved to your project context.', duration: 2500 });
+    } catch (e) {
+      console.warn('Failed to save citations:', e);
+    }
+  };
+
+  const insertAnchorOnce = (text: string, href: string, anchorText?: string, relNoFollow?: boolean): { applied: boolean; updated: string } => {
+    const label = (anchorText || text || '').trim();
+    if (!label) return { applied: false, updated: content };
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`(\\\b)(${escaped})(\\\b)`, 'i');
+    if (!pattern.test(content)) {
+      return { applied: false, updated: content };
+    }
+    const rel = relNoFollow ? ' rel="nofollow"' : '';
+    const replaced = content.replace(pattern, `$1<a href="${href}"${rel}>$2</a>$3`);
+    return { applied: true, updated: replaced };
+  };
+
+  const handleInsertAnchors = async () => {
+    let updated = content;
+    let count = 0;
+    const next = citations.map(c => ({ ...c }));
+    next.forEach(c => {
+      if (!c.url) return;
+      const res = insertAnchorOnce(c.anchorText || c.title, c.url, c.anchorText || c.title, c.relNofollow ?? relNofollowDefault);
+      if (res.applied) {
+        updated = res.updated;
+        count += 1;
+        c.used = true;
+      }
+    });
+    setContent(updated);
+    setCitations(next);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && selectedProjectId && (currentUrl || context?.url)) {
+        await userDataService.saveCitationsUsage({
+          userId: user.id,
+          projectId: selectedProjectId,
+          websiteUrl: (currentUrl || context?.url)!,
+          usage: { citations: next, insertedAnchors: true, insertedReferences: false }
+        });
+      }
+    } catch {}
+    onToast?.({ type: 'success', title: 'Anchors inserted', message: count ? `${count} anchors added` : 'No matching phrases found to anchor', duration: 3000 });
+  };
+
+  const handleInsertReferences = async () => {
+    const list = citations.filter(c => (c.used || c.anchorText || c.title) && c.url).slice(0, 20);
+    if (list.length === 0) {
+      onToast?.({ type: 'info', title: 'No citations selected', message: 'Add or select citations first.' });
+      return;
+    }
+    const items = list.map((c, i) => `<li><a href="${c.url}"${(c.relNofollow ?? relNofollowDefault) ? ' rel="nofollow"' : ''}>${c.title || c.anchorText || `Source ${i+1}`}</a></li>`).join('\n');
+    const block = `\n\n<h3>References</h3>\n<ol>\n${items}\n</ol>\n`;
+    const updated = content.trimEnd() + block;
+    setContent(updated);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && selectedProjectId && (currentUrl || context?.url)) {
+        await userDataService.saveCitationsUsage({
+          userId: user.id,
+          projectId: selectedProjectId,
+          websiteUrl: (currentUrl || context?.url)!,
+          usage: { citations, insertedAnchors: true, insertedReferences: true }
+        });
+      }
+    } catch {}
+    onToast?.({ type: 'success', title: 'References inserted', message: 'References block appended to content.' });
   };
 
   // Schema helpers
@@ -1489,6 +1598,13 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                     </span>
                   </button>
                   <button
+                    onClick={() => setShowCitationsPanel(v => !v)}
+                    className={`px-3 py-1 text-sm rounded border ${showCitationsPanel ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                    title="Add citations and references"
+                  >
+                    Citations{citations.length ? ` (${citations.length})` : ''}
+                  </button>
+                  <button
                     onClick={() => {
                       setShowOptimized(false);
                       setOptimizedContent('');
@@ -1672,6 +1788,64 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                 </div>
               )}
               <textarea value={schemaJson} onChange={(e) => setSchemaJson(e.target.value)} rows={12} className="w-full border border-gray-200 rounded p-3 text-xs font-mono bg-gray-50" placeholder='{"@context":"https://schema.org","@type":"Article",...}' />
+            </div>
+          )}
+
+          {showCitationsPanel && (
+            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium text-gray-900">Citations</h4>
+                <div className="flex items-center space-x-2">
+                  <label className="text-xs text-gray-600 flex items-center space-x-1">
+                    <input type="checkbox" checked={relNofollowDefault} onChange={(e) => setRelNofollowDefault(e.target.checked)} />
+                    <span>rel="nofollow"</span>
+                  </label>
+                  <button onClick={saveCitations} className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50">Save</button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {citations.map((c, idx) => (
+                  <div key={idx} className="p-2 border border-gray-200 rounded flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={c.title}
+                      onChange={(e) => setCitations(prev => prev.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))}
+                      placeholder="Title"
+                      className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs"
+                    />
+                    <input
+                      type="text"
+                      value={c.url}
+                      onChange={(e) => setCitations(prev => prev.map((x, i) => i === idx ? { ...x, url: e.target.value } : x))}
+                      placeholder="https://example.com/article"
+                      className="flex-[2] border border-gray-200 rounded px-2 py-1 text-xs"
+                    />
+                    <input
+                      type="text"
+                      value={c.anchorText || ''}
+                      onChange={(e) => setCitations(prev => prev.map((x, i) => i === idx ? { ...x, anchorText: e.target.value } : x))}
+                      placeholder="Anchor text in content"
+                      className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs"
+                    />
+                    <label className="text-[11px] text-gray-600 flex items-center space-x-1">
+                      <input type="checkbox" checked={c.relNofollow ?? relNofollowDefault} onChange={(e) => setCitations(prev => prev.map((x, i) => i === idx ? { ...x, relNofollow: e.target.checked } : x))} />
+                      <span>nofollow</span>
+                    </label>
+                    <button
+                      onClick={() => setCitations(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+                    >Remove</button>
+                  </div>
+                ))}
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setCitations(prev => [...prev, { title: '', url: '', anchorText: '', used: false, relNofollow: relNofollowDefault }])}
+                    className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50"
+                  >Add source</button>
+                  <button onClick={handleInsertAnchors} className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50">Insert anchors</button>
+                  <button onClick={handleInsertReferences} className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50">Insert References block</button>
+                </div>
+              </div>
             </div>
           )}
 

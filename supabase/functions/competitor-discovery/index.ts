@@ -131,8 +131,12 @@ export const competitorDiscoveryService = async (req, supabase)=>{
     }
     const searchResults = await googleResponse.json();
 
-    // Filter out irrelevant domains and existing competitors
-    const blocklist = ['wikipedia.org', 'forbes.com', 'investopedia.com', 'bloomberg.com', 'businessinsider.com', 'techcrunch.com', 'medium.com', 'youtube.com', 'facebook.com', 'twitter.com', 'linkedin.com'];
+    // Filter out irrelevant/broad domains and existing competitors
+    const blocklist = [
+      'wikipedia.org', 'forbes.com', 'investopedia.com', 'bloomberg.com', 'businessinsider.com',
+      'techcrunch.com', 'medium.com', 'youtube.com', 'facebook.com', 'twitter.com', 'linkedin.com',
+      'quora.com', 'reddit.com', 'pinterest.com', 'amazon.com', 'ebay.com', 'appsumo.com', 'g2.com', 'capterra.com'
+    ];
     const potentialCompetitors = searchResults.items?.filter(item => {
       if (!item.link) return false;
       const domain = new URL(item.link).hostname.replace('www.', '');
@@ -205,7 +209,7 @@ export const competitorDiscoveryService = async (req, supabase)=>{
       try {
         const url = competitor.link;
         const relevanceInfo = relevanceMap.get(url);
-        if (!relevanceInfo || relevanceInfo.relevanceScore < 30) continue;
+        if (!relevanceInfo || relevanceInfo.relevanceScore < 45) continue; // tighten relevance threshold
         const domain = new URL(url).hostname;
         // Get Moz domain authority
         const expires = Math.floor(Date.now() / 1000) + 300;
@@ -221,13 +225,19 @@ export const competitorDiscoveryService = async (req, supabase)=>{
         } catch (mozError) {
           console.warn(`Failed to get Moz data for ${domain}:`, mozError);
         }
+        // Adjust score to prefer niche players: penalize very high DA unless aspirational
+        let adjustedScore = relevanceInfo.relevanceScore;
+        const type = (relevanceInfo.competitorType || 'direct') as string;
+        if (typeof domainAuthority === 'number' && domainAuthority >= 80 && type !== 'aspirational') {
+          adjustedScore = Math.max(0, adjustedScore - 20);
+        }
         competitors.push({
           name: competitor.title || domain,
           url: url,
           domainAuthority: domainAuthority,
-          relevanceScore: relevanceInfo.relevanceScore,
+          relevanceScore: adjustedScore,
           explanation: relevanceInfo.explanation,
-          type: relevanceInfo.competitorType || 'direct', // Add type from AI analysis
+          type: type,
           analyzedAt: new Date().toISOString()
         });
       } catch (e) {
