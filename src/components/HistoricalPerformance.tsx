@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TrendingUp, TrendingDown, Calendar, BarChart3, Target, FileText, Search, Mic, Globe, Users, Zap, Lightbulb, Filter, SortAsc, SortDesc, ExternalLink, Eye, X, Download, RefreshCw, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
+import Modal from './ui/Modal';
 import { userDataService, type AuditHistoryEntry, type UserActivity, type Report } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
 
@@ -1152,56 +1153,48 @@ const HistoricalPerformance: React.FC<HistoricalPerformanceProps> = ({ userPlan,
       </div>
 
       {/* Entry Details Modal */}
-      {selectedEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <div className="flex items-center space-x-3">
-                <div className={`p-2 rounded-lg ${selectedEntry.color}`}>
-                  <selectedEntry.icon className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-900">{selectedEntry.title}</h3>
-                  <p className="text-sm text-gray-500">
-                    {new Date(selectedEntry.date).toLocaleDateString()} at {new Date(selectedEntry.date).toLocaleTimeString()}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedEntry(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
+      {selectedEntry && (() => {
+        const Header = (
+          <div className="flex items-center space-x-3">
+            <div className={`p-2 rounded-lg ${selectedEntry.color}`}>
+              {(() => { const Icon = selectedEntry.icon; return <Icon className="w-6 h-6 text-white" />; })()}
             </div>
-            
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-              {renderEntryDetails(selectedEntry)}
-            </div>
-            
-            <div className="flex items-center justify-end space-x-3 p-4 border-t border-gray-200">
-              {selectedEntry.type === 'audit' && (
-                <button
-                  onClick={() => {
-                    setSelectedEntry(null);
-                    setShowTrendView(true);
-                  }}
-                  className="flex items-center space-x-2 text-purple-600 hover:text-purple-800"
-                >
-                  <TrendingUp className="w-4 h-4" />
-                  <span>View in Trends</span>
-                </button>
-              )}
-              <button
-                onClick={() => setSelectedEntry(null)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Close
-              </button>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">{selectedEntry.title}</h3>
+              <p className="text-sm text-gray-500">
+                {new Date(selectedEntry.date).toLocaleDateString()} at {new Date(selectedEntry.date).toLocaleTimeString()}
+              </p>
             </div>
           </div>
-        </div>
-      )}
+        );
+        const Footer = (
+          <div className="flex items-center justify-end space-x-3 w-full">
+            {selectedEntry.type === 'audit' && (
+              <button
+                onClick={() => {
+                  setSelectedEntry(null);
+                  setShowTrendView(true);
+                }}
+                className="flex items-center space-x-2 text-purple-600 hover:text-purple-800"
+              >
+                <TrendingUp className="w-4 h-4" />
+                <span>View in Trends</span>
+              </button>
+            )}
+            <button
+              onClick={() => setSelectedEntry(null)}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        );
+        return (
+          <Modal isOpen={true} onClose={() => setSelectedEntry(null)} header={Header} footer={Footer} size="2xl">
+            {renderEntryDetails(selectedEntry)}
+          </Modal>
+        );
+      })()}
     </div>
   );
 };

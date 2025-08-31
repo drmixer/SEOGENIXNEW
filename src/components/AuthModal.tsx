@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, Loader } from 'lucide-react';
 import { supabase, resetAuth } from '../lib/supabase';
+import Modal from './ui/Modal';
 
 interface AuthModalProps {
   onClose: () => void;
@@ -104,23 +105,10 @@ const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const header = (<h2 className="text-2xl font-bold text-gray-900">{isLogin ? 'Sign In' : 'Create Account'}</h2>);
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md my-8">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900">
-            {isLogin ? 'Sign In' : 'Create Account'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        <div className="p-6">
+    <Modal isOpen={true} onClose={onClose} header={header} size="md">
+        <div className="">
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div>
@@ -237,8 +225,7 @@ const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

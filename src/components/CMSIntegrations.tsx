@@ -3,6 +3,7 @@ import { ExternalLink, Settings, CheckCircle, AlertCircle, Loader, Globe, Code, 
 import { apiService } from '../services/api';
 import { userDataService, type CMSIntegration } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
+import Modal from './ui/Modal';
 
 interface CMSIntegrationsProps {
   userPlan: 'free' | 'core' | 'pro' | 'agency';
@@ -502,91 +503,108 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
       </div>
 
       {/* Connection Modal */}
-      {showConnectionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
-          <div className="bg-white w-full h-full sm:h-auto sm:max-w-md sm:rounded-xl shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
-              <div className="flex items-center space-x-3">
-                <span className="text-2xl">{showConnectionModal.icon}</span>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Connect {showConnectionModal.name}</h3>
-                  <p className="text-sm text-gray-500">Enter your connection details</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowConnectionModal(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-6 overflow-y-auto">
-              {renderConnectionForm()}
-              
-              <div className="flex items-center justify-end space-x-3 mt-4 sm:mt-6">
-                <button
-                  onClick={() => setShowConnectionModal(null)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConnectionSubmit}
-                  disabled={connecting === showConnectionModal.id}
-                  className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
-                >
-                  {connecting === showConnectionModal.id ? (
-                    <>
-                      <Loader className="w-4 h-4 animate-spin" />
-                      <span>Connecting...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4" />
-                      <span>Connect</span>
-                    </>
-                  )}
-                </button>
-              </div>
+      {showConnectionModal && (() => {
+        const header = (
+          <div className="flex items-center space-x-3">
+            <span className="text-2xl">{showConnectionModal.icon}</span>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Connect {showConnectionModal.name}</h3>
+              <p className="text-sm text-gray-500">Enter your connection details</p>
             </div>
           </div>
-        </div>
-      )}
+        );
+        const footer = (
+          <>
+            <button
+              onClick={() => setShowConnectionModal(null)}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConnectionSubmit}
+              disabled={connecting === showConnectionModal.id}
+              className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+            >
+              {connecting === showConnectionModal.id ? (
+                <>
+                  <Loader className="w-4 h-4 animate-spin" />
+                  <span>Connecting...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4" />
+                  <span>Connect</span>
+                </>
+              )}
+            </button>
+          </>
+        );
+        return (
+          <Modal isOpen={true} onClose={() => setShowConnectionModal(null)} header={header} footer={footer} size="md">
+            {renderConnectionForm()}
+          </Modal>
+        );
+      })()}
 
       {/* Integration Details Modal */}
-      {selectedIntegration && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
-          <div className="bg-white w-full h-full sm:h-auto sm:max-w-2xl sm:rounded-xl shadow-2xl flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
-              <div className="flex items-center space-x-3">
-                <span className="text-2xl">{selectedIntegration.icon}</span>
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-900">{selectedIntegration.name} Integration</h3>
-                  <p className="text-sm text-gray-500">{selectedIntegration.description}</p>
+      {selectedIntegration && (() => {
+        const header = (
+          <div className="flex items-center space-x-3">
+            <span className="text-2xl">{selectedIntegration.icon}</span>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">{selectedIntegration.name} Integration</h3>
+              <p className="text-sm text-gray-500">{selectedIntegration.description}</p>
+            </div>
+          </div>
+        );
+        const footer = (
+          <>
+            <button
+              onClick={() => setSelectedIntegration(null)}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Close
+            </button>
+            {selectedIntegration.status === 'available' && canUseIntegration(selectedIntegration) && (
+              <button
+                onClick={() => {
+                  setSelectedIntegration(null);
+                  handleConnect(selectedIntegration);
+                }}
+                disabled={connecting === selectedIntegration.id}
+                className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+              >
+                {connecting === selectedIntegration.id ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    <span>Connecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    <span>Connect Now</span>
+                  </>
+                )}
+              </button>
+            )}
+          </>
+        );
+        return (
+          <Modal isOpen={true} onClose={() => setSelectedIntegration(null)} header={header} footer={footer} size="2xl">
+            <div className="space-y-6">
+              {/* Features */}
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-3">Features & Capabilities</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {selectedIntegration.features.map((feature, index) => (
+                    <div key={index} className="flex items-center space-x-2 text-sm text-gray-600">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span>{feature}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedIntegration(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-              <div className="space-y-6">
-                {/* Features */}
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-3">Features & Capabilities</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {selectedIntegration.features.map((feature, index) => (
-                      <div key={index} className="flex items-center space-x-2 text-sm text-gray-600">
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                        <span>{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
 
                 {/* Setup Steps */}
                 <div>
@@ -614,42 +632,9 @@ const CMSIntegrations: React.FC<CMSIntegrationsProps> = ({ userPlan }) => {
                     <li>• Consistent SEO implementation</li>
                   </ul>
                 </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end space-x-3 p-4 sm:p-6 border-t border-gray-200">
-              <button
-                onClick={() => setSelectedIntegration(null)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Close
-              </button>
-              {selectedIntegration.status === 'available' && canUseIntegration(selectedIntegration) && (
-                <button
-                  onClick={() => {
-                    setSelectedIntegration(null);
-                    handleConnect(selectedIntegration);
-                  }}
-                  disabled={connecting === selectedIntegration.id}
-                  className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
-                >
-                  {connecting === selectedIntegration.id ? (
-                    <>
-                      <Loader className="w-4 h-4 animate-spin" />
-                      <span>Connecting...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4" />
-                      <span>Connect Now</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+          </Modal>
+        );
+      })()}
 
       {/* Help Section */}
       <div className="bg-blue-50 rounded-xl p-6 border border-blue-200">
