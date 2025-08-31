@@ -4,6 +4,7 @@ import { apiService } from '../services/api';
 import { mapRecommendationToTool } from '../utils/fixItRouter';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
+import Modal from './ui/Modal';
 
 interface ToolModalProps {
   isOpen: boolean;
@@ -959,80 +960,73 @@ const ToolModal: React.FC<ToolModalProps> = ({
 
   const IconComponent = getToolIcon(toolId);
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
-      <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-xl shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className={`p-3 rounded-lg bg-gradient-to-r ${getToolColor(toolId)}`}>
-              <IconComponent className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900">{toolName}</h3>
-              <p className="text-sm text-gray-500">
-                {step === 'config' ? 'Configure settings' : 
-                 step === 'running' ? 'Running...' : 
-                 'Results'}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+  // Do not render when closed
+  if (!isOpen) return null;
 
-        <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
-          {step === 'config' && renderToolConfig()}
-          {step === 'running' && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Loader className="w-12 h-12 text-purple-600 animate-spin mb-4" />
-              <p className="text-gray-600">Running {toolName}...</p>
-              <p className="text-sm text-gray-500 mt-2">This may take a few moments</p>
-            </div>
-          )}
-          {step === 'results' && renderToolResults()}
-        </div>
-
-        <div className="flex items-center justify-end space-x-3 p-4 sm:p-6 border-t border-gray-200">
-          {step === 'config' && (
-            <>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRunTool}
-                disabled={isLoading}
-                className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-              >
-                {isLoading ? 'Running...' : `Run ${toolName}`}
-              </button>
-            </>
-          )}
-          {step === 'results' && (
-            <>
-              <button
-                onClick={() => setStep('config')}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Run Again
-              </button>
-              <button
-                onClick={onClose}
-                className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300"
-              >
-                Close
-              </button>
-            </>
-          )}
-        </div>
+  const header = (
+    <div className="flex items-center space-x-3">
+      <div className={`p-3 rounded-lg bg-gradient-to-r ${getToolColor(toolId)}`}>
+        <IconComponent className="w-6 h-6 text-white" />
+      </div>
+      <div>
+        <h3 className="text-xl font-semibold text-gray-900">{toolName}</h3>
+        <p className="text-sm text-gray-500">
+          {step === 'config' ? 'Configure settings' : step === 'running' ? 'Running...' : 'Results'}
+        </p>
       </div>
     </div>
+  );
+
+  const footer = (
+    <>
+      {step === 'config' && (
+        <>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleRunTool}
+            disabled={isLoading}
+            className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+          >
+            {isLoading ? 'Running...' : `Run ${toolName}`}
+          </button>
+        </>
+      )}
+      {step === 'results' && (
+        <>
+          <button
+            onClick={() => setStep('config')}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Run Again
+          </button>
+          <button
+            onClick={onClose}
+            className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300"
+          >
+            Close
+          </button>
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} header={header} footer={footer} size="5xl">
+      {step === 'config' && renderToolConfig()}
+      {step === 'running' && (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader className="w-12 h-12 text-purple-600 animate-spin mb-4" />
+          <p className="text-gray-600">Running {toolName}...</p>
+          <p className="text-sm text-gray-500 mt-2">This may take a few moments</p>
+        </div>
+      )}
+      {step === 'results' && renderToolResults()}
+    </Modal>
   );
 };
 
