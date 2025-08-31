@@ -5,6 +5,7 @@ export interface UserProfile {
   user_id: string;
   websites: Array<{ id: string; url: string; name: string }>; 
   competitors: Array<{ url: string; name: string }>;
+  competitor_blocklist?: string[];
   industry?: string;
   business_description?: string;
   plan: 'free' | 'core' | 'pro' | 'agency';

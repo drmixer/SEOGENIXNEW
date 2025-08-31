@@ -207,7 +207,7 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan,
     }
   };
 
-  const canUseRealTimeEditor = ['core', 'pro', 'agency'].includes(userPlan);
+  const canUseRealTimeEditor = ['pro', 'agency'].includes(userPlan);
 
   if (!canUseRealTimeEditor) {
     return (
@@ -215,10 +215,10 @@ const RealTimeContentEditor: React.FC<RealTimeContentEditorProps> = ({ userPlan,
         <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">Real-time AI Content Editor</h3>
         <p className="text-gray-600 mb-4">
-          Get instant AI-powered suggestions as you write. Available with Core plan and above.
+          Get instant AI-powered suggestions as you write. Available with Pro plan and above.
         </p>
         <button className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300">
-          Upgrade to Core Plan
+          Upgrade to Pro Plan
         </button>
       </div>
     );

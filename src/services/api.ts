@@ -162,6 +162,15 @@ export const apiService = {
     return auditPromise;
   },
 
+  // Source search (for Citations)
+  async searchSources(query: string): Promise<{ results: Array<{ title: string; url: string; snippet?: string }> }> {
+    const result = await apiCall(`${API_BASE_URL}/search-sources`, {
+      method: 'POST',
+      body: JSON.stringify({ query })
+    }, false); // no auth required
+    return result.data || result.output || result;
+  },
+
   // Enhanced Audit Insights
   async getEnhancedAuditInsights(url: string, content: string, previousScore?: number) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/enhanced-audit-insights`, { url, content, previousScore });
@@ -517,10 +526,11 @@ export const apiService = {
     industry?: string,
     businessDescription?: string,
     existingCompetitors?: string[],
-    analysisDepth?: 'basic' | 'comprehensive'
+    analysisDepth?: 'basic' | 'comprehensive',
+    options?: { preferNiche?: boolean; hintKeywords?: string[]; blocklist?: string[] }
   ) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/competitor-discovery`, { 
-      projectId, url, industry, businessDescription, existingCompetitors, analysisDepth
+      projectId, url, industry, businessDescription, existingCompetitors, analysisDepth, options
     });
     
     if (pendingApiRequests.has(cacheKey)) {
@@ -530,7 +540,7 @@ export const apiService = {
     
     const discoveryPromise = apiCall(`${API_BASE_URL}/competitor-discovery`, {
       method: 'POST',
-      body: JSON.stringify({ projectId, url, industry, businessDescription, existingCompetitors, analysisDepth })
+      body: JSON.stringify({ projectId, url, industry, businessDescription, existingCompetitors, analysisDepth, options })
     }).then(response => {
       if (response.output) {
         return response.output;

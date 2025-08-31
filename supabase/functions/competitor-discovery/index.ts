@@ -69,6 +69,7 @@ const getRelevancePrompt = (competitors, payload)=>{
 - **Industry:** ${payload.industry}
 - **Primary Topic/Service:** ${payload.topic || 'Not specified'}
 - **Description:** ${payload.userDescription || 'Not specified'}
+${payload.options?.hintKeywords && payload.options.hintKeywords.length ? `- **Hint Keywords:** ${payload.options.hintKeywords.join(', ')}` : ''}
 
 **List of Potential Competitors (from Google Search):**
 ${JSON.stringify(competitors.map((c)=>({
@@ -105,7 +106,7 @@ export const competitorDiscoveryService = async (req, supabase)=>{
   let runId = null;
   try {
     const payload = await req.json();
-    const { industry, topic, existingCompetitors = [], projectId } = payload;
+    const { industry, topic, existingCompetitors = [], projectId, options } = payload;
     if (!projectId) {
       throw new Error('`projectId` is required.');
     }
@@ -136,7 +137,7 @@ export const competitorDiscoveryService = async (req, supabase)=>{
       'wikipedia.org', 'forbes.com', 'investopedia.com', 'bloomberg.com', 'businessinsider.com',
       'techcrunch.com', 'medium.com', 'youtube.com', 'facebook.com', 'twitter.com', 'linkedin.com',
       'quora.com', 'reddit.com', 'pinterest.com', 'amazon.com', 'ebay.com', 'appsumo.com', 'g2.com', 'capterra.com'
-    ];
+    ].concat(Array.isArray(options?.blocklist) ? options.blocklist.map((d)=>String(d).replace(/^www\./,'').toLowerCase()) : []);
     const potentialCompetitors = searchResults.items?.filter(item => {
       if (!item.link) return false;
       const domain = new URL(item.link).hostname.replace('www.', '');
@@ -205,11 +206,13 @@ export const competitorDiscoveryService = async (req, supabase)=>{
       ]));
     // Get SEO metrics for relevant competitors
     const competitors = [];
+    const preferNiche = options?.preferNiche === true;
     for (const competitor of potentialCompetitors){
       try {
         const url = competitor.link;
         const relevanceInfo = relevanceMap.get(url);
-        if (!relevanceInfo || relevanceInfo.relevanceScore < 45) continue; // tighten relevance threshold
+        const minScore = preferNiche ? 60 : 45;
+        if (!relevanceInfo || relevanceInfo.relevanceScore < minScore) continue; // threshold based on mode
         const domain = new URL(url).hostname;
         // Get Moz domain authority
         const expires = Math.floor(Date.now() / 1000) + 300;
@@ -228,8 +231,8 @@ export const competitorDiscoveryService = async (req, supabase)=>{
         // Adjust score to prefer niche players: penalize very high DA unless aspirational
         let adjustedScore = relevanceInfo.relevanceScore;
         const type = (relevanceInfo.competitorType || 'direct') as string;
-        if (typeof domainAuthority === 'number' && domainAuthority >= 80 && type !== 'aspirational') {
-          adjustedScore = Math.max(0, adjustedScore - 20);
+        if (typeof domainAuthority === 'number' && domainAuthority >= (preferNiche ? 70 : 80) && type !== 'aspirational') {
+          adjustedScore = Math.max(0, adjustedScore - (preferNiche ? 30 : 20));
         }
         competitors.push({
           name: competitor.title || domain,

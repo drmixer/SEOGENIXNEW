@@ -51,7 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'voice', label: 'Voice Assistant Tester', icon: Mic, available: isDevelopment || userPlan !== 'free' },
     { id: 'summaries', label: 'LLM Site Summaries', icon: Globe, available: isDevelopment || userPlan !== 'free' },
     { id: 'entities', label: 'Entity Coverage', icon: Users, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
-    { id: 'generator', label: 'AI Content Generator', icon: Zap, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
+    { id: 'generator', label: 'AI Content Generator', icon: Zap, available: true },
     { id: 'prompts', label: 'Prompt Suggestions', icon: Lightbulb, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'competitive', label: 'Competitive Analysis', icon: BarChart3, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'discovery', label: 'Competitor Discovery', icon: Radar, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },

@@ -18,6 +18,7 @@ interface CompetitiveAnalysisModalProps {
   onAnalysisComplete: (results: any) => void;
   userWebsites: Website[];
   userCompetitors: Competitor[];
+  maxSelectable?: number;
 }
 
 const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
@@ -25,6 +26,7 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
   onAnalysisComplete,
   userWebsites,
   userCompetitors,
+  maxSelectable = 10,
 }) => {
   console.log('userWebsites', userWebsites);
   console.log('userCompetitors', userCompetitors);
@@ -44,11 +46,11 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
   }, [userWebsites, userCompetitors, selectedUserWebsite]);
 
   const handleCompetitorToggle = (competitorUrl: string) => {
-    setSelectedCompetitors(prev =>
-      prev.includes(competitorUrl)
-        ? prev.filter(url => url !== competitorUrl)
-        : [...prev, competitorUrl]
-    );
+    setSelectedCompetitors(prev => {
+      if (prev.includes(competitorUrl)) return prev.filter(url => url !== competitorUrl);
+      if (prev.length >= maxSelectable) return prev; // enforce limit
+      return [...prev, competitorUrl];
+    });
   };
 
   const handleRunAnalysis = async () => {
@@ -107,6 +109,7 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Competitors to Analyze</label>
+            <div className="text-xs text-gray-500 mb-2">Selected {selectedCompetitors.length} / {maxSelectable}</div>
             <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-3">
               {userCompetitors.map(comp => (
                 <label key={comp.url} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">

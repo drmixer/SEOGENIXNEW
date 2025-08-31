@@ -49,6 +49,10 @@
 [functions.wordpress-integration]
   import_map = "./functions/wordpress-integration/deno.json"
 
+[functions.search-sources]
+  # Simple HTML scraping of DuckDuckGo results
+  verify_jwt = false
+
 [functions.prerender-fetch]
   # Allow unauthenticated browser calls
   verify_jwt = false
