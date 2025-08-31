@@ -100,6 +100,11 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
   // Voice Assistant specific state
   const [voiceQuery, setVoiceQuery] = useState('');
   const [selectedAssistants, setSelectedAssistants] = useState<string[]>(['siri', 'alexa', 'google']);
+  // Discovery rules manager state
+  const [showRulesManager, setShowRulesManager] = useState(false);
+  const [domainRules, setDomainRules] = useState<Array<{ id: string; type: 'allow'|'block'; pattern: string; reason?: string; created_at?: string }>>([]);
+  const [isRulesLoading, setIsRulesLoading] = useState(false);
+  const [newRule, setNewRule] = useState<{ type: 'allow'|'block'; pattern: string; reason?: string }>({ type: 'block', pattern: '' });
 
   // Update active tool when selectedTool changes
   useEffect(() => {
@@ -379,15 +384,15 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           );
           break;
 
-        case 'discovery':
-          result = await apiService.discoverCompetitors(
-            selectedProjectId!,
-            selectedWebsite!,
-            userProfile?.industry,
-            userProfile?.business_description,
-            userProfile?.competitors?.map((c: any) => c.url) || []
-          );
-          break;
+      case 'discovery':
+        result = await apiService.discoverCompetitors(
+          selectedProjectId!,
+          selectedWebsite!,
+          userProfile?.industry,
+          userProfile?.business_description,
+          userProfile?.competitors?.map((c: any) => c.url) || []
+        );
+        break;
 
         case 'prompts':
           if (!promptTopic) {
@@ -1043,7 +1048,21 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             </div>
           ) : toolData ? (
             <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-              <h3 className="font-medium text-gray-900 mb-4">Results</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900">Results</h3>
+                {activeToolId === 'discovery' && (
+                  <button
+                    onClick={async () => {
+                      if (!selectedProjectId) return;
+                      setShowRulesManager(true);
+                      setIsRulesLoading(true);
+                      try { const rules = await apiService.getDomainRules(selectedProjectId); setDomainRules(rules || []); } catch {}
+                      setIsRulesLoading(false);
+                    }}
+                    className="px-3 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-100 text-sm"
+                  >Manage Allow/Block</button>
+                )}
+              </div>
               
               {/* Tool-specific results rendering */}
               <ToolResultsDisplay 
@@ -1137,6 +1156,117 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             setShowCompetitiveAnalysisModal(false);
           }}
         />
+      )}
+      {/* Discovery Rules Manager Modal */}
+      {showRulesManager && (
+        <Modal
+          isOpen={true}
+          onClose={() => setShowRulesManager(false)}
+          header={<div className="flex items-center space-x-3"><div className="bg-purple-500 p-2 rounded-lg"><Radar className="w-5 h-5 text-white"/></div><h2 className="text-xl font-bold text-gray-900">Discovery Allow/Block Rules</h2></div>}
+          footer={
+            <>
+              <button onClick={() => setShowRulesManager(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Close</button>
+              <button
+                onClick={async () => {
+                  if (!selectedProjectId || !selectedWebsite) return;
+                  setLoading(true);
+                  try {
+                    const updated = await apiService.discoverCompetitors(
+                      selectedProjectId,
+                      selectedWebsite,
+                      userProfile?.industry,
+                      userProfile?.business_description,
+                      userProfile?.competitors?.map((c: any) => c.url) || []
+                    );
+                    setToolData(normalizeResult('discovery', updated));
+                  } catch (e) {
+                    console.warn('Failed to re-run discovery:', e);
+                  } finally { setLoading(false); }
+                }}
+                className="bg-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-purple-700"
+              >Apply Now</button>
+            </>
+          }
+          size="2xl"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">Rules are applied to discovery results before AI scoring. Use allow rules to constrain to specific domains/patterns; use block rules to hide noisy sources.</div>
+              <button
+                onClick={async () => {
+                  if (!selectedProjectId) return;
+                  setIsRulesLoading(true);
+                  try {
+                    const rules = await apiService.getDomainRules(selectedProjectId);
+                    setDomainRules(rules || []);
+                  } catch (e) { console.warn('Failed to load rules:', e); }
+                  finally { setIsRulesLoading(false); }
+                }}
+                className="text-sm text-gray-700 border border-gray-300 rounded px-3 py-1 hover:bg-gray-50"
+              >Refresh</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-gray-50 rounded p-3 border border-gray-200">
+                <div className="font-medium text-gray-800 mb-2">Allow Rules</div>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {isRulesLoading ? <div className="text-sm text-gray-600">Loading…</div> : (
+                    domainRules.filter(r => r.type === 'allow').length === 0 ? (
+                      <div className="text-xs text-gray-500">No allow rules. All non-blocked candidates pass.</div>
+                    ) : (
+                      domainRules.filter(r => r.type === 'allow').map(r => (
+                        <div key={r.id} className="flex items-center justify-between text-sm bg-white border border-gray-200 rounded px-2 py-1">
+                          <span className="truncate" title={r.pattern}>{r.pattern}</span>
+                          <button onClick={async ()=>{ if (!selectedProjectId) return; try { await apiService.deleteDomainRule(selectedProjectId, r.id); setDomainRules(prev => prev.filter(x => x.id !== r.id)); } catch(e){ console.warn('Delete failed:', e);} }} className="text-xs text-red-600 hover:underline">Delete</button>
+                        </div>
+                      ))
+                    )
+                  )}
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded p-3 border border-gray-200">
+                <div className="font-medium text-gray-800 mb-2">Block Rules</div>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {isRulesLoading ? <div className="text-sm text-gray-600">Loading…</div> : (
+                    domainRules.filter(r => r.type === 'block').length === 0 ? (
+                      <div className="text-xs text-gray-500">No block rules.</div>
+                    ) : (
+                      domainRules.filter(r => r.type === 'block').map(r => (
+                        <div key={r.id} className="flex items-center justify-between text-sm bg-white border border-gray-200 rounded px-2 py-1">
+                          <span className="truncate" title={r.pattern}>{r.pattern}</span>
+                          <button onClick={async ()=>{ if (!selectedProjectId) return; try { await apiService.deleteDomainRule(selectedProjectId, r.id); setDomainRules(prev => prev.filter(x => x.id !== r.id)); } catch(e){ console.warn('Delete failed:', e);} }} className="text-xs text-red-600 hover:underline">Delete</button>
+                        </div>
+                      ))
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded border border-gray-200 p-3">
+              <div className="font-medium text-gray-800 mb-2">Add Rule</div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
+                <select value={newRule.type} onChange={(e)=> setNewRule(prev => ({ ...prev, type: e.target.value as any }))} className="border border-gray-300 rounded px-2 py-1 text-sm">
+                  <option value="block">Block</option>
+                  <option value="allow">Allow</option>
+                </select>
+                <input value={newRule.pattern} onChange={(e)=> setNewRule(prev => ({ ...prev, pattern: e.target.value }))} placeholder="example.com or keyword" className="border border-gray-300 rounded px-2 py-1 text-sm md:col-span-2" />
+                <input value={newRule.reason || ''} onChange={(e)=> setNewRule(prev => ({ ...prev, reason: e.target.value }))} placeholder="Reason (optional)" className="border border-gray-300 rounded px-2 py-1 text-sm" />
+              </div>
+              <div className="mt-2">
+                <button
+                  onClick={async ()=>{
+                    if (!selectedProjectId || !newRule.pattern.trim()) return;
+                    try {
+                      const added = await apiService.addDomainRule(selectedProjectId, newRule.type, newRule.pattern.trim(), newRule.reason?.trim() || undefined);
+                      setDomainRules(prev => [added, ...prev]);
+                      setNewRule({ type: 'block', pattern: '' });
+                    } catch (e) { console.warn('Add rule failed:', e); }
+                  }}
+                  className="px-3 py-1 bg-gray-900 text-white rounded text-sm hover:bg-black"
+                >Add Rule</button>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
     </>
   );
@@ -1905,10 +2035,38 @@ const ToolResultsDisplay: React.FC<{
                 </div>
                 {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores) && (
                   <div className="grid grid-cols-4 gap-2 mt-2 text-xs">
-                    <div>AI: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.aiUnderstanding || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.ai_understanding || 0}</div>
-                    <div>Citation: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.citationLikelihood || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.citation_likelihood || 0}</div>
-                    <div>Voice: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.conversationalReadiness || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.conversational_readiness || 0}</div>
-                    <div>Structure: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.contentStructure || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.content_structure || 0}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span>AI: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.aiUnderstanding || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.ai_understanding || 0}</span>
+                      <button
+                        onClick={() => onSwitchTool('editor', { url: selectedWebsite, tab: 'entities', from: 'compare' })}
+                        className="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                        title="Open Editor to improve AI understanding (Entities)"
+                      >Fix</button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span>Citation: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.citationLikelihood || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.citation_likelihood || 0}</span>
+                      <button
+                        onClick={() => onSwitchTool('editor', { url: selectedWebsite, tab: 'citations', from: 'compare' })}
+                        className="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                        title="Open Editor to add/use citations"
+                      >Fix</button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span>Voice: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.conversationalReadiness || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.conversational_readiness || 0}</span>
+                      <button
+                        onClick={() => onSwitchTool('editor', { url: selectedWebsite, tab: 'entities', from: 'compare' })}
+                        className="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                        title="Open Editor to improve conversational readiness"
+                      >Fix</button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span>Structure: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.contentStructure || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.content_structure || 0}</span>
+                      <button
+                        onClick={() => onSwitchTool('editor', { url: selectedWebsite, tab: 'schema', from: 'compare' })}
+                        className="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                        title="Open Editor to generate/validate schema"
+                      >Fix</button>
+                    </div>
                   </div>
                 )}
                 {data.primarySiteAnalysis.strengths && data.primarySiteAnalysis.strengths.length > 0 && (
@@ -2092,6 +2250,8 @@ const ToolResultsDisplay: React.FC<{
                         <div className="text-sm text-purple-800">Market Intensity</div>
                     </div>
                 </div>
+
+                {/* Manage button moved to parent container controls */}
 
                 {data.rejectedSummary && (
                   <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">

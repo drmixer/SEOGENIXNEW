@@ -58,6 +58,10 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [highlightedText, setHighlightedText] = useState<{start: number, end: number} | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const analysisTimeoutRef = useRef<NodeJS.Timeout>();
+  // Panel refs for deep-link scrolling
+  const entitiesPanelRef = useRef<HTMLDivElement>(null);
+  const schemaPanelRef = useRef<HTMLDivElement>(null);
+  const citationsPanelRef = useRef<HTMLDivElement>(null);
 
   // Entities state (Phase 1 cross-tool integration)
   type SuggestedEntity = { name: string; type?: string; relevance?: number; description?: string };
@@ -319,6 +323,29 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
       loadContentFromUrl();
     }
   }, [context]);
+
+  // Deep-link handling: open target tab/panel and scroll into view
+  useEffect(() => {
+    const tab = (context as any)?.tab as undefined | 'entities' | 'schema' | 'citations';
+    if (!tab) return;
+    if (tab === 'entities') {
+      setShowEntitiesPanel(true);
+      setShowSchemaPanel(false);
+      setShowCitationsPanel(false);
+      setTimeout(() => entitiesPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    } else if (tab === 'schema') {
+      setShowSchemaPanel(true);
+      setShowEntitiesPanel(false);
+      setShowCitationsPanel(false);
+      setTimeout(() => schemaPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    } else if (tab === 'citations') {
+      setShowCitationsPanel(true);
+      setShowEntitiesPanel(false);
+      setShowSchemaPanel(false);
+      setTimeout(() => citationsPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context?.tab]);
 
   // If no specific page URL provided, resolve the website URL from the selected project
   useEffect(() => {
@@ -1700,7 +1727,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           )}
 
           {showEntitiesPanel && (
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+            <div ref={entitiesPanelRef} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center space-x-3">
                   <h4 className="font-medium text-gray-900">Entities</h4>
@@ -1771,7 +1798,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           )}
 
           {showSchemaPanel && (
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+            <div ref={schemaPanelRef} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center space-x-3">
                   <h4 className="font-medium text-gray-900">Schema</h4>
@@ -1795,7 +1822,7 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
           )}
 
           {showCitationsPanel && (
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
+            <div ref={citationsPanelRef} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mt-4">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-medium text-gray-900">Citations</h4>
                 <div className="flex items-center space-x-2">

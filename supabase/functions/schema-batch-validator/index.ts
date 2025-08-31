@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { ok, fail } from "../_shared/response.ts";
 
 // --- CORS Headers ---
 const corsHeaders = {
@@ -41,7 +42,7 @@ Deno.serve(async (req) => {
   try {
     const { projectId, urls } = await req.json();
     if (!projectId) {
-      return new Response(JSON.stringify({ success: false, error: { message: '`projectId` is required.' } }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify(fail('`projectId` is required.', 'BAD_REQUEST')), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     // Resolve user (for persisting activity)
@@ -94,9 +95,9 @@ Deno.serve(async (req) => {
       }
     } catch {}
 
-    return new Response(JSON.stringify({ success: true, data: { results } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(ok({ results })), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    return new Response(JSON.stringify({ success: false, error: { message: msg } }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(fail(msg, 'SERVER_ERROR')), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });

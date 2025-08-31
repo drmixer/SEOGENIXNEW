@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "node:crypto";
 import { getDomain } from "https://esm.sh/tldts@6";
+import { ok, fail } from "../_shared/response.ts";
 // --- CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -106,6 +107,59 @@ export const competitorDiscoveryService = async (req, supabase)=>{
       headers: corsHeaders
     });
   }
+  // Lightweight router for managing allow/block rules
+  try {
+    const url = new URL(req.url);
+    const action = url.searchParams.get('action');
+    if ((req.method === 'GET' && action === 'rules') || (req.method === 'POST' && action === 'add_rule') || (req.method === 'DELETE' && action === 'delete_rule')) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) return new Response(JSON.stringify({ success: false, error: { message: 'Auth required' } }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (!user) return new Response(JSON.stringify({ success: false, error: { message: 'Invalid token' } }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (req.method === 'GET') {
+        const projectId = url.searchParams.get('projectId') as string;
+        if (!projectId) return new Response(JSON.stringify({ success: false, error: { message: 'projectId required' } }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const { data, error } = await supabase
+          .from('project_domain_rules')
+          .select('*')
+          .eq('project_id', projectId)
+          .eq('created_by', user.id)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data: { rules: data || [] } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      if (req.method === 'POST') {
+        const body = await req.json();
+        const { projectId, type, pattern, reason } = body || {};
+        if (!projectId || (type !== 'allow' && type !== 'block') || !pattern) {
+          return new Response(JSON.stringify({ success: false, error: { message: 'projectId, type, pattern required' } }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        const { data, error } = await supabase
+          .from('project_domain_rules')
+          .insert({ project_id: projectId, type, pattern, reason, created_by: user.id })
+          .select()
+          .single();
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data: { rule: data } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      if (req.method === 'DELETE') {
+        const body = await req.json().catch(() => ({}));
+        const { id, projectId } = body || {};
+        if (!id || !projectId) return new Response(JSON.stringify({ success: false, error: { message: 'id and projectId required' } }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const { error } = await supabase
+          .from('project_domain_rules')
+          .delete()
+          .eq('id', id)
+          .eq('created_by', user.id)
+          .eq('project_id', projectId);
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data: { id } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+  } catch (e) {
+    // fallthrough to main handler
+  }
   let runId = null;
   try {
     const payload = await req.json();
@@ -196,17 +250,44 @@ export const competitorDiscoveryService = async (req, supabase)=>{
         continue;
       }
     }
-    const potentialCompetitors = Array.from(domainMap.values()).slice(0, 20);
+    // Load project-level allow/block rules (if any)
+    let allowRules: Array<{ pattern: string }> = [];
+    let blockRules: Array<{ pattern: string }> = [];
+    try {
+      const { data: rulesData } = await supabase
+        .from('project_domain_rules')
+        .select('type,pattern')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+      (rulesData || []).forEach((r: any) => {
+        if (r?.type === 'allow') allowRules.push({ pattern: String(r.pattern) });
+        else if (r?.type === 'block') blockRules.push({ pattern: String(r.pattern) });
+      });
+    } catch {}
+    const matchesRule = (root: string, pattern: string) => {
+      const p = String(pattern || '').toLowerCase();
+      if (!p) return false;
+      const r = String(root || '').toLowerCase();
+      return r === p || r.endsWith(p) || r.includes(p);
+    };
+    // Apply allow/block rules to candidate domains before model scoring
+    const prelim = Array.from(domainMap.entries()).filter(([root, v]) => {
+      if (blockRules.some(br => matchesRule(root, br.pattern))) {
+        rejected.push({ url: v.link, root, reason: 'blocked_by_rule' });
+        return false;
+      }
+      if (allowRules.length > 0 && !allowRules.some(ar => matchesRule(root, ar.pattern))) {
+        rejected.push({ url: v.link, root, reason: 'not_in_allow_list' });
+        return false;
+      }
+      return true;
+    }).map(([, v]) => v);
+
+    const potentialCompetitors = prelim.slice(0, 20);
     if (potentialCompetitors.length === 0) {
-      const emptyResult = {
-        competitorSuggestions: []
-      };
+      const emptyResult = { competitorSuggestions: [] };
       await updateToolRun(supabase, runId, 'completed', emptyResult, null);
-      return new Response(JSON.stringify({
-        success: true,
-        data: emptyResult,
-        runId
-      }), {
+      return new Response(JSON.stringify(ok(emptyResult, { runId })), {
         headers: {
           ...corsHeaders,
           "Content-Type": "application/json"
@@ -319,11 +400,7 @@ export const competitorDiscoveryService = async (req, supabase)=>{
       rejectedSamples: rejected.slice(0, 20)
     };
     await updateToolRun(supabase, runId, 'completed', output, null);
-    return new Response(JSON.stringify({
-      success: true,
-      data: output,
-      runId
-    }), {
+    return new Response(JSON.stringify(ok(output, { runId })), {
       headers: {
         ...corsHeaders,
         "Content-Type": "application/json"
@@ -335,13 +412,7 @@ export const competitorDiscoveryService = async (req, supabase)=>{
     if (runId) {
       await updateToolRun(supabase, runId, 'error', null, errorMessage);
     }
-    return new Response(JSON.stringify({
-      success: false,
-      error: {
-        message: errorMessage
-      },
-      runId
-    }), {
+    return new Response(JSON.stringify(fail(errorMessage, 'SERVER_ERROR', { runId })), {
       status: 500,
       headers: {
         ...corsHeaders,

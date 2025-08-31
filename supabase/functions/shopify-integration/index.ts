@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { ok, fail } from "../_shared/response.ts";
 // --- CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -353,11 +354,7 @@ export const shopifyService = async (req, supabase)=>{
       await updateToolRun(supabase, runId, 'completed', output, null);
     }
     console.log(`Shopify ${action} operation completed successfully`);
-    return new Response(JSON.stringify({
-      success: true,
-      data: output,
-      runId
-    }), {
+    return new Response(JSON.stringify(ok(output, { runId })), {
       headers: {
         ...corsHeaders,
         'Content-Type': 'application/json'
@@ -370,14 +367,7 @@ export const shopifyService = async (req, supabase)=>{
     if (runId) {
       await updateToolRun(supabase, runId, 'error', null, errorMessage);
     }
-    return new Response(JSON.stringify({
-      success: false,
-      error: {
-        message: errorMessage,
-        code: errorCode
-      },
-      runId
-    }), {
+    return new Response(JSON.stringify(fail(errorMessage, errorCode, { runId })), {
       status: 500,
       headers: {
         ...corsHeaders,
