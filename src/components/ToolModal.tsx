@@ -1552,6 +1552,68 @@ const ToolResultsDisplay: React.FC<{
             </div>
           )}
 
+          {data.primarySiteAnalysis && data.competitorAnalyses && data.competitorAnalyses.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900">Side-by-Side Compare</h4>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600">
+                      <th className="py-2 pr-4">Site</th>
+                      <th className="py-2 px-2">AI</th>
+                      <th className="py-2 px-2">Citation</th>
+                      <th className="py-2 px-2">Voice</th>
+                      <th className="py-2 px-2">Structure</th>
+                      <th className="py-2 px-2">Overall</th>
+                    </tr>
+                  </thead>
+                  <tbody className="align-top">
+                    {(() => {
+                      const getSub = (o: any, key: string) => (o?.subscores?.[key] ?? o?.scores?.[key] ?? o?.subscores?.[key.replace('_','')] ?? o?.scores?.[key.replace('_','')]) || 0;
+                      const your = data.primarySiteAnalysis;
+                      const yourRow = (
+                        <tr key={your.url || 'your'} className="border-t border-gray-100">
+                          <td className="py-2 pr-4 font-medium text-green-700">{your.name || your.url || 'Your site'}</td>
+                          <td className="py-2 px-2">{getSub(your, 'aiUnderstanding') || getSub(your, 'ai_understanding')}</td>
+                          <td className="py-2 px-2">{getSub(your, 'citationLikelihood') || getSub(your, 'citation_likelihood')}</td>
+                          <td className="py-2 px-2">{getSub(your, 'conversationalReadiness') || getSub(your, 'conversational_readiness')}</td>
+                          <td className="py-2 px-2">{getSub(your, 'contentStructure') || getSub(your, 'content_structure')}</td>
+                          <td className="py-2 px-2 font-semibold">{your.overallScore || 0}</td>
+                        </tr>
+                      );
+                      const rows = (data.competitorAnalyses || []).map((c: any) => {
+                        const ai = getSub(c, 'aiUnderstanding') || getSub(c, 'ai_understanding');
+                        const cit = getSub(c, 'citationLikelihood') || getSub(c, 'citation_likelihood');
+                        const voice = getSub(c, 'conversationalReadiness') || getSub(c, 'conversational_readiness');
+                        const struct = getSub(c, 'contentStructure') || getSub(c, 'content_structure');
+                        const yoAI = getSub(your, 'aiUnderstanding') || getSub(your, 'ai_understanding');
+                        const yoCit = getSub(your, 'citationLikelihood') || getSub(your, 'citation_likelihood');
+                        const yoVoice = getSub(your, 'conversationalReadiness') || getSub(your, 'conversational_readiness');
+                        const yoStruct = getSub(your, 'contentStructure') || getSub(your, 'content_structure');
+                        const deltaBadge = (delta: number) => (
+                          <span className={`ml-2 text-2xs px-1.5 py-0.5 rounded ${delta > 0 ? 'bg-red-100 text-red-700' : delta < 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {delta > 0 ? `+${delta}` : `${delta}`}
+                          </span>
+                        );
+                        return (
+                          <tr key={c.url || c.name} className="border-t border-gray-100">
+                            <td className="py-2 pr-4 font-medium text-gray-900">{c.name || c.url}</td>
+                            <td className="py-2 px-2">{ai}{deltaBadge(ai - yoAI)}</td>
+                            <td className="py-2 px-2">{cit}{deltaBadge(cit - yoCit)}</td>
+                            <td className="py-2 px-2">{voice}{deltaBadge(voice - yoVoice)}</td>
+                            <td className="py-2 px-2">{struct}{deltaBadge(struct - yoStruct)}</td>
+                            <td className="py-2 px-2 font-semibold">{c.overallScore || c.score || 0}{deltaBadge((c.overallScore || c.score || 0) - (your.overallScore || 0))}</td>
+                          </tr>
+                        );
+                      });
+                      return [yourRow, ...rows];
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {data.competitorAnalyses && data.competitorAnalyses.length > 0 && (
             <div className="space-y-4">
               <h4 className="font-medium text-gray-900">Competitor Analysis:</h4>

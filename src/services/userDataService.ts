@@ -199,6 +199,55 @@ export const userDataService = {
     return profilePromise;
   },
 
+  // Competitive Analysis: persist last selection per project via user_activity
+  async saveCompetitiveSelection(params: { userId: string; projectId: string; primaryUrl: string; competitorUrls: string[] }): Promise<void> {
+    const { userId, projectId, primaryUrl, competitorUrls } = params;
+    if (!userId || !projectId) {
+      console.error('saveCompetitiveSelection called with missing identifiers');
+      return;
+    }
+    try {
+      await supabase.from('user_activity').insert({
+        user_id: userId,
+        activity_type: 'competitive_selection',
+        tool_id: projectId,
+        website_url: primaryUrl,
+        activity_data: { primaryUrl, competitorUrls },
+        created_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Failed to save competitive selection:', e);
+    }
+  },
+
+  async getCompetitiveSelection(userId: string, projectId: string): Promise<{ primaryUrl?: string; competitorUrls?: string[] } | null> {
+    if (!userId || !projectId) {
+      console.error('getCompetitiveSelection called with missing identifiers');
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('user_activity')
+        .select('activity_data, website_url, created_at')
+        .eq('user_id', userId)
+        .eq('activity_type', 'competitive_selection')
+        .eq('tool_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        const ad = data[0].activity_data || {};
+        // Backfill primaryUrl from website_url if not present
+        if (!ad.primaryUrl && data[0].website_url) ad.primaryUrl = data[0].website_url;
+        return ad;
+      }
+      return null;
+    } catch (e) {
+      console.warn('Failed to fetch competitive selection:', e);
+      return null;
+    }
+  },
+
   // Entities draft persistence using user_activity (no new tables)
   async saveEntitiesDraft(params: { userId: string; projectId: string; websiteUrl: string; draft: { suggested?: any[]; missing?: any[]; accepted?: string[] } }): Promise<void> {
     const { userId, projectId, websiteUrl, draft } = params;

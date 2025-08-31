@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader, BarChart3 } from 'lucide-react';
 import { apiService } from '../services/api';
+import { userDataService } from '../services/userDataService';
 
 interface Website {
   url: string;
@@ -20,6 +21,7 @@ interface CompetitiveAnalysisModalProps {
   maxSelectable?: number;
   projectId: string;
   industry?: string;
+  userId?: string;
 }
 
 const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
@@ -30,6 +32,7 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
   maxSelectable = 10,
   projectId,
   industry,
+  userId,
 }) => {
   console.log('userWebsites', userWebsites);
   console.log('userCompetitors', userCompetitors);
@@ -39,30 +42,51 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const storageKey = `ca:lastSelection:${projectId}`;
 
-  // Initialize selection from storage or defaults
+  // Initialize selection from server (preferred) or local storage/defaults
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved) as { primaryUrl?: string; competitorUrls?: string[] };
-        if (parsed.primaryUrl && userWebsites.some(w => w.url === parsed.primaryUrl)) {
-          setSelectedUserWebsite(parsed.primaryUrl);
-        } else if (userWebsites.length > 0 && !selectedUserWebsite) {
-          setSelectedUserWebsite(userWebsites[0].url);
+      (async () => {
+        let initialized = false;
+        if (userId && projectId) {
+          const serverSaved = await userDataService.getCompetitiveSelection(userId, projectId);
+          if (serverSaved) {
+            const primary = serverSaved.primaryUrl;
+            const compUrls = Array.isArray(serverSaved.competitorUrls) ? serverSaved.competitorUrls : [];
+            if (primary && userWebsites.some(w => w.url === primary)) {
+              setSelectedUserWebsite(primary);
+              initialized = true;
+            }
+            if (compUrls.length) {
+              const available = new Set(userCompetitors.map(c => c.url));
+              const filtered = compUrls.filter(url => available.has(url)).slice(0, maxSelectable);
+              if (filtered.length) setSelectedCompetitors(filtered);
+            }
+          }
         }
-        if (Array.isArray(parsed.competitorUrls)) {
-          const available = new Set(userCompetitors.map(c => c.url));
-          const filtered = parsed.competitorUrls.filter(url => available.has(url)).slice(0, maxSelectable);
-          if (filtered.length) setSelectedCompetitors(filtered);
+        if (!initialized) {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+            const parsed = JSON.parse(saved) as { primaryUrl?: string; competitorUrls?: string[] };
+            if (parsed.primaryUrl && userWebsites.some(w => w.url === parsed.primaryUrl)) {
+              setSelectedUserWebsite(parsed.primaryUrl);
+            } else if (userWebsites.length > 0 && !selectedUserWebsite) {
+              setSelectedUserWebsite(userWebsites[0].url);
+            }
+            if (Array.isArray(parsed.competitorUrls)) {
+              const available = new Set(userCompetitors.map(c => c.url));
+              const filtered = parsed.competitorUrls.filter(url => available.has(url)).slice(0, maxSelectable);
+              if (filtered.length) setSelectedCompetitors(filtered);
+            }
+          } else {
+            if (userWebsites.length > 0 && !selectedUserWebsite) {
+              setSelectedUserWebsite(userWebsites[0].url);
+            }
+            if (userCompetitors.length > 0) {
+              setSelectedCompetitors(userCompetitors.slice(0, maxSelectable).map(c => c.url));
+            }
+          }
         }
-      } else {
-        if (userWebsites.length > 0 && !selectedUserWebsite) {
-          setSelectedUserWebsite(userWebsites[0].url);
-        }
-        if (userCompetitors.length > 0) {
-          setSelectedCompetitors(userCompetitors.slice(0, maxSelectable).map(c => c.url));
-        }
-      }
+      })();
     } catch {
       // fallback to defaults
       if (userWebsites.length > 0 && !selectedUserWebsite) {
@@ -73,14 +97,23 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userWebsites, userCompetitors, maxSelectable]);
+  }, [userWebsites, userCompetitors, maxSelectable, userId, projectId]);
 
   // Persist selection
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify({ primaryUrl: selectedUserWebsite, competitorUrls: selectedCompetitors }));
     } catch {}
-  }, [storageKey, selectedUserWebsite, selectedCompetitors]);
+    // Save server-side when we have identifiers
+    if (userId && projectId && selectedUserWebsite) {
+      userDataService.saveCompetitiveSelection({
+        userId,
+        projectId,
+        primaryUrl: selectedUserWebsite,
+        competitorUrls: selectedCompetitors,
+      });
+    }
+  }, [storageKey, selectedUserWebsite, selectedCompetitors, userId, projectId]);
 
   const handleCompetitorToggle = (competitorUrl: string) => {
     setSelectedCompetitors(prev => {
