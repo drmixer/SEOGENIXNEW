@@ -386,8 +386,8 @@ const HistoricalPerformance: React.FC<HistoricalPerformanceProps> = ({ userPlan,
           actionText = 'Check Citation Tracker';
           break;
         case 'Conversational Readiness':
-          toolRecommendation = 'voice';
-          actionText = 'Test Voice Assistants';
+          toolRecommendation = 'prompts';
+          actionText = 'Generate Prompt Suggestions';
           break;
         case 'Content Structure':
           toolRecommendation = 'schema';

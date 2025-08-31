@@ -202,9 +202,9 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
           {
             trend: 'Voice search optimization',
             impact: 'AI systems are increasingly prioritizing conversational content',
-            action: 'voice',
+            action: 'prompts',
             steps: [
-              "Test your content with voice search queries",
+              "Generate voice search prompts to evaluate content",
               "Add more conversational content and FAQs",
               "Implement question-answer format content",
               "Optimize for natural language patterns",

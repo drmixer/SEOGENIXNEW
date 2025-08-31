@@ -123,15 +123,6 @@ export interface Citation {
   type: 'llm' | 'google' | 'reddit' | 'news';
 }
 
-export interface VoiceTestResult {
-  assistant: string;
-  query: string;
-  response: string;
-  mentioned: boolean;
-  ranking: number;
-  confidence: number;
-}
-
 export const apiService = {
   // AI Visibility Audit
   async runAudit(projectId: string, url: string, content?: string): Promise<AuditResult> {
@@ -309,49 +300,7 @@ export const apiService = {
     return optimizePromise;
   },
 
-  // Voice Assistant Tester
-  async testVoiceAssistants(query: string, assistants: string[]): Promise<{ results: VoiceTestResult[] }> {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/voice-assistant-tester`, { query, assistants });
-    
-    if (pendingApiRequests.has(cacheKey)) {
-      console.log('Voice assistant test request already in progress, returning existing promise');
-      return pendingApiRequests.get(cacheKey);
-    }
-    
-    const voicePromise = apiCall(`${API_BASE_URL}/voice-assistant-tester`, {
-      method: 'POST',
-      body: JSON.stringify({ query, assistants })
-    }).then(response => {
-      // Handle the response structure correctly
-      if (response.output) {
-        return response.output;
-      }
-      return response;
-    });
-    
-    pendingApiRequests.set(cacheKey, voicePromise);
-    
-    voicePromise.finally(() => {
-      pendingApiRequests.delete(cacheKey);
-    });
-    
-    return voicePromise;
-  },
 
-  // Assistant Testbench (multi-provider)
-  async runAssistantTestbench(projectId: string, query: string, providers: string[]): Promise<{ results: VoiceTestResult[] }> {
-    const cacheKey = generateCacheKey(`${API_BASE_URL}/assistant-testbench`, { query, providers, projectId });
-    if (pendingApiRequests.has(cacheKey)) {
-      return pendingApiRequests.get(cacheKey);
-    }
-    const p = apiCall(`${API_BASE_URL}/assistant-testbench`, {
-      method: 'POST',
-      body: JSON.stringify({ projectId, query, providers })
-    }).then((resp) => resp.output || resp.data || resp);
-    pendingApiRequests.set(cacheKey, p);
-    p.finally(() => pendingApiRequests.delete(cacheKey));
-    return p;
-  },
 
   // AI Sitemap
   async generateAISitemap(projectId: string, urls?: string[], fetchContent: boolean = false): Promise<any> {
@@ -587,6 +536,8 @@ export const apiService = {
       if (response?.data) return response.data;
       if (response?.output) return response.output;
       if (response?.result) return response.result;
+      if (response?.results) return response.results;
+      if (response?.competitors) return response.competitors;
       return response;
     });
     
