@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "node:crypto";
+import { getDomain } from "https://esm.sh/tldts@6";
 // --- CORS Headers ---
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -56,22 +57,23 @@ const getRelevancePrompt = (competitors, payload)=>{
   const jsonSchema = `{
       "competitors": [
         {
-          "url": "string (The competitor's URL from the list)",
+          "url": "string (Homepage URL from the provided list; keep exactly as given)",
           "relevanceScore": "number (0-100, how relevant this competitor is)",
           "explanation": "string (A brief 1-sentence explanation of why)",
           "competitorType": "string (Enum: 'direct', 'indirect', 'aspirational', 'product')"
         }
       ]
     }`;
-  return `You are an expert Market Analyst specializing in niche markets. Your task is to analyze a list of potential competitors and determine their true relevance to the user's business.
+  return `You are an expert Market Analyst specializing in niche markets. Your task is to analyze a list of potential competitors and determine their true relevance to the user's business. Only consider each company's primary homepage URL.
 
 **User's Business Profile:**
 - **Industry:** ${payload.industry}
 - **Primary Topic/Service:** ${payload.topic || 'Not specified'}
-- **Description:** ${payload.userDescription || 'Not specified'}
+- **Description:** ${payload.userDescription || payload.businessDescription || 'Not specified'}
+${payload.siteUrl ? `- **User Site:** ${payload.siteUrl}` : ''}
 ${payload.options?.hintKeywords && payload.options.hintKeywords.length ? `- **Hint Keywords:** ${payload.options.hintKeywords.join(', ')}` : ''}
 
-**List of Potential Competitors (from Google Search):**
+**List of Potential Competitors (deduped by domain, homepage URLs):**
 ${JSON.stringify(competitors.map((c)=>({
       title: c.title,
       link: c.link,
@@ -87,6 +89,7 @@ ${JSON.stringify(competitors.map((c)=>({
     *   'aspirational': A major, well-known leader in the industry that the user might look up to.
     *   'product': A specific product that competes, rather than the entire company.
 4.  **Provide a Concise Explanation:** Briefly explain your reasoning for the score and classification in one sentence.
+5.  Only return entries that match the homepages provided in the list. Do not invent new URLs.
 
 **CRITICAL: Your response MUST be a single, valid JSON object enclosed in a \`\`\`json markdown block.**
 The JSON object must follow this exact schema:
@@ -107,6 +110,9 @@ export const competitorDiscoveryService = async (req, supabase)=>{
   try {
     const payload = await req.json();
     const { industry, topic, existingCompetitors = [], projectId, options } = payload;
+    // Normalize common fields received from UI
+    const siteUrl: string | undefined = payload.url || payload.siteUrl;
+    const userDescription: string | undefined = payload.businessDescription || payload.userDescription;
     if (!projectId) {
       throw new Error('`projectId` is required.');
     }
@@ -122,8 +128,24 @@ export const competitorDiscoveryService = async (req, supabase)=>{
     if (!googleApiKey || !googleCx || !mozAccessId || !mozSecretKey || !geminiApiKey) {
       throw new Error('Required API keys are not configured as secrets.');
     }
-    // Refine search query for more niche results
-    const searchQuery = `"${industry || ''}" "${topic || ''}" niche competitors OR alternatives`;
+    // Build search query: prefer related:domain if siteUrl provided; otherwise a niche-focused query
+    let searchQuery: string;
+    const userRoot = (() => {
+      try {
+        if (!siteUrl) return undefined;
+        const host = new URL(siteUrl).hostname.replace(/^www\./, '');
+        return getDomain(host) || host;
+      } catch {
+        return undefined;
+      }
+    })();
+    if (userRoot) {
+      // related: often returns company homepages similar to the root domain
+      searchQuery = `related:${userRoot}`;
+    } else {
+      const parts = [industry || '', topic || ''].filter(Boolean).join(' ');
+      searchQuery = `${parts} competitors OR alternatives`;
+    }
     const googleUrl = `https://www.googleapis.com/customsearch/v1?key=${googleApiKey}&cx=${googleCx}&q=${encodeURIComponent(searchQuery)}`;
     const googleResponse = await fetch(googleUrl);
     if (!googleResponse.ok) {
@@ -132,19 +154,46 @@ export const competitorDiscoveryService = async (req, supabase)=>{
     }
     const searchResults = await googleResponse.json();
 
-    // Filter out irrelevant/broad domains and existing competitors
+    // Filter out irrelevant/broad domains and existing competitors; dedupe to root domains
     const blocklist = [
-      'wikipedia.org', 'forbes.com', 'investopedia.com', 'bloomberg.com', 'businessinsider.com',
-      'techcrunch.com', 'medium.com', 'youtube.com', 'facebook.com', 'twitter.com', 'linkedin.com',
-      'quora.com', 'reddit.com', 'pinterest.com', 'amazon.com', 'ebay.com', 'appsumo.com', 'g2.com', 'capterra.com'
+      'wikipedia.org','forbes.com','investopedia.com','bloomberg.com','businessinsider.com',
+      'techcrunch.com','medium.com','youtube.com','facebook.com','twitter.com','linkedin.com',
+      'quora.com','reddit.com','pinterest.com','amazon.com','ebay.com','appsumo.com','g2.com','capterra.com',
+      'crunchbase.com','similarweb.com','semrush.com','ahrefs.com','builtwith.com','trustpilot.com',
+      'yelp.com','yellowpages.com','glassdoor.com','indeed.com','getapp.com','pcmag.com','theverge.com',
+      'news.ycombinator.com','producthunt.com','openai.com','google.com'
     ].concat(Array.isArray(options?.blocklist) ? options.blocklist.map((d)=>String(d).replace(/^www\./,'').toLowerCase()) : []);
-    const potentialCompetitors = searchResults.items?.filter(item => {
-      if (!item.link) return false;
-      const domain = new URL(item.link).hostname.replace('www.', '');
-      if (blocklist.includes(domain)) return false;
-      if (existingCompetitors.some(existing => domain.includes(new URL(existing).hostname.replace('www.','')))) return false;
-      return true;
-    }).slice(0, 15) || [];
+
+    const existingRoots = new Set<string>();
+    for (const e of Array.isArray(existingCompetitors) ? existingCompetitors : []) {
+      try {
+        const host = new URL(e).hostname.replace(/^www\./,'');
+        existingRoots.add((getDomain(host) || host).toLowerCase());
+      } catch {}
+    }
+
+    const domainMap = new Map<string, { title: string; link: string; snippet?: string }>();
+    for (const item of searchResults.items || []) {
+      try {
+        if (!item.link) continue;
+        const url = new URL(item.link);
+        const host = url.hostname.replace(/^www\./,'');
+        const root = (getDomain(host) || host).toLowerCase();
+        if (!root) continue;
+        if (blocklist.includes(root)) continue;
+        if (userRoot && root === userRoot) continue; // exclude the user's own domain
+        if (existingRoots.has(root)) continue;
+        // Avoid common non-homepage subdomains by normalizing to root homepage URL
+        const homepage = `https://${root}`;
+        if (!domainMap.has(root)) {
+          // Prefer the first encountered title; fallback to root
+          domainMap.set(root, { title: item.title || root, link: homepage, snippet: item.snippet });
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    const potentialCompetitors = Array.from(domainMap.values()).slice(0, 20);
     if (potentialCompetitors.length === 0) {
       const emptyResult = {
         competitorSuggestions: []
@@ -162,7 +211,8 @@ export const competitorDiscoveryService = async (req, supabase)=>{
       });
     }
     // Analyze relevance with AI
-    const relevancePrompt = getRelevancePrompt(potentialCompetitors, payload);
+    const augmentedPayload = { ...payload, siteUrl, userDescription };
+    const relevancePrompt = getRelevancePrompt(potentialCompetitors, augmentedPayload);
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: {
@@ -196,24 +246,29 @@ export const competitorDiscoveryService = async (req, supabase)=>{
     }
     const responseText = geminiData.candidates[0].content.parts[0].text;
     const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
-    if (!jsonMatch || !jsonMatch[1]) {
-      throw new Error('Failed to extract JSON from AI response.');
+    let relevanceAnalysis: any;
+    if (jsonMatch && jsonMatch[1]) {
+      relevanceAnalysis = JSON.parse(jsonMatch[1]);
+    } else {
+      // Fallback: try parsing as raw JSON
+      try {
+        relevanceAnalysis = JSON.parse(responseText);
+      } catch {
+        throw new Error('Failed to extract JSON from AI response.');
+      }
     }
-    const relevanceAnalysis = JSON.parse(jsonMatch[1]);
-    const relevanceMap = new Map(relevanceAnalysis.competitors.map((c)=>[
-        c.url,
-        c
-      ]));
+    const relevanceMap = new Map(relevanceAnalysis.competitors.map((c)=>[ c.url, c ]));
     // Get SEO metrics for relevant competitors
     const competitors = [];
     const preferNiche = options?.preferNiche === true;
     for (const competitor of potentialCompetitors){
       try {
+        // Ensure we only use the homepage URL (already normalized)
         const url = competitor.link;
         const relevanceInfo = relevanceMap.get(url);
         const minScore = preferNiche ? 60 : 45;
         if (!relevanceInfo || relevanceInfo.relevanceScore < minScore) continue; // threshold based on mode
-        const domain = new URL(url).hostname;
+        const domain = new URL(url).hostname.replace(/^www\./,'');
         // Get Moz domain authority
         const expires = Math.floor(Date.now() / 1000) + 300;
         const sig = createHmac('sha1', mozSecretKey).update(`${mozAccessId}\n${expires}`).digest('base64');

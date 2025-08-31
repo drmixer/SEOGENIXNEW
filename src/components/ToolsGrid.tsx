@@ -591,6 +591,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             primarySiteScore: result.summary?.primarySiteScore || result.yourScore || 0,
             averageCompetitorScore: result.summary?.averageCompetitorScore || result.competitorAverage || 0
           },
+          primarySiteAnalysis: result.primarySiteAnalysis || result.primary || null,
           competitorAnalyses: result.competitorAnalyses || result.competitors || [],
           insights: result.insights || []
         };
@@ -1120,9 +1121,15 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
       </div>
       {showCompetitiveAnalysisModal && (
         <CompetitiveAnalysisModal
-          userWebsites={userProfile?.websites || []}
-          userCompetitors={context?.competitors || toolData?.competitorSuggestions || userProfile?.competitors || []}
+          userWebsites={(userProfile?.websites || []).map((w: any) => ({ url: w.url, name: w.name || (w.url ? new URL(w.url).hostname : 'Site') }))}
+          userCompetitors={
+            ((context?.competitors || toolData?.competitorSuggestions || userProfile?.competitors || []) as any[])
+              .map((c: any) => ({ url: c.url, name: c.name || (c.url ? new URL(c.url).hostname : 'Competitor') }))
+          }
           maxSelectable={{ free: 1, core: 3, pro: 10, agency: 25 }[(userProfile?.plan || 'free') as 'free'|'core'|'pro'|'agency']}
+          projectId={selectedProjectId!}
+          industry={userProfile?.industry}
+          userId={userProfile?.user_id || userProfile?.id}
           onClose={() => setShowCompetitiveAnalysisModal(false)}
           onAnalysisComplete={(results) => {
             setToolData(results);
@@ -1887,6 +1894,100 @@ const ToolResultsDisplay: React.FC<{
               <div className="text-sm text-purple-800">Competitor Avg</div>
             </div>
           </div>
+
+          {data.primarySiteAnalysis && (
+            <div className="space-y-2">
+              <h4 className="font-medium text-gray-900">Your Site Analysis:</h4>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900">{data.primarySiteAnalysis.name || data.primarySiteAnalysis.url}</span>
+                  <span className="text-sm bg-green-200 text-green-900 px-2 py-1 rounded">{data.primarySiteAnalysis.overallScore || 0}/100</span>
+                </div>
+                {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores) && (
+                  <div className="grid grid-cols-4 gap-2 mt-2 text-xs">
+                    <div>AI: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.aiUnderstanding || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.ai_understanding || 0}</div>
+                    <div>Citation: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.citationLikelihood || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.citation_likelihood || 0}</div>
+                    <div>Voice: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.conversationalReadiness || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.conversational_readiness || 0}</div>
+                    <div>Structure: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.contentStructure || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.content_structure || 0}</div>
+                  </div>
+                )}
+                {data.primarySiteAnalysis.strengths && data.primarySiteAnalysis.strengths.length > 0 && (
+                  <div className="mt-2">
+                    <h5 className="text-xs font-medium text-gray-700">Strengths:</h5>
+                    <p className="text-xs text-gray-600">{data.primarySiteAnalysis.strengths[0]}</p>
+                  </div>
+                )}
+                {data.primarySiteAnalysis.weaknesses && data.primarySiteAnalysis.weaknesses.length > 0 && (
+                  <div className="mt-1">
+                    <h5 className="text-xs font-medium text-gray-700">Opportunities:</h5>
+                    <p className="text-xs text-gray-600">{data.primarySiteAnalysis.weaknesses[0]}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {data.primarySiteAnalysis && data.competitorAnalyses && data.competitorAnalyses.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900">Side-by-Side Compare</h4>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600">
+                      <th className="py-2 pr-4">Site</th>
+                      <th className="py-2 px-2">AI</th>
+                      <th className="py-2 px-2">Citation</th>
+                      <th className="py-2 px-2">Voice</th>
+                      <th className="py-2 px-2">Structure</th>
+                      <th className="py-2 px-2">Overall</th>
+                    </tr>
+                  </thead>
+                  <tbody className="align-top">
+                    {(() => {
+                      const getSub = (o: any, key: string) => (o?.subscores?.[key] ?? o?.scores?.[key] ?? o?.subscores?.[key.replace('_','')] ?? o?.scores?.[key.replace('_','')]) || 0;
+                      const your = data.primarySiteAnalysis;
+                      const yourRow = (
+                        <tr key={your.url || 'your'} className="border-t border-gray-100">
+                          <td className="py-2 pr-4 font-medium text-green-700">{your.name || your.url || 'Your site'}</td>
+                          <td className="py-2 px-2">{getSub(your, 'aiUnderstanding') || getSub(your, 'ai_understanding')}</td>
+                          <td className="py-2 px-2">{getSub(your, 'citationLikelihood') || getSub(your, 'citation_likelihood')}</td>
+                          <td className="py-2 px-2">{getSub(your, 'conversationalReadiness') || getSub(your, 'conversational_readiness')}</td>
+                          <td className="py-2 px-2">{getSub(your, 'contentStructure') || getSub(your, 'content_structure')}</td>
+                          <td className="py-2 px-2 font-semibold">{your.overallScore || 0}</td>
+                        </tr>
+                      );
+                      const rows = (data.competitorAnalyses || []).map((c: any) => {
+                        const ai = getSub(c, 'aiUnderstanding') || getSub(c, 'ai_understanding');
+                        const cit = getSub(c, 'citationLikelihood') || getSub(c, 'citation_likelihood');
+                        const voice = getSub(c, 'conversationalReadiness') || getSub(c, 'conversational_readiness');
+                        const struct = getSub(c, 'contentStructure') || getSub(c, 'content_structure');
+                        const yoAI = getSub(your, 'aiUnderstanding') || getSub(your, 'ai_understanding');
+                        const yoCit = getSub(your, 'citationLikelihood') || getSub(your, 'citation_likelihood');
+                        const yoVoice = getSub(your, 'conversationalReadiness') || getSub(your, 'conversational_readiness');
+                        const yoStruct = getSub(your, 'contentStructure') || getSub(your, 'content_structure');
+                        const deltaBadge = (delta: number) => (
+                          <span className={`ml-2 text-2xs px-1.5 py-0.5 rounded ${delta > 0 ? 'bg-red-100 text-red-700' : delta < 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {delta > 0 ? `+${delta}` : `${delta}`}
+                          </span>
+                        );
+                        return (
+                          <tr key={c.url || c.name} className="border-t border-gray-100">
+                            <td className="py-2 pr-4 font-medium text-gray-900">{c.name || c.url}</td>
+                            <td className="py-2 px-2">{ai}{deltaBadge(ai - yoAI)}</td>
+                            <td className="py-2 px-2">{cit}{deltaBadge(cit - yoCit)}</td>
+                            <td className="py-2 px-2">{voice}{deltaBadge(voice - yoVoice)}</td>
+                            <td className="py-2 px-2">{struct}{deltaBadge(struct - yoStruct)}</td>
+                            <td className="py-2 px-2 font-semibold">{c.overallScore || c.score || 0}{deltaBadge((c.overallScore || c.score || 0) - (your.overallScore || 0))}</td>
+                          </tr>
+                        );
+                      });
+                      return [yourRow, ...rows];
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           
           {data.competitorAnalyses && data.competitorAnalyses.length > 0 && (
             <div className="space-y-4">

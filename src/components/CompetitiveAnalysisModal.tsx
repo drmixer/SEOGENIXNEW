@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader, BarChart3 } from 'lucide-react';
 import { apiService } from '../services/api';
-import CompetitiveAnalysisSiteSelector from './CompetitiveAnalysisSiteSelector';
+import { userDataService } from '../services/userDataService';
 
 interface Website {
   url: string;
@@ -19,6 +19,9 @@ interface CompetitiveAnalysisModalProps {
   userWebsites: Website[];
   userCompetitors: Competitor[];
   maxSelectable?: number;
+  projectId: string;
+  industry?: string;
+  userId?: string;
 }
 
 const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
@@ -27,6 +30,9 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
   userWebsites,
   userCompetitors,
   maxSelectable = 10,
+  projectId,
+  industry,
+  userId,
 }) => {
   console.log('userWebsites', userWebsites);
   console.log('userCompetitors', userCompetitors);
@@ -34,16 +40,80 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
   const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const storageKey = `ca:lastSelection:${projectId}`;
 
+  // Initialize selection from server (preferred) or local storage/defaults
   useEffect(() => {
-    if (userWebsites.length > 0 && !selectedUserWebsite) {
-      setSelectedUserWebsite(userWebsites[0].url);
+    try {
+      (async () => {
+        let initialized = false;
+        if (userId && projectId) {
+          const serverSaved = await userDataService.getCompetitiveSelection(userId, projectId);
+          if (serverSaved) {
+            const primary = serverSaved.primaryUrl;
+            const compUrls = Array.isArray(serverSaved.competitorUrls) ? serverSaved.competitorUrls : [];
+            if (primary && userWebsites.some(w => w.url === primary)) {
+              setSelectedUserWebsite(primary);
+              initialized = true;
+            }
+            if (compUrls.length) {
+              const available = new Set(userCompetitors.map(c => c.url));
+              const filtered = compUrls.filter(url => available.has(url)).slice(0, maxSelectable);
+              if (filtered.length) setSelectedCompetitors(filtered);
+            }
+          }
+        }
+        if (!initialized) {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+            const parsed = JSON.parse(saved) as { primaryUrl?: string; competitorUrls?: string[] };
+            if (parsed.primaryUrl && userWebsites.some(w => w.url === parsed.primaryUrl)) {
+              setSelectedUserWebsite(parsed.primaryUrl);
+            } else if (userWebsites.length > 0 && !selectedUserWebsite) {
+              setSelectedUserWebsite(userWebsites[0].url);
+            }
+            if (Array.isArray(parsed.competitorUrls)) {
+              const available = new Set(userCompetitors.map(c => c.url));
+              const filtered = parsed.competitorUrls.filter(url => available.has(url)).slice(0, maxSelectable);
+              if (filtered.length) setSelectedCompetitors(filtered);
+            }
+          } else {
+            if (userWebsites.length > 0 && !selectedUserWebsite) {
+              setSelectedUserWebsite(userWebsites[0].url);
+            }
+            if (userCompetitors.length > 0) {
+              setSelectedCompetitors(userCompetitors.slice(0, maxSelectable).map(c => c.url));
+            }
+          }
+        }
+      })();
+    } catch {
+      // fallback to defaults
+      if (userWebsites.length > 0 && !selectedUserWebsite) {
+        setSelectedUserWebsite(userWebsites[0].url);
+      }
+      if (userCompetitors.length > 0) {
+        setSelectedCompetitors(userCompetitors.slice(0, maxSelectable).map(c => c.url));
+      }
     }
-    if (userCompetitors.length > 0) {
-      // Pre-select all competitors passed in
-      setSelectedCompetitors(userCompetitors.map(c => c.url));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userWebsites, userCompetitors, maxSelectable, userId, projectId]);
+
+  // Persist selection
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ primaryUrl: selectedUserWebsite, competitorUrls: selectedCompetitors }));
+    } catch {}
+    // Save server-side when we have identifiers
+    if (userId && projectId && selectedUserWebsite) {
+      userDataService.saveCompetitiveSelection({
+        userId,
+        projectId,
+        primaryUrl: selectedUserWebsite,
+        competitorUrls: selectedCompetitors,
+      });
     }
-  }, [userWebsites, userCompetitors, selectedUserWebsite]);
+  }, [storageKey, selectedUserWebsite, selectedCompetitors, userId, projectId]);
 
   const handleCompetitorToggle = (competitorUrl: string) => {
     setSelectedCompetitors(prev => {
@@ -51,6 +121,15 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
       if (prev.length >= maxSelectable) return prev; // enforce limit
       return [...prev, competitorUrl];
     });
+  };
+
+  const handleSelectAll = () => {
+    const all = userCompetitors.map(c => c.url).slice(0, maxSelectable);
+    setSelectedCompetitors(all);
+  };
+
+  const handleClearAll = () => {
+    setSelectedCompetitors([]);
   };
 
   const handleRunAnalysis = async () => {
@@ -64,9 +143,10 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
 
     try {
       const results = await apiService.performCompetitiveAnalysis(
+        projectId,
         selectedUserWebsite,
         selectedCompetitors,
-        '' // Industry is optional
+        industry
       );
       onAnalysisComplete(results);
       onClose();
@@ -109,9 +189,18 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Competitors to Analyze</label>
-            <div className="text-xs text-gray-500 mb-2">Selected {selectedCompetitors.length} / {maxSelectable}</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-gray-500">Selected {selectedCompetitors.length} / {maxSelectable}</div>
+              <div className="space-x-2">
+                <button type="button" onClick={handleSelectAll} className="text-xs text-purple-600 hover:text-purple-800 disabled:opacity-50" disabled={selectedCompetitors.length >= Math.min(userCompetitors.length, maxSelectable)}>Select All</button>
+                <button type="button" onClick={handleClearAll} className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50" disabled={selectedCompetitors.length === 0}>Clear</button>
+              </div>
+            </div>
             <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-3">
-              {userCompetitors.map(comp => (
+              {userCompetitors
+                .slice()
+                .sort((a, b) => (a.name || a.url).localeCompare(b.name || b.url))
+                .map(comp => (
                 <label key={comp.url} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
                   <input
                     type="checkbox"
@@ -123,6 +212,13 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
                 </label>
               ))}
             </div>
+            {selectedCompetitors.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedCompetitors.map(url => (
+                  <span key={url} className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-200">{url}</span>
+                ))}
+              </div>
+            )}
           </div>
 
           {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
