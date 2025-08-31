@@ -19,6 +19,8 @@ interface CompetitiveAnalysisModalProps {
   userWebsites: Website[];
   userCompetitors: Competitor[];
   maxSelectable?: number;
+  projectId: string;
+  industry?: string;
 }
 
 const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
@@ -27,6 +29,8 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
   userWebsites,
   userCompetitors,
   maxSelectable = 10,
+  projectId,
+  industry,
 }) => {
   console.log('userWebsites', userWebsites);
   console.log('userCompetitors', userCompetitors);
@@ -64,9 +68,10 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
 
     try {
       const results = await apiService.performCompetitiveAnalysis(
+        projectId,
         selectedUserWebsite,
         selectedCompetitors,
-        '' // Industry is optional
+        industry
       );
       onAnalysisComplete(results);
       onClose();

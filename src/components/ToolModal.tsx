@@ -251,6 +251,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
             primarySiteScore: result.summary?.primarySiteScore || result.yourScore || 0,
             averageCompetitorScore: result.summary?.averageCompetitorScore || result.competitorAverage || 0
           },
+          primarySiteAnalysis: result.primarySiteAnalysis || result.primary || null,
           competitorAnalyses: result.competitorAnalyses || result.competitors || [],
           insights: result.insights || []
         };
@@ -1518,7 +1519,39 @@ const ToolResultsDisplay: React.FC<{
               <div className="text-sm text-purple-800">Competitor Avg</div>
             </div>
           </div>
-          
+
+          {data.primarySiteAnalysis && (
+            <div className="space-y-2">
+              <h4 className="font-medium text-gray-900">Your Site Analysis:</h4>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900">{data.primarySiteAnalysis.name || data.primarySiteAnalysis.url}</span>
+                  <span className="text-sm bg-green-200 text-green-900 px-2 py-1 rounded">{data.primarySiteAnalysis.overallScore || 0}/100</span>
+                </div>
+                {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores) && (
+                  <div className="grid grid-cols-4 gap-2 mt-2 text-xs">
+                    <div>AI: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.aiUnderstanding || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.ai_understanding || 0}</div>
+                    <div>Citation: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.citationLikelihood || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.citation_likelihood || 0}</div>
+                    <div>Voice: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.conversationalReadiness || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.conversational_readiness || 0}</div>
+                    <div>Structure: {(data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.contentStructure || (data.primarySiteAnalysis.subscores || data.primarySiteAnalysis.scores)?.content_structure || 0}</div>
+                  </div>
+                )}
+                {data.primarySiteAnalysis.strengths && data.primarySiteAnalysis.strengths.length > 0 && (
+                  <div className="mt-2">
+                    <h5 className="text-xs font-medium text-gray-700">Strengths:</h5>
+                    <p className="text-xs text-gray-600">{data.primarySiteAnalysis.strengths[0]}</p>
+                  </div>
+                )}
+                {data.primarySiteAnalysis.weaknesses && data.primarySiteAnalysis.weaknesses.length > 0 && (
+                  <div className="mt-1">
+                    <h5 className="text-xs font-medium text-gray-700">Opportunities:</h5>
+                    <p className="text-xs text-gray-600">{data.primarySiteAnalysis.weaknesses[0]}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {data.competitorAnalyses && data.competitorAnalyses.length > 0 && (
             <div className="space-y-4">
               <h4 className="font-medium text-gray-900">Competitor Analysis:</h4>
