@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { ok, fail } from "../_shared/response.ts";
 
 // --- CORS Headers ---
 const corsHeaders = {
@@ -48,7 +49,7 @@ export const aiSitemapService = async (req: Request, supabase: any) => {
     const urls: string[] | undefined = body?.urls;
     const fetchContent: boolean = !!body?.fetch;
     if (!projectId) {
-      return new Response(JSON.stringify({ success: false, error: { message: '`projectId` is required' } }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify(fail('`projectId` is required', 'BAD_REQUEST')), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Get project root/site URL (if available)
@@ -147,10 +148,10 @@ export const aiSitemapService = async (req: Request, supabase: any) => {
       items
     };
 
-    return new Response(JSON.stringify({ success: true, data: out }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(ok(out)), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    return new Response(JSON.stringify({ success: false, error: { message: msg } }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(fail(msg, 'SERVER_ERROR')), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 };
 
@@ -159,4 +160,3 @@ Deno.serve(async (req) => {
   const supabase = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
   return aiSitemapService(req, supabase);
 });
-

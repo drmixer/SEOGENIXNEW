@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { ok, fail } from "../_shared/response.ts";
 
 // --- CORS Headers ---
 const corsHeaders = {
@@ -108,7 +109,7 @@ export const assistantTestbenchService = async (req: Request, supabase: any) => 
     const query: string = body?.query || '';
     const providers: Provider[] = Array.isArray(body?.providers) ? body.providers : ['openai','google'];
     if (!projectId || !query) {
-      return new Response(JSON.stringify({ success: false, error: { message: '`projectId` and `query` are required' } }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify(fail('`projectId` and `query` are required', 'BAD_REQUEST')), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // resolve plan for gating later if needed
@@ -155,10 +156,10 @@ export const assistantTestbenchService = async (req: Request, supabase: any) => 
       try { await supabase.from('tool_runs').update({ status: 'completed', output_payload: { results } }).eq('id', runId); } catch {}
     }
 
-    return new Response(JSON.stringify({ success: true, data: { results } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(ok({ results })), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    return new Response(JSON.stringify({ success: false, error: { message: msg } }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(fail(msg, 'SERVER_ERROR')), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 };
 
@@ -167,4 +168,3 @@ Deno.serve(async (req) => {
   const supabase = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
   return assistantTestbenchService(req, supabase);
 });
-

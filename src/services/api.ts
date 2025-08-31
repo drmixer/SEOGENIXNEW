@@ -599,6 +599,26 @@ export const apiService = {
     return discoveryPromise;
   },
 
+  // Domain Rules (Allow/Block) manager for Competitor Discovery
+  async getDomainRules(projectId: string) {
+    const result = await apiCall(`${API_BASE_URL}/competitor-discovery?action=rules&projectId=${encodeURIComponent(projectId)}` , { method: 'GET' });
+    return result.data?.rules || result.rules || result;
+  },
+  async addDomainRule(projectId: string, type: 'allow' | 'block', pattern: string, reason?: string) {
+    const result = await apiCall(`${API_BASE_URL}/competitor-discovery?action=add_rule`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId, type, pattern, reason })
+    });
+    return result.data?.rule || result.rule || result;
+  },
+  async deleteDomainRule(projectId: string, id: string) {
+    const result = await apiCall(`${API_BASE_URL}/competitor-discovery?action=delete_rule`, {
+      method: 'DELETE',
+      body: JSON.stringify({ id, projectId })
+    });
+    return result.data || result;
+  },
+
   // Real-time Content Analysis
   async analyzeContentRealTime(projectId: string, content: string, keywords: string[]) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/real-time-content-analysis`, { projectId, content, keywords });
