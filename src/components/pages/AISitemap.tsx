@@ -99,6 +99,34 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
     }
   };
 
+  const publishViaWordPress = async () => {
+    if (!selectedProjectId || !lastPublishedUrl) {
+      alert('Upload ai.json first to get a public URL.');
+      return;
+    }
+    try {
+      const resp = await apiService.publishAISitemapToCMS('wordpress', { projectId: selectedProjectId, publicUrl: lastPublishedUrl });
+      const payload = resp?.data || resp;
+      alert(`Published link page on WordPress${payload?.permalink ? `: ${payload.permalink}` : ''}`);
+    } catch (e: any) {
+      alert(`WordPress publish failed: ${e?.message || 'Unknown error'}`);
+    }
+  };
+
+  const publishViaShopify = async () => {
+    if (!selectedProjectId || !lastPublishedUrl) {
+      alert('Upload ai.json first to get a public URL.');
+      return;
+    }
+    try {
+      const resp = await apiService.publishAISitemapToCMS('shopify', { projectId: selectedProjectId, publicUrl: lastPublishedUrl });
+      const payload = resp?.data || resp;
+      alert(`Published link page on Shopify${payload?.permalink ? `: ${payload.permalink}` : ''}`);
+    } catch (e: any) {
+      alert(`Shopify publish failed: ${e?.message || 'Unknown error'}`);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -130,6 +158,8 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
             <button onClick={copy} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 text-gray-100"><Copy className="w-4 h-4"/> <span>Copy</span></button>
             <button onClick={download} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 text-gray-100"><Download className="w-4 h-4"/> <span>Download</span></button>
             <button onClick={uploadToStorage} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 text-gray-100"><UploadCloud className="w-4 h-4"/> <span>Upload</span></button>
+            <button onClick={publishViaWordPress} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50">Publish via WordPress</button>
+            <button onClick={publishViaShopify} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded border border-green-200 text-green-700 bg-green-50">Publish via Shopify</button>
           </div>
           </div>
           <pre className="text-xs overflow-auto max-h-[420px]">{JSON.stringify(json, null, 2)}</pre>

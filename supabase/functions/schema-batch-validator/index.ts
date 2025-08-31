@@ -44,6 +44,16 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: false, error: { message: '`projectId` is required.' } }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    // Resolve user (for persisting activity)
+    let userId: string | null = null;
+    try {
+      const authHeader = req.headers.get('Authorization');
+      if (authHeader) {
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user } } = await supabase.auth.getUser(token);
+        userId = user?.id || null;
+      }
+    } catch {}
     // Fetch latest schema drafts per URL
     let query = supabase
       .from('user_activity')
@@ -66,6 +76,23 @@ Deno.serve(async (req) => {
       const issues = validateSchemaObject(obj);
       results.push({ url, valid: issues.length === 0, issues });
     }
+    // Persist a summary activity for auditing/alerts
+    try {
+      if (userId) {
+        const summary = {
+          total: results.length,
+          valid: results.filter(r => r.valid).length,
+          invalid: results.filter(r => !r.valid).length,
+        };
+        await supabase.from('user_activity').insert({
+          user_id: userId,
+          tool_id: projectId,
+          activity_type: 'schema_validation_batch',
+          activity_data: { summary, results, executedAt: new Date().toISOString() },
+          created_at: new Date().toISOString()
+        });
+      }
+    } catch {}
 
     return new Response(JSON.stringify({ success: true, data: { results } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
@@ -73,4 +100,3 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ success: false, error: { message: msg } }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
-

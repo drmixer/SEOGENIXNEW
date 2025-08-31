@@ -129,6 +129,12 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
         </div>
       </div>
 
+      {coverage.invalid > 0 && (
+        <div className="p-3 rounded border border-red-200 bg-red-50 text-red-800 text-sm">
+          {coverage.invalid} page(s) have invalid schema. Use Batch Validate and fix issues in Editor → Schema.
+        </div>
+      )}
+
       {error && (
         <div className="p-3 rounded border border-red-200 bg-red-50 text-red-800 text-sm">{error}</div>
       )}

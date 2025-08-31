@@ -244,6 +244,15 @@ export const apiService = {
     return result.data || result.output || result;
   },
 
+  // Publish AI Sitemap to CMS
+  async publishAISitemapToCMS(cmsType: 'wordpress' | 'shopify', params: { projectId: string; publicUrl: string }) {
+    const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
+    return await apiCall(`${API_BASE_URL}/${endpoint}`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'publish_ai_sitemap', ...params })
+    });
+  },
+
   // Citation Tracker
   async trackCitations(projectId: string, domain: string, keywords: string[], fingerprintPhrases?: string[]) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/citation-tracker`, { projectId, domain, keywords, fingerprintPhrases });

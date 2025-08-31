@@ -1474,6 +1474,16 @@ const ToolResultsDisplay: React.FC<{
                     </div>
                   </div>
                   <p className="text-sm text-gray-600 mt-2">{voiceResult.response || voiceResult.text || 'No response available'}</p>
+                  {!voiceResult.mentioned && (
+                    <div className="mt-2 text-xs text-gray-700 bg-yellow-50 border border-yellow-200 rounded p-2">
+                      <div className="font-medium text-yellow-800 mb-1">Improve mention/citation odds:</div>
+                      <div className="flex flex-wrap gap-2">
+                        <button onClick={() => onSwitchTool('schema', {})} className="px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">Check Schema</button>
+                        <button onClick={() => onSwitchTool('entities', {})} className="px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">Boost Entities</button>
+                        <button onClick={() => onSwitchTool('citations', {})} className="px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">Add Citations</button>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
                     <span>Confidence: {voiceResult.confidence || 0}%</span>
                     {voiceResult.mentioned && voiceResult.ranking && (
