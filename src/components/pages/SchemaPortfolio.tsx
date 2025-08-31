@@ -22,6 +22,8 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
   const [error, setError] = useState<string | null>(null);
   const [validating, setValidating] = useState<boolean>(false);
   const [coverage, setCoverage] = useState<{ total: number; applied: number; valid: number; invalid: number }>({ total: 0, applied: 0, valid: 0, invalid: 0 });
+  const [alertEnabled, setAlertEnabled] = useState<boolean>(false);
+  const [recentBatches, setRecentBatches] = useState<Array<{ created_at: string; summary: { total: number; valid: number; invalid: number } }>>([]);
 
   useEffect(() => {
     (async () => {
@@ -63,6 +65,33 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
         const valid = arr.filter(r => r.schemaValid === true).length;
         const invalid = arr.filter(r => r.schemaValid === false).length;
         setCoverage({ total, applied, valid, invalid });
+
+        // Load recent batch validations
+        const { data: batchRows } = await supabase
+          .from('user_activity')
+          .select('activity_data, created_at')
+          .eq('tool_id', selectedProjectId)
+          .eq('activity_type', 'schema_validation_batch')
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (Array.isArray(batchRows)) {
+          const batches = batchRows
+            .map(b => ({ created_at: b.created_at, summary: b.activity_data?.summary }))
+            .filter(b => b.summary && typeof b.summary.total === 'number');
+          setRecentBatches(batches as any);
+        }
+
+        // Load alert preference
+        const { data: prefRows } = await supabase
+          .from('user_activity')
+          .select('activity_data, created_at')
+          .eq('tool_id', selectedProjectId)
+          .eq('activity_type', 'schema_alert_pref')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (prefRows && prefRows[0]?.activity_data?.enabled != null) {
+          setAlertEnabled(!!prefRows[0].activity_data.enabled);
+        }
       } catch (e: any) {
         setError(e?.message || 'Failed to load schema portfolio');
       } finally {
@@ -78,36 +107,61 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
           <Shield className="w-5 h-5 text-purple-600" />
           <h2 className="text-lg font-semibold text-gray-900">Schema Portfolio</h2>
         </div>
-        <button
-          onClick={async () => {
-            if (!selectedProjectId) return;
-            setValidating(true);
-            try {
-              const resp = await apiService.batchValidateSchemas(selectedProjectId);
-              const map = new Map(resp.results.map(r => [r.url, r]));
-              const updated = rows.map(r => {
-                const hit = map.get(r.url);
-                return hit ? { ...r, schemaValid: !!hit.valid, issues: Array.isArray(hit.issues) ? hit.issues.length : r.issues } : r;
-              });
-              setRows(updated);
-              const total = updated.length;
-              const applied = updated.filter(x => x.schemaApplied).length;
-              const valid = updated.filter(x => x.schemaValid === true).length;
-              const invalid = updated.filter(x => x.schemaValid === false).length;
-              setCoverage({ total, applied, valid, invalid });
-            } catch (e: any) {
-              setError(e?.message || 'Batch validation failed');
-            } finally {
-              setValidating(false);
-            }
-          }}
-          className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded border text-sm ${validating ? 'border-gray-200 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-          disabled={validating}
-          title="Validate schema for pages with saved drafts"
-        >
-          <RefreshCw className="w-4 h-4" />
-          <span>Batch Validate</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <label className="flex items-center space-x-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={alertEnabled}
+              onChange={async (e) => {
+                setAlertEnabled(e.target.checked);
+                try {
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (user && selectedProjectId) {
+                    await supabase.from('user_activity').insert({
+                      user_id: user.id,
+                      tool_id: selectedProjectId,
+                      activity_type: 'schema_alert_pref',
+                      activity_data: { enabled: e.target.checked },
+                      created_at: new Date().toISOString()
+                    });
+                  }
+                } catch {}
+              }}
+            />
+            <span>Enable alerts</span>
+          </label>
+          
+          <button
+            onClick={async () => {
+              if (!selectedProjectId) return;
+              setValidating(true);
+              try {
+                const resp = await apiService.batchValidateSchemas(selectedProjectId);
+                const map = new Map(resp.results.map(r => [r.url, r]));
+                const updated = rows.map(r => {
+                  const hit = map.get(r.url);
+                  return hit ? { ...r, schemaValid: !!hit.valid, issues: Array.isArray(hit.issues) ? hit.issues.length : r.issues } : r;
+                });
+                setRows(updated);
+                const total = updated.length;
+                const applied = updated.filter(x => x.schemaApplied).length;
+                const valid = updated.filter(x => x.schemaValid === true).length;
+                const invalid = updated.filter(x => x.schemaValid === false).length;
+                setCoverage({ total, applied, valid, invalid });
+              } catch (e: any) {
+                setError(e?.message || 'Batch validation failed');
+              } finally {
+                setValidating(false);
+              }
+            }}
+            className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded border text-sm ${validating ? 'border-gray-200 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            disabled={validating}
+            title="Validate schema for pages with saved drafts"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Batch Validate</span>
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
@@ -179,6 +233,20 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
           </tbody>
         </table>
       </div>
+
+      {recentBatches.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-gray-900 mb-2">Recent Validation Batches</h3>
+          <ul className="space-y-2">
+            {recentBatches.map((b, i) => (
+              <li key={i} className="text-xs text-gray-700 flex items-center justify-between">
+                <span>{new Date(b.created_at).toLocaleString()}</span>
+                <span>Total: {b.summary.total} • Valid: {b.summary.valid} • Invalid: {b.summary.invalid}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 };

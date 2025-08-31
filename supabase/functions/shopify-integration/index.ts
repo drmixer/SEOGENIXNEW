@@ -76,7 +76,7 @@ export const shopifyService = async (req, supabase)=>{
   }
   let runId = null;
   try {
-    const { action, projectId, shopDomain, accessToken, product, productId, content, limit, page_info, search, autoGenerateSchema, pageUrl, useInsertedSchema, publicUrl } = await req.json();
+    const { action, projectId, shopDomain, accessToken, product, productId, content, limit, page_info, search, autoGenerateSchema, pageUrl, useInsertedSchema, publicUrl, embeddedContent } = await req.json();
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header required');
     const token = authHeader.replace('Bearer ', '');
@@ -313,7 +313,9 @@ export const shopifyService = async (req, supabase)=>{
           const listData = await listResp.json();
           const pages = Array.isArray(listData?.pages) ? listData.pages : [];
           const existing = pages.find((p: any) => p.handle === 'ai-sitemap' || p.title === 'AI Sitemap');
-          const body_html = `This shop exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.`;
+          const body_html = embeddedContent
+            ? `This shop exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.<br/><br/><strong>Excerpt:</strong><pre>${embeddedContent.replace(/</g,'&lt;')}</pre>`
+            : `This shop exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.`;
           let page;
           if (existing) {
             const upd = await fetch(`${shopifyApiUrl}/pages/${existing.id}.json`, {

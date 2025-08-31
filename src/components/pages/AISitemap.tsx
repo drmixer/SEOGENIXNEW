@@ -15,6 +15,8 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
   const [lastPublishedUrl, setLastPublishedUrl] = useState<string | null>(null);
   const [indexNowKey, setIndexNowKey] = useState<string>('');
   const [pingIndexNow, setPingIndexNow] = useState<boolean>(false);
+  const [lastCmsPermalink, setLastCmsPermalink] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState<boolean>(false);
 
   useEffect(() => {
     (async () => {
@@ -107,6 +109,7 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
     try {
       const resp = await apiService.publishAISitemapToCMS('wordpress', { projectId: selectedProjectId, publicUrl: lastPublishedUrl });
       const payload = resp?.data || resp;
+      if (payload?.permalink) setLastCmsPermalink(payload.permalink);
       alert(`Published link page on WordPress${payload?.permalink ? `: ${payload.permalink}` : ''}`);
     } catch (e: any) {
       alert(`WordPress publish failed: ${e?.message || 'Unknown error'}`);
@@ -121,9 +124,44 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
     try {
       const resp = await apiService.publishAISitemapToCMS('shopify', { projectId: selectedProjectId, publicUrl: lastPublishedUrl });
       const payload = resp?.data || resp;
+      if (payload?.permalink) setLastCmsPermalink(payload.permalink);
       alert(`Published link page on Shopify${payload?.permalink ? `: ${payload.permalink}` : ''}`);
     } catch (e: any) {
       alert(`Shopify publish failed: ${e?.message || 'Unknown error'}`);
+    }
+  };
+
+  const publishEmbedded = async (cms: 'wordpress' | 'shopify') => {
+    if (!selectedProjectId || !lastPublishedUrl || !json) {
+      alert('Generate and upload ai.json first.');
+      return;
+    }
+    try {
+      const excerpt = JSON.stringify(json, null, 2).slice(0, 2000);
+      const resp = await apiService.publishAISitemapToCMS(cms, { projectId: selectedProjectId, publicUrl: lastPublishedUrl, embeddedContent: excerpt });
+      const payload = resp?.data || resp;
+      if (payload?.permalink) setLastCmsPermalink(payload.permalink);
+      alert(`Published embedded page on ${cms === 'wordpress' ? 'WordPress' : 'Shopify'}${payload?.permalink ? `: ${payload.permalink}` : ''}`);
+    } catch (e: any) {
+      alert(`${cms} embedded publish failed: ${e?.message || 'Unknown error'}`);
+    }
+  };
+
+  const verifyCmsPage = async () => {
+    if (!lastCmsPermalink || !lastPublishedUrl) {
+      alert('No CMS page to verify yet. Publish first.');
+      return;
+    }
+    setVerifying(true);
+    try {
+      const res = await fetch(lastCmsPermalink, { method: 'GET' });
+      const text = await res.text();
+      const ok = res.ok && text.includes(lastPublishedUrl);
+      alert(ok ? 'Verified: CMS page reachable and references ai.json' : `Verify failed (status ${res.status}). Does the page include the ai.json link?`);
+    } catch (e: any) {
+      alert(`Verify failed: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -160,6 +198,11 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
             <button onClick={uploadToStorage} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 text-gray-100"><UploadCloud className="w-4 h-4"/> <span>Upload</span></button>
             <button onClick={publishViaWordPress} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50">Publish via WordPress</button>
             <button onClick={publishViaShopify} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded border border-green-200 text-green-700 bg-green-50">Publish via Shopify</button>
+            <button onClick={() => publishEmbedded('wordpress')} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded border border-blue-300 text-blue-800">Publish Embedded (WP)</button>
+            <button onClick={() => publishEmbedded('shopify')} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded border border-green-300 text-green-800">Publish Embedded (Shopify)</button>
+            {lastCmsPermalink && (
+              <button onClick={verifyCmsPage} className="text-xs inline-flex items-center space-x-1 px-2 py-1 rounded border border-gray-300 text-gray-800">{verifying ? 'Verifying…' : 'Verify CMS Page'}</button>
+            )}
           </div>
           </div>
           <pre className="text-xs overflow-auto max-h-[420px]">{JSON.stringify(json, null, 2)}</pre>

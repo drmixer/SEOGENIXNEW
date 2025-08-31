@@ -60,7 +60,7 @@ export const wordpressService = async (req, supabase)=>{
   }
   let runId = null;
   try {
-    const { action, projectId, siteUrl, username, applicationPassword, content, postId, page, search, title, status, autoGenerateSchema, pageUrl, useInsertedSchema, publicUrl } = await req.json();
+    const { action, projectId, siteUrl, username, applicationPassword, content, postId, page, search, title, status, autoGenerateSchema, pageUrl, useInsertedSchema, publicUrl, embeddedContent } = await req.json();
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header required');
     const token = authHeader.replace('Bearer ', '');
@@ -299,9 +299,12 @@ export const wordpressService = async (req, supabase)=>{
           });
           if (!existingResp.ok) throw new Error(`Failed to query pages: ${await existingResp.text()}`);
           const existing = await existingResp.json();
+          const contentHtml = embeddedContent
+            ? `This site exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.<br/><br/><strong>Excerpt:</strong><pre>${embeddedContent.replace(/</g,'&lt;')}</pre>`
+            : `This site exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.`;
           const pagePayload = {
             title: 'AI Sitemap',
-            content: `This site exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.`,
+            content: contentHtml,
             status: 'publish',
             slug
           };

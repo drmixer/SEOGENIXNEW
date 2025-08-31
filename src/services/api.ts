@@ -245,7 +245,7 @@ export const apiService = {
   },
 
   // Publish AI Sitemap to CMS
-  async publishAISitemapToCMS(cmsType: 'wordpress' | 'shopify', params: { projectId: string; publicUrl: string }) {
+  async publishAISitemapToCMS(cmsType: 'wordpress' | 'shopify', params: { projectId: string; publicUrl: string; embeddedContent?: string }) {
     const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
     return await apiCall(`${API_BASE_URL}/${endpoint}`, {
       method: 'POST',
