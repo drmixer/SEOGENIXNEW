@@ -236,6 +236,23 @@ export const apiService = {
     return result.output || result.data || result;
   },
 
+  async batchValidateSchemas(projectId: string, urls?: string[]): Promise<{ results: Array<{ url: string; valid: boolean; issues: any[] }> }> {
+    const result = await apiCall(`${API_BASE_URL}/schema-batch-validator`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId, urls })
+    });
+    return result.data || result.output || result;
+  },
+
+  // Publish AI Sitemap to CMS
+  async publishAISitemapToCMS(cmsType: 'wordpress' | 'shopify', params: { projectId: string; publicUrl: string; embeddedContent?: string }) {
+    const endpoint = cmsType === 'wordpress' ? 'wordpress-integration' : 'shopify-integration';
+    return await apiCall(`${API_BASE_URL}/${endpoint}`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'publish_ai_sitemap', ...params })
+    });
+  },
+
   // Citation Tracker
   async trackCitations(projectId: string, domain: string, keywords: string[], fingerprintPhrases?: string[]) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/citation-tracker`, { projectId, domain, keywords, fingerprintPhrases });
@@ -319,6 +336,30 @@ export const apiService = {
     });
     
     return voicePromise;
+  },
+
+  // Assistant Testbench (multi-provider)
+  async runAssistantTestbench(projectId: string, query: string, providers: string[]): Promise<{ results: VoiceTestResult[] }> {
+    const cacheKey = generateCacheKey(`${API_BASE_URL}/assistant-testbench`, { query, providers, projectId });
+    if (pendingApiRequests.has(cacheKey)) {
+      return pendingApiRequests.get(cacheKey);
+    }
+    const p = apiCall(`${API_BASE_URL}/assistant-testbench`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId, query, providers })
+    }).then((resp) => resp.output || resp.data || resp);
+    pendingApiRequests.set(cacheKey, p);
+    p.finally(() => pendingApiRequests.delete(cacheKey));
+    return p;
+  },
+
+  // AI Sitemap
+  async generateAISitemap(projectId: string, urls?: string[], fetchContent: boolean = false): Promise<any> {
+    const result = await apiCall(`${API_BASE_URL}/ai-sitemap`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId, urls, fetch: fetchContent })
+    });
+    return result?.data || result?.output || result;
   },
 
   // Genie Chatbot (Enhanced with user data)

@@ -164,8 +164,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
     },
     {
       id: 'voice',
-      name: 'Voice Assistant Tester',
-      description: 'Test how voice assistants respond to queries about your business',
+      name: 'Assistant Testbench',
+      description: 'Probe multiple providers (OpenAI, Perplexity, Bing, Google) for mentions/citations.',
       icon: Mic,
       color: 'from-indigo-500 to-indigo-600',
       planRequired: 'core'
@@ -333,7 +333,8 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
           break;
 
         case 'voice':
-          result = await apiService.testVoiceAssistants(voiceQuery, selectedAssistants);
+          if (!selectedProjectId) throw new Error('Select a website first');
+          result = await apiService.runAssistantTestbench(selectedProjectId, voiceQuery, selectedAssistants);
           break;
 
         case 'summaries':
@@ -919,7 +920,7 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
             <div className="mb-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Voice Query
+                  Assistant Test Query
                 </label>
                 <input
                   type="text"
@@ -929,14 +930,14 @@ const ToolsGrid: React.FC<ToolsGridProps> = ({
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
                 <p className="mt-1 text-sm text-gray-500">
-                  Enter the question users might ask voice assistants about your business
+                  Enter the question users might ask assistants about your business
                 </p>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Voice Assistants</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Providers</label>
                 <div className="space-y-2">
-                  {['siri', 'alexa', 'google'].map(assistant => (
+                  {['openai', 'perplexity', 'bing', 'google'].map(assistant => (
                     <label key={assistant} className="flex items-center">
                       <input
                         type="checkbox"
@@ -1154,6 +1155,52 @@ const ToolResultsDisplay: React.FC<{
   const [playlistIndex, setPlaylistIndex] = React.useState(0);
   // Selection for adding discovered competitors
   const [selectedToAdd, setSelectedToAdd] = React.useState<string[]>([]);
+  // Assistant Testbench view state (provider filters + mention context)
+  const [visibleProviders, setVisibleProviders] = React.useState<string[] | null>(null);
+  const [mentionContext, setMentionContext] = React.useState<{ hasSchemaApplied: boolean; schemaValid: boolean | null; hasCitations: boolean; entitiesAcceptedCount: number } | null>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (!userProfile?.user_id || !selectedWebsite) return;
+        const keyUrl = selectedWebsite;
+        // Load schema draft (latest for this URL)
+        const { data: schemaRows } = await supabase
+          .from('user_activity')
+          .select('activity_data, created_at')
+          .eq('user_id', userProfile.user_id)
+          .eq('activity_type', 'schema_draft')
+          .eq('website_url', keyUrl)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const schemaData = schemaRows && schemaRows[0]?.activity_data;
+        const hasSchemaApplied = !!schemaData?.applied;
+        const schemaValid = typeof schemaData?.valid === 'boolean' ? schemaData.valid : null;
+        // Citations usage
+        const { data: citeRows } = await supabase
+          .from('user_activity')
+          .select('activity_data, created_at')
+          .eq('user_id', userProfile.user_id)
+          .eq('activity_type', 'citations_usage')
+          .eq('website_url', keyUrl)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const hasCitations = !!(citeRows && citeRows[0]?.activity_data?.citations?.length);
+        // Entities accepted
+        const { data: entRows } = await supabase
+          .from('user_activity')
+          .select('activity_data, created_at')
+          .eq('user_id', userProfile.user_id)
+          .eq('activity_type', 'entities_draft')
+          .eq('website_url', keyUrl)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const entitiesAcceptedCount = Array.isArray(entRows && entRows[0]?.activity_data?.accepted) ? entRows![0].activity_data.accepted.length : 0;
+        setMentionContext({ hasSchemaApplied, schemaValid, hasCitations, entitiesAcceptedCount });
+      } catch {
+        setMentionContext(null);
+      }
+    })();
+  }, [userProfile?.user_id, selectedWebsite, toolId]);
 
   React.useEffect(() => {
     const loadProgress = async () => {
@@ -1433,6 +1480,28 @@ const ToolResultsDisplay: React.FC<{
     case 'voice':
       return (
         <div className="space-y-6">
+          {Array.isArray(data?.results) && data.results.length > 0 && (
+            <div className="flex items-center flex-wrap gap-3">
+              <div className="text-sm text-gray-700">Show providers:</div>
+              {Array.from(new Set((data.results || []).map((r: any) => r.assistant))).map((prov: string) => (
+                <label key={prov} className="flex items-center text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={!visibleProviders || visibleProviders.includes(prov)}
+                    onChange={(e) => {
+                      setVisibleProviders((prev) => {
+                        if (!prev) return e.target.checked ? [prov] : [];
+                        return e.target.checked ? Array.from(new Set([...prev, prov])) : prev.filter(p => p !== prov);
+                      });
+                    }}
+                    className="mr-1"
+                  />
+                  <span className="capitalize">{prov}</span>
+                </label>
+              ))}
+              <button onClick={() => setVisibleProviders(null)} className="text-xs px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">All</button>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg text-center">
               <div className="text-xl font-bold text-blue-600">{data.summary?.totalMentions || 0}</div>
@@ -1448,18 +1517,59 @@ const ToolResultsDisplay: React.FC<{
             </div>
           </div>
           
-          {data.results && data.results.length > 0 && (
-            <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">Assistant Responses:</h4>
-              {data.results.map((voiceResult: any, index: number) => (
-                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+              {data.results && data.results.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="font-medium text-gray-900">Assistant Responses:</h4>
+                  {data.results
+                    .filter((voiceResult: any) => !visibleProviders || visibleProviders.includes(voiceResult.assistant))
+                    .map((voiceResult: any, index: number) => (
+                    <div key={index} className="bg-gray-50 p-4 rounded-lg">
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-900 capitalize">{voiceResult.assistant}</span>
-                    <span className={`text-sm px-2 py-1 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                      {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-800 capitalize">{voiceResult.assistant || 'provider'}</span>
+                      {voiceResult.error && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-800">Error</span>
+                      )}
+                      {voiceResult.skipped && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">Skipped</span>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-xs px-2 py-0.5 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
+                      </span>
+                      {voiceResult.citationUrl && (
+                        <a href={voiceResult.citationUrl} target="_blank" rel="noopener noreferrer" className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">View Citation</a>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-600 mt-2">{voiceResult.response || 'No response available'}</p>
+                  <p className="text-sm text-gray-600 mt-2">{voiceResult.response || voiceResult.text || 'No response available'}</p>
+                  {!voiceResult.mentioned && (
+                    <div className="mt-2 text-xs text-gray-700 bg-yellow-50 border border-yellow-200 rounded p-2">
+                      <div className="font-medium text-yellow-800 mb-1">Improve mention/citation odds:</div>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <button onClick={() => onSwitchTool('schema', {})} className="px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">Check Schema</button>
+                        <button onClick={() => onSwitchTool('entities', {})} className="px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">Boost Entities</button>
+                        <button onClick={() => onSwitchTool('citations', {})} className="px-2 py-0.5 rounded border border-gray-300 hover:bg-gray-50">Add Citations</button>
+                      </div>
+                      {mentionContext && (
+                        <ul className="list-disc pl-5 space-y-1">
+                          {!mentionContext.hasSchemaApplied && (
+                            <li>Schema not applied in this context. Insert schema in Editor → Schema.</li>
+                          )}
+                          {mentionContext.schemaValid === false && (
+                            <li>Schema appears invalid. Run validation and fix issues.</li>
+                          )}
+                          {!mentionContext.hasCitations && (
+                            <li>No outgoing citations saved. Add reputable sources in Citations.</li>
+                          )}
+                          {mentionContext.entitiesAcceptedCount === 0 && (
+                            <li>No accepted entities yet. Accept key entities to improve understanding.</li>
+                          )}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
                     <span>Confidence: {voiceResult.confidence || 0}%</span>
                     {voiceResult.mentioned && voiceResult.ranking && (

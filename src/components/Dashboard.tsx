@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import DashboardHeader from './DashboardHeader';
+import SchemaPortfolio from './pages/SchemaPortfolio';
+import AISitemap from './pages/AISitemap';
 import Sidebar from './Sidebar';
 import VisibilityScore from './VisibilityScore';
 import ToolsGrid from './ToolsGrid';
@@ -735,6 +737,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       
       case 'integrations':
         return <CMSIntegrations userPlan={effectivePlan} />;
+      case 'schema-portfolio':
+        return <SchemaPortfolio selectedProjectId={selectedProjectId || ''} />;
+      case 'ai-sitemap':
+        return <AISitemap selectedProjectId={selectedProjectId || ''} />;
       
       case 'settings':
         return <SettingsModal onClose={() => setActiveSection('overview')} user={user} userProfile={userProfile} onProfileUpdate={() => {}} />;

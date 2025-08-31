@@ -76,7 +76,7 @@ export const shopifyService = async (req, supabase)=>{
   }
   let runId = null;
   try {
-    const { action, projectId, shopDomain, accessToken, product, productId, content, limit, page_info, search, autoGenerateSchema, pageUrl, useInsertedSchema } = await req.json();
+    const { action, projectId, shopDomain, accessToken, product, productId, content, limit, page_info, search, autoGenerateSchema, pageUrl, useInsertedSchema, publicUrl, embeddedContent } = await req.json();
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header required');
     const token = authHeader.replace('Bearer ', '');
@@ -302,6 +302,41 @@ export const shopifyService = async (req, supabase)=>{
           product: updatedProduct.product,
           permalink: updatedProduct?.product?.handle ? `${integration.site_url.replace(/\/$/, '')}/products/${updatedProduct.product.handle}` : null
         };
+        break;
+      case 'publish_ai_sitemap':
+        if (!publicUrl) throw new Error('publicUrl is required');
+        // Create or update a Shopify page linking to the AI sitemap JSON
+        {
+          // Try to find an existing page with handle 'ai-sitemap'
+          const listResp = await fetch(`${shopifyApiUrl}/pages.json?limit=50&fields=id,title,handle,body_html`, { headers: shopifyHeaders });
+          if (!listResp.ok) throw new Error(await listResp.text());
+          const listData = await listResp.json();
+          const pages = Array.isArray(listData?.pages) ? listData.pages : [];
+          const existing = pages.find((p: any) => p.handle === 'ai-sitemap' || p.title === 'AI Sitemap');
+          const body_html = embeddedContent
+            ? `This shop exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.<br/><br/><strong>Excerpt:</strong><pre>${embeddedContent.replace(/</g,'&lt;')}</pre>`
+            : `This shop exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.`;
+          let page;
+          if (existing) {
+            const upd = await fetch(`${shopifyApiUrl}/pages/${existing.id}.json`, {
+              method: 'PUT',
+              headers: shopifyHeaders,
+              body: JSON.stringify({ page: { id: existing.id, title: 'AI Sitemap', body_html } })
+            });
+            if (!upd.ok) throw new Error(await upd.text());
+            page = (await upd.json()).page;
+          } else {
+            const create = await fetch(`${shopifyApiUrl}/pages.json`, {
+              method: 'POST',
+              headers: shopifyHeaders,
+              body: JSON.stringify({ page: { title: 'AI Sitemap', body_html, published: true } })
+            });
+            if (!create.ok) throw new Error(await create.text());
+            page = (await create.json()).page;
+          }
+          const permalink = page?.handle ? `${integration.site_url.replace(/\/$/, '')}/pages/${page.handle}` : null;
+          output = { success: true, page, permalink };
+        }
         break;
       case 'disconnect':
         console.log('Disconnecting Shopify integration...');

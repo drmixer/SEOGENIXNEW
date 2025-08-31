@@ -60,7 +60,7 @@ export const wordpressService = async (req, supabase)=>{
   }
   let runId = null;
   try {
-    const { action, projectId, siteUrl, username, applicationPassword, content, postId, page, search, title, status, autoGenerateSchema, pageUrl, useInsertedSchema } = await req.json();
+    const { action, projectId, siteUrl, username, applicationPassword, content, postId, page, search, title, status, autoGenerateSchema, pageUrl, useInsertedSchema, publicUrl, embeddedContent } = await req.json();
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header required');
     const token = authHeader.replace('Bearer ', '');
@@ -287,6 +287,48 @@ export const wordpressService = async (req, supabase)=>{
           title: postData.title.raw,
           content: postData.content.raw
         };
+        break;
+      case 'publish_ai_sitemap':
+        if (!publicUrl) throw new Error('publicUrl is required');
+        // Create or update a WordPress page that links to the AI sitemap JSON
+        {
+          const slug = 'ai-sitemap';
+          // Try to find existing page by slug
+          const existingResp = await fetch(`${integration.site_url}/wp-json/wp/v2/pages?slug=${slug}&status=any`, {
+            headers: { 'Authorization': getAuthHeader(integration.credentials) }
+          });
+          if (!existingResp.ok) throw new Error(`Failed to query pages: ${await existingResp.text()}`);
+          const existing = await existingResp.json();
+          const contentHtml = embeddedContent
+            ? `This site exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.<br/><br/><strong>Excerpt:</strong><pre>${embeddedContent.replace(/</g,'&lt;')}</pre>`
+            : `This site exposes an AI sitemap at <a href="${publicUrl}">${publicUrl}</a>.`;
+          const pagePayload = {
+            title: 'AI Sitemap',
+            content: contentHtml,
+            status: 'publish',
+            slug
+          };
+          let pageData;
+          if (Array.isArray(existing) && existing.length > 0) {
+            const id = existing[0].id;
+            const upd = await fetch(`${integration.site_url}/wp-json/wp/v2/pages/${id}`, {
+              method: 'PUT',
+              headers: { 'Authorization': getAuthHeader(integration.credentials), 'Content-Type': 'application/json' },
+              body: JSON.stringify(pagePayload)
+            });
+            if (!upd.ok) throw new Error(await upd.text());
+            pageData = await upd.json();
+          } else {
+            const create = await fetch(`${integration.site_url}/wp-json/wp/v2/pages`, {
+              method: 'POST',
+              headers: { 'Authorization': getAuthHeader(integration.credentials), 'Content-Type': 'application/json' },
+              body: JSON.stringify(pagePayload)
+            });
+            if (!create.ok) throw new Error(await create.text());
+            pageData = await create.json();
+          }
+          output = { success: true, page: pageData, permalink: pageData?.link || null };
+        }
         break;
       case 'update_content':
         if (!postId || !content) throw new Error('postId and content are required');
