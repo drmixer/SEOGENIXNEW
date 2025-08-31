@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Globe, Download, Loader, Copy, UploadCloud } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { supabase } from '../../lib/supabase';
@@ -12,6 +12,30 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchContent, setFetchContent] = useState<boolean>(false);
+  const [lastPublishedUrl, setLastPublishedUrl] = useState<string | null>(null);
+  const [indexNowKey, setIndexNowKey] = useState<string>('');
+  const [pingIndexNow, setPingIndexNow] = useState<boolean>(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!selectedProjectId) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data, error } = await supabase
+          .from('user_activity')
+          .select('activity_data, created_at')
+          .eq('user_id', user.id)
+          .eq('tool_id', selectedProjectId)
+          .eq('activity_type', 'ai_sitemap_published')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (!error && data && data[0]?.activity_data?.publicUrl) {
+          setLastPublishedUrl(data[0].activity_data.publicUrl);
+        }
+      } catch {}
+    })();
+  }, [selectedProjectId]);
 
   const run = async () => {
     if (!selectedProjectId) return;
@@ -49,7 +73,27 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
       const { error } = await supabase.storage.from('ai-sitemaps').upload(path, new Blob([content], { type: 'application/json' }), { upsert: true, contentType: 'application/json' as any });
       if (error) throw error;
       const { data } = supabase.storage.from('ai-sitemaps').getPublicUrl(path);
-      alert(`Uploaded to storage. Public URL: ${data.publicUrl}`);
+      const publicUrl = data.publicUrl;
+      setLastPublishedUrl(publicUrl);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('user_activity').insert({
+            user_id: user.id,
+            activity_type: 'ai_sitemap_published',
+            tool_id: selectedProjectId,
+            activity_data: { publicUrl },
+            created_at: new Date().toISOString()
+          });
+        }
+      } catch {}
+      if (pingIndexNow && indexNowKey && publicUrl) {
+        try {
+          const pingUrl = `https://www.bing.com/indexnow?url=${encodeURIComponent(publicUrl)}&key=${encodeURIComponent(indexNowKey)}`;
+          await fetch(pingUrl);
+        } catch {}
+      }
+      alert(`Uploaded to storage. Public URL: ${publicUrl}`);
     } catch (e: any) {
       alert(`Upload failed: ${e?.message || 'Storage bucket missing? Create bucket ai-sitemaps.'}`);
     }
@@ -91,6 +135,26 @@ const AISitemap: React.FC<AISitemapProps> = ({ selectedProjectId }) => {
           <pre className="text-xs overflow-auto max-h-[420px]">{JSON.stringify(json, null, 2)}</pre>
         </div>
       )}
+
+      <div className="p-3 rounded border border-gray-200 bg-gray-50">
+        <div className="text-sm text-gray-700 mb-2">Publish Options</div>
+        <div className="flex items-center space-x-2 mb-2">
+          <label className="flex items-center space-x-2 text-xs text-gray-700">
+            <input type="checkbox" checked={pingIndexNow} onChange={(e)=>setPingIndexNow(e.target.checked)} />
+            <span>Ping IndexNow after upload</span>
+          </label>
+          <input
+            type="text"
+            placeholder="IndexNow key (optional)"
+            value={indexNowKey}
+            onChange={(e)=>setIndexNowKey(e.target.value)}
+            className="text-xs border border-gray-300 rounded px-2 py-1"
+          />
+        </div>
+        {lastPublishedUrl && (
+          <div className="text-xs text-gray-600">Last published: <a className="text-blue-600" href={lastPublishedUrl} target="_blank" rel="noreferrer">{lastPublishedUrl}</a></div>
+        )}
+      </div>
     </div>
   );
 };

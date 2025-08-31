@@ -1455,12 +1455,25 @@ const ToolResultsDisplay: React.FC<{
               {data.results.map((voiceResult: any, index: number) => (
                 <div key={index} className="bg-gray-50 p-4 rounded-lg">
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-900 capitalize">{voiceResult.assistant}</span>
-                    <span className={`text-sm px-2 py-1 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                      {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-800 capitalize">{voiceResult.assistant || 'provider'}</span>
+                      {voiceResult.error && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-800">Error</span>
+                      )}
+                      {voiceResult.skipped && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">Skipped</span>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-xs px-2 py-0.5 rounded ${voiceResult.mentioned ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {voiceResult.mentioned ? 'Mentioned' : 'Not Mentioned'}
+                      </span>
+                      {voiceResult.citationUrl && (
+                        <a href={voiceResult.citationUrl} target="_blank" rel="noopener noreferrer" className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">View Citation</a>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-600 mt-2">{voiceResult.response || 'No response available'}</p>
+                  <p className="text-sm text-gray-600 mt-2">{voiceResult.response || voiceResult.text || 'No response available'}</p>
                   <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
                     <span>Confidence: {voiceResult.confidence || 0}%</span>
                     {voiceResult.mentioned && voiceResult.ranking && (

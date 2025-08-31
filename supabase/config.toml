@@ -17,6 +17,9 @@
 [functions.assistant-testbench]
   import_map = "./functions/assistant-testbench/deno.json"
   verify_jwt = true
+[functions.schema-batch-validator]
+  # Batch validate stored schema drafts for a project
+  verify_jwt = true
 [functions.ai-sitemap]
   # Minimal JSON emitter for assistants; requires auth
   import_map = "./functions/ai-sitemap/deno.json"

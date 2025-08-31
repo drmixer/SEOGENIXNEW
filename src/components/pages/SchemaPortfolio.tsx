@@ -83,25 +83,12 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
             if (!selectedProjectId) return;
             setValidating(true);
             try {
-              const updated: Row[] = [];
-              for (const r of rows) {
-                // fetch latest schema_draft for URL
-                const { data, error } = await supabase
-                  .from('user_activity')
-                  .select('activity_data')
-                  .eq('tool_id', selectedProjectId)
-                  .eq('activity_type', 'schema_draft')
-                  .eq('website_url', r.url)
-                  .order('created_at', { ascending: false })
-                  .limit(1);
-                if (!error && data && data[0]?.activity_data?.schema) {
-                  const schemaObj = data[0].activity_data.schema;
-                  const resp = await apiService.validateSchema(schemaObj);
-                  updated.push({ ...r, schemaValid: resp.valid, issues: Array.isArray(resp.issues) ? resp.issues.length : r.issues });
-                } else {
-                  updated.push(r);
-                }
-              }
+              const resp = await apiService.batchValidateSchemas(selectedProjectId);
+              const map = new Map(resp.results.map(r => [r.url, r]));
+              const updated = rows.map(r => {
+                const hit = map.get(r.url);
+                return hit ? { ...r, schemaValid: !!hit.valid, issues: Array.isArray(hit.issues) ? hit.issues.length : r.issues } : r;
+              });
               setRows(updated);
               const total = updated.length;
               const applied = updated.filter(x => x.schemaApplied).length;

@@ -236,6 +236,14 @@ export const apiService = {
     return result.output || result.data || result;
   },
 
+  async batchValidateSchemas(projectId: string, urls?: string[]): Promise<{ results: Array<{ url: string; valid: boolean; issues: any[] }> }> {
+    const result = await apiCall(`${API_BASE_URL}/schema-batch-validator`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId, urls })
+    });
+    return result.data || result.output || result;
+  },
+
   // Citation Tracker
   async trackCitations(projectId: string, domain: string, keywords: string[], fingerprintPhrases?: string[]) {
     const cacheKey = generateCacheKey(`${API_BASE_URL}/citation-tracker`, { projectId, domain, keywords, fingerprintPhrases });
