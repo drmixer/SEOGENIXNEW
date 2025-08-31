@@ -178,7 +178,54 @@ export const contentGeneratorService = async (req, supabase)=>{
     if (!validContentTypes.includes(requestBody.contentType)) {
       throw new Error(`Invalid contentType. Must be one of: ${validContentTypes.join(', ')}`);
     }
-    runId = await logToolRun(supabase, projectId, 'ai-content-generator', inputPayload);
+    // Resolve user plan via project ownership
+    let userId: string | null = null;
+    let userPlan: 'free' | 'core' | 'pro' | 'agency' = 'free';
+    try {
+      const { data: projectRow, error: projectErr } = await supabase
+        .from('projects')
+        .select('owner_id')
+        .eq('id', projectId)
+        .single();
+      if (projectErr) throw projectErr;
+      userId = projectRow?.owner_id || null;
+      if (userId) {
+        const { data: profileRow } = await supabase
+          .from('user_profiles')
+          .select('plan')
+          .eq('user_id', userId)
+          .single();
+        if (profileRow?.plan) userPlan = profileRow.plan as typeof userPlan;
+      }
+    } catch (e) {
+      console.warn('Failed to resolve user plan; defaulting to free:', e);
+    }
+
+    // Enforce per-plan daily limits using user_activity (activity_type = 'generator_run')
+    const planDailyLimits: Record<typeof userPlan, number> = {
+      free: 3,
+      core: 20,
+      pro: 60,
+      agency: 200
+    };
+    if (userId) {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: usedCount } = await supabase
+        .from('user_activity')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('activity_type', 'generator_run')
+        .gte('created_at', since);
+      const limit = planDailyLimits[userPlan];
+      if ((usedCount || 0) >= limit) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: { message: `Daily generator limit reached (${limit}/${limit}). Upgrade for higher limits.` }
+        }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    runId = await logToolRun(supabase, projectId, 'ai-content-generator', { ...inputPayload, userPlan });
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     if (!geminiApiKey) {
       throw new Error('Gemini API key not configured');
@@ -248,10 +295,59 @@ export const contentGeneratorService = async (req, supabase)=>{
       console.error('Invalid generated JSON structure:', generatedJson);
       throw new Error('Generated content missing required fields');
     }
+    // Enforce max words per plan (truncate overly long strings)
+    const maxWordsPerPlan: Record<typeof userPlan, number> = {
+      free: 700,
+      core: 2000,
+      pro: 4000,
+      agency: 10000
+    };
+    const maxWords = maxWordsPerPlan[userPlan];
+    const truncateToWords = (text: string, limit: number) => {
+      const words = text.split(/\s+/);
+      if (words.length <= limit) return text;
+      return words.slice(0, limit).join(' ') + '…';
+    };
+    const maybeTruncateField = (obj: any, field: string) => {
+      if (obj && typeof obj[field] === 'string') {
+        obj[field] = truncateToWords(obj[field], maxWords);
+      }
+    };
+    try {
+      const gc = generatedJson.generatedContent;
+      if (typeof gc === 'string') {
+        generatedJson.generatedContent = truncateToWords(gc, maxWords);
+      } else if (gc && typeof gc === 'object') {
+        // Common fields to truncate
+        ['raw', 'snippet', 'description'].forEach((f) => maybeTruncateField(gc, f));
+        if (Array.isArray(gc.faqs)) {
+          gc.faqs = gc.faqs.map((f: any) => ({
+            question: typeof f.question === 'string' ? truncateToWords(f.question, Math.min(30, Math.floor(maxWords / 10))) : f.question,
+            answer: typeof f.answer === 'string' ? truncateToWords(f.answer, Math.min(maxWords, 500)) : f.answer
+          }));
+        }
+      }
+    } catch (_) {}
+
     // Add metadata
     generatedJson.generatedAt = new Date().toISOString();
     generatedJson.contentType = requestBody.contentType;
     console.log('Final generated content:', JSON.stringify(generatedJson, null, 2));
+
+    // Record usage in user_activity
+    try {
+      if (userId) {
+        await supabase.from('user_activity').insert({
+          user_id: userId,
+          activity_type: 'generator_run',
+          tool_id: projectId,
+          activity_data: { contentType: requestBody.contentType, plan: userPlan },
+          created_at: new Date().toISOString()
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to record generator_run activity:', e);
+    }
     if (runId) {
       await updateToolRun(supabase, runId, 'completed', generatedJson, null);
     }

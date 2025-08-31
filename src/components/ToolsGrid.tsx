@@ -1587,6 +1587,12 @@ const ToolResultsDisplay: React.FC<{
               </button>
             </div>
             
+            {/* Upsell for advanced editing (Free plan) */}
+            {userProfile?.plan === 'free' && (
+              <div className="mb-3 p-3 rounded border border-purple-200 bg-purple-50 text-sm text-purple-900">
+                Draft ready. Upgrade to Core to refine with Entities, Schema, Citations, and Publish.
+              </div>
+            )}
             {/* Open in Editor CTA */}
             <div className="mb-4">
               <button
