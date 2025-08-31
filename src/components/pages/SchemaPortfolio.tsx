@@ -164,7 +164,7 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-gray-50 p-3 rounded border text-center">
           <div className="text-xl font-bold text-gray-900">{coverage.total}</div>
           <div className="text-xs text-gray-600">Pages</div>
@@ -194,6 +194,7 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
       )}
 
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -232,6 +233,7 @@ const SchemaPortfolio: React.FC<SchemaPortfolioProps> = ({ selectedProjectId }) 
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {recentBatches.length > 0 && (

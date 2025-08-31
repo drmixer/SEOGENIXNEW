@@ -236,9 +236,9 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
   const totalSteps = 4;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white w-full h-full sm:h-auto sm:max-w-2xl sm:max-h-[90vh] sm:rounded-2xl shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Welcome to SEOGENIX!</h2>
             <p className="text-gray-600 mt-1">Let's set up your {userPlan} plan</p>
@@ -252,7 +252,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ userPlan, onComplete,
         </div>
 
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="p-6 pb-0">
+          <div className="p-4 sm:p-6 pb-0">
             {/* Progress indicator */}
             <div className="flex items-center mb-8">
               {[1, 2, 3, 4].map((stepNumber) => (

@@ -163,8 +163,8 @@ const ChatbotPopup: React.FC<ChatbotPopupProps> = ({ onClose, type, userPlan, on
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-end p-6 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md h-96 flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-end p-0 sm:p-6 z-50">
+      <div className="bg-white w-full h-[80vh] sm:h-96 sm:max-w-md sm:rounded-2xl shadow-2xl flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-2 rounded-full">
