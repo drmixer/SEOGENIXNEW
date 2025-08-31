@@ -394,14 +394,20 @@ const ToolModal: React.FC<ToolModalProps> = ({
           break;
         }
 
-        case 'discovery': {
+      case 'discovery': {
+          const options = {
+            preferNiche: !!formData.preferNiche,
+            hintKeywords: (formData.hintKeywords ? String(formData.hintKeywords).split(',').map((s: string)=>s.trim()).filter(Boolean) : undefined),
+            blocklist: userProfile?.competitor_blocklist || []
+          };
           result = await apiService.discoverCompetitors(
             selectedProjectId,
             websiteUrl,
             formData.industry || userProfile?.industry,
             userProfile?.business_description,
             userProfile?.competitors?.map((c: any) => c.url) || [],
-            formData.analysisDepth || 'comprehensive'
+            formData.analysisDepth || 'comprehensive',
+            options
           );
           break;
         }
@@ -761,6 +767,29 @@ const ToolModal: React.FC<ToolModalProps> = ({
                 <option value="basic">Basic</option>
                 <option value="comprehensive">Comprehensive</option>
               </select>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <label className="flex items-center space-x-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={!!formData.preferNiche}
+                  onChange={(e) => setFormData({ ...formData, preferNiche: e.target.checked })}
+                  className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                />
+                <span>Prefer niche competitors</span>
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hint keywords (comma separated)</label>
+              <input
+                type="text"
+                value={formData.hintKeywords || ''}
+                onChange={(e) => setFormData({ ...formData, hintKeywords: e.target.value })}
+                placeholder="e.g., hiring platform, developer recruiting, YC startups"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
             </div>
           </div>
         );

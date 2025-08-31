@@ -1907,19 +1907,34 @@ const ToolResultsDisplay: React.FC<{
                                     />
                                     <span>{alreadyTracked(competitor.url) ? 'Already tracked' : 'Select to add'}</span>
                                   </label>
-                                  {!alreadyTracked(competitor.url) && (
+                                  <div className="flex items-center space-x-2">
+                                    {!alreadyTracked(competitor.url) && (
+                                      <button
+                                        disabled={remainingSlots === 0}
+                                        onClick={async () => {
+                                          if (!userProfile?.user_id || remainingSlots === 0) return;
+                                          try {
+                                            const updated = [...currentCompetitors, { url: competitor.url, name: competitor.name || new URL(competitor.url).hostname }];
+                                            await userDataService.updateUserProfile(userProfile.user_id, { competitors: updated });
+                                          } catch (e) { console.warn('Failed to add competitor:', e); }
+                                        }}
+                                        className={`text-xs px-2 py-1 rounded border ${remainingSlots === 0 ? 'border-gray-200 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+                                      >Add</button>
+                                    )}
                                     <button
-                                      disabled={remainingSlots === 0}
-                                      onClick={async () => {
-                                        if (!userProfile?.user_id || remainingSlots === 0) return;
+                                      onClick={async ()=>{
+                                        if (!userProfile?.user_id) return;
                                         try {
-                                          const updated = [...currentCompetitors, { url: competitor.url, name: competitor.name || new URL(competitor.url).hostname }];
-                                          await userDataService.updateUserProfile(userProfile.user_id, { competitors: updated });
-                                        } catch (e) { console.warn('Failed to add competitor:', e); }
+                                          const domain = new URL(competitor.url).hostname.replace('www.','');
+                                          const current = Array.isArray(userProfile.competitor_blocklist) ? userProfile.competitor_blocklist : [];
+                                          if (!current.includes(domain)) {
+                                            await userDataService.updateUserProfile(userProfile.user_id, { competitor_blocklist: [...current, domain] });
+                                          }
+                                        } catch(e){ console.warn('Failed to hide domain:', e); }
                                       }}
-                                      className={`text-xs px-2 py-1 rounded border ${remainingSlots === 0 ? 'border-gray-200 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
-                                    >Add</button>
-                                  )}
+                                      className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-100"
+                                    >Hide</button>
+                                  </div>
                                 </div>
                             </div>
                         ))}

@@ -81,6 +81,9 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
   const [showCitationsPanel, setShowCitationsPanel] = useState<boolean>(false);
   const [citations, setCitations] = useState<Array<{ title: string; url: string; anchorText?: string; used?: boolean; relNofollow?: boolean }>>([]);
   const [relNofollowDefault, setRelNofollowDefault] = useState<boolean>(true);
+  const [citationSearchQuery, setCitationSearchQuery] = useState<string>('');
+  const [citationSearchResults, setCitationSearchResults] = useState<Array<{ title: string; url: string; snippet?: string }>>([]);
+  const [isSearchingSources, setIsSearchingSources] = useState<boolean>(false);
   // Publish Impact
   const [recentImpacts, setRecentImpacts] = useState<Array<any>>([]);
 
@@ -1804,6 +1807,46 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
                 </div>
               </div>
               <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={citationSearchQuery}
+                    onChange={(e)=> setCitationSearchQuery(e.target.value)}
+                    placeholder="Find sources (e.g., 'Google Quality Rater Guidelines')"
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                  />
+                  <button
+                    onClick={async ()=>{
+                      if (!citationSearchQuery.trim()) return;
+                      setIsSearchingSources(true);
+                      try {
+                        const { results } = await apiService.searchSources(citationSearchQuery.trim());
+                        setCitationSearchResults(results || []);
+                      } catch(e) { console.warn('Search sources failed:', e); }
+                      finally { setIsSearchingSources(false); }
+                    }}
+                    className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded hover:bg-gray-50"
+                  >{isSearchingSources ? 'Searching…' : 'Search'}</button>
+                </div>
+                {citationSearchResults.length > 0 && (
+                  <div className="border border-gray-200 rounded p-2 bg-gray-50">
+                    <div className="text-xs text-gray-600 mb-1">Results</div>
+                    <div className="space-y-1 max-h-40 overflow-auto">
+                      {citationSearchResults.map((r, i)=> (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <div className="truncate pr-2">
+                            <div className="font-medium text-gray-800 truncate">{r.title}</div>
+                            <div className="text-gray-600 truncate">{r.url}</div>
+                          </div>
+                          <button
+                            onClick={() => setCitations(prev => [...prev, { title: r.title, url: r.url, anchorText: r.title, used: false, relNofollow: relNofollowDefault }])}
+                            className="px-2 py-0.5 border border-gray-300 rounded hover:bg-white"
+                          >Add</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {citations.map((c, idx) => (
                   <div key={idx} className="p-2 border border-gray-200 rounded flex items-center space-x-2">
                     <input
