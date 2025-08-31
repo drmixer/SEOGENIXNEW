@@ -1223,9 +1223,9 @@ const ContentEditor: React.FC<ContentEditorProps> = ({ userPlan, context, onToas
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h2 className="text-2xl font-bold text-gray-900">Content Editor</h2>
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2 sm:space-x-3">
           {connectedIntegrations.map(int => (
             <button
               key={int.id}

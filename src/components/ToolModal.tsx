@@ -960,9 +960,9 @@ const ToolModal: React.FC<ToolModalProps> = ({
   const IconComponent = getToolIcon(toolId);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-xl shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className={`p-3 rounded-lg bg-gradient-to-r ${getToolColor(toolId)}`}>
               <IconComponent className="w-6 h-6 text-white" />
@@ -984,7 +984,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
           </button>
         </div>
 
-        <div className="flex-1 p-6 overflow-y-auto">
+        <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
           {step === 'config' && renderToolConfig()}
           {step === 'running' && (
             <div className="flex flex-col items-center justify-center py-12">
@@ -996,7 +996,7 @@ const ToolModal: React.FC<ToolModalProps> = ({
           {step === 'results' && renderToolResults()}
         </div>
 
-        <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+        <div className="flex items-center justify-end space-x-3 p-4 sm:p-6 border-t border-gray-200">
           {step === 'config' && (
             <>
               <button
