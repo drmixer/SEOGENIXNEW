@@ -321,6 +321,15 @@ export const apiService = {
     return voicePromise;
   },
 
+  // AI Sitemap
+  async generateAISitemap(projectId: string, urls?: string[], fetchContent: boolean = false): Promise<any> {
+    const result = await apiCall(`${API_BASE_URL}/ai-sitemap`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId, urls, fetch: fetchContent })
+    });
+    return result?.data || result?.output || result;
+  },
+
   // Genie Chatbot (Enhanced with user data)
   async chatWithGenie(
     message: string, 

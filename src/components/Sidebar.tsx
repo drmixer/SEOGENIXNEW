@@ -48,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'audit', label: 'AI Visibility Audit', icon: FileText, available: isDevelopment || userPlan !== 'free' },
     { id: 'schema', label: 'Schema Generator', icon: Shield, available: isDevelopment || userPlan !== 'free' },
     { id: 'citations', label: 'Citation Tracker', icon: Search, available: isDevelopment || userPlan !== 'free' },
-    { id: 'voice', label: 'Voice Assistant Tester', icon: Mic, available: isDevelopment || userPlan !== 'free' },
+    { id: 'voice', label: 'Assistant Testbench', icon: Mic, available: isDevelopment || userPlan !== 'free' },
     { id: 'summaries', label: 'LLM Site Summaries', icon: Globe, available: isDevelopment || userPlan !== 'free' },
     { id: 'entities', label: 'Entity Coverage', icon: Users, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'generator', label: 'AI Content Generator', icon: Zap, available: true },
@@ -88,6 +88,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'reports', label: 'Reports', icon: Download, available: isDevelopment || userPlan !== 'free' },
     { id: 'competitive-viz', label: 'Competitive Insights', icon: Eye, available: isDevelopment || ['pro', 'agency'].includes(userPlan) },
     { id: 'integrations', label: 'CMS Integrations', icon: Layers, available: isDevelopment || ['core', 'pro', 'agency'].includes(userPlan) },
+    { id: 'schema-portfolio', label: 'Schema Portfolio', icon: Layers, available: isDevelopment || ['core','pro','agency'].includes(userPlan) },
+    { id: 'ai-sitemap', label: 'AI Sitemap', icon: Globe, available: isDevelopment || ['core','pro','agency'].includes(userPlan) },
   ];
 
   const bottomItems = [

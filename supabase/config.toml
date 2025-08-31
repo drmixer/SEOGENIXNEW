@@ -14,6 +14,10 @@
   import_map = "./functions/competitive-analysis/deno.json"
 [functions.competitor-discovery]
   import_map = "./functions/competitor-discovery/deno.json"
+[functions.ai-sitemap]
+  # Minimal JSON emitter for assistants; requires auth
+  import_map = "./functions/ai-sitemap/deno.json"
+  verify_jwt = true
 [functions.content-optimizer]
   import_map = "./functions/content-optimizer/deno.json"
 [functions.create-checkout]
