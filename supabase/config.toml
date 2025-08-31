@@ -67,8 +67,6 @@
   # Allow unauthenticated browser calls
   verify_jwt = false
 
-[functions.schema-generator]
-  # Simple heuristic generator; no import map required
 
 [functions.schema-validator]
   # Lightweight validator; no import map required
