@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, User, Globe, Target, Save, Loader, Trash2, Plus } from 'lucide-react';
 import { userDataService } from '../services/userDataService';
 import { supabase } from '../lib/supabase';
+import Modal from './ui/Modal';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -485,6 +486,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
               </div>
             )}
         </div>
+      </div>
     </Modal>
   );
 };
