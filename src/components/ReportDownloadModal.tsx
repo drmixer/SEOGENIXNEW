@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, FileText, Download, Copy, ExternalLink, Loader } from 'lucide-react';
 import { reportService } from '../services/reportService';
+import Modal from './ui/Modal';
 
 interface ReportDownloadModalProps {
   onClose: () => void;
@@ -56,20 +57,11 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
     }
   };
 
+  const header = (<h3 className="text-xl font-semibold text-gray-900">Download Report</h3>);
+  const footer = (<button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">Close</button>);
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h3 className="text-xl font-semibold text-gray-900">Download Report</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        <div className="p-6">
+    <Modal isOpen={true} onClose={onClose} header={header} footer={footer} size="md">
+        <div className="">
           <div className="mb-6">
             <h4 className="font-medium text-gray-900 mb-2">Report Details</h4>
             <p className="text-gray-600 text-sm mb-1">
@@ -174,8 +166,7 @@ const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

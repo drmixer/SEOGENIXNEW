@@ -182,22 +182,40 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
     { id: 'goals', label: 'Goals', icon: Target }
   ];
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+  const header = (<h2 className="text-2xl font-bold text-gray-900">Settings</h2>);
+  const footer = (
+    <>
+      <button
+        onClick={onClose}
+        className="px-4 sm:px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm sm:text-base"
+      >
+        Cancel
+      </button>
+      <button
+        onClick={handleSave}
+        disabled={loading}
+        className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-4 sm:px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2 text-sm sm:text-base"
+      >
+        {loading ? (
+          <>
+            <Loader className="w-4 h-4 animate-spin" />
+            <span>Saving...</span>
+          </>
+        ) : (
+          <>
+            <Save className="w-4 h-4" />
+            <span>Save Changes</span>
+          </>
+        )}
+      </button>
+    </>
+  );
 
+  return (
+    <Modal isOpen={true} onClose={onClose} header={header} footer={footer} size="4xl">
         <div className="flex flex-1 min-h-0">
-          {/* Sidebar */}
-          <div className="w-64 border-r border-gray-200 p-6">
+          {/* Sidebar (desktop) */}
+          <div className="hidden sm:block w-64 border-r border-gray-200 p-6">
             <nav className="space-y-2">
               {tabs.map((tab) => {
                 const IconComponent = tab.icon;
@@ -220,7 +238,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
           </div>
 
           {/* Content */}
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
+            {/* Mobile tabs */}
+            <div className="sm:hidden mb-4 -mx-4 px-4">
+              <div className="flex gap-2 overflow-x-auto">
+                {tabs.map((tab) => {
+                  const IconComponent = tab.icon;
+                  const active = activeTab === (tab.id as any);
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg whitespace-nowrap border ${active ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-200'}`}
+                    >
+                      <IconComponent className="w-4 h-4" />
+                      <span className="text-sm">{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {activeTab === 'profile' && (
               <div className="space-y-6">
                 <div>
@@ -446,37 +484,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, user, userProfil
                 </div>
               </div>
             )}
-          </div>
         </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
-          <button
-            onClick={onClose}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            className="bg-gradient-to-r from-teal-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
-          >
-            {loading ? (
-              <>
-                <Loader className="w-4 h-4 animate-spin" />
-                <span>Saving...</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span>Save Changes</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

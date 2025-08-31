@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader, BarChart3 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { userDataService } from '../services/userDataService';
+import Modal from './ui/Modal';
 
 interface Website {
   url: string;
@@ -158,34 +159,55 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="bg-red-500 p-2 rounded-lg">
-              <BarChart3 className="w-5 h-5 text-white" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-900">Run Competitive Analysis</h2>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+  const header = (
+    <div className="flex items-center space-x-3">
+      <div className="bg-red-500 p-2 rounded-lg">
+        <BarChart3 className="w-5 h-5 text-white" />
+      </div>
+      <h2 className="text-xl font-bold text-gray-900">Run Competitive Analysis</h2>
+    </div>
+  );
 
-        <div className="p-6 space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Your Website</label>
-            <select
-              value={selectedUserWebsite}
-              onChange={(e) => setSelectedUserWebsite(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            >
-              {userWebsites.map(site => (
-                <option key={site.url} value={site.url}>{site.name || site.url}</option>
-              ))}
-            </select>
+  const footer = (
+    <>
+      <button
+        onClick={onClose}
+        className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+      >
+        Cancel
+      </button>
+      <button
+        onClick={handleRunAnalysis}
+        disabled={loading || selectedCompetitors.length === 0}
+        className="bg-red-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+      >
+        {loading ? (
+          <div className="flex items-center">
+            <Loader className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" />
+            Running Analysis...
           </div>
+        ) : (
+          `Analyze ${selectedCompetitors.length} Competitor(s)`
+        )}
+      </button>
+    </>
+  );
+
+  return (
+    <Modal isOpen={true} onClose={onClose} header={header} footer={footer} size="2xl">
+      <div className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Your Website</label>
+          <select
+            value={selectedUserWebsite}
+            onChange={(e) => setSelectedUserWebsite(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          >
+            {userWebsites.map(site => (
+              <option key={site.url} value={site.url}>{site.name || site.url}</option>
+            ))}
+          </select>
+        </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Competitors to Analyze</label>
@@ -222,32 +244,8 @@ const CompetitiveAnalysisModal: React.FC<CompetitiveAnalysisModalProps> = ({
           </div>
 
           {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
-        </div>
-
-        <div className="flex justify-end p-6 bg-gray-50 rounded-b-2xl space-x-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleRunAnalysis}
-            disabled={loading || selectedCompetitors.length === 0}
-            className="bg-red-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
-          >
-            {loading ? (
-              <div className="flex items-center">
-                <Loader className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" />
-                Running Analysis...
-              </div>
-            ) : (
-              `Analyze ${selectedCompetitors.length} Competitor(s)`
-            )}
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 
