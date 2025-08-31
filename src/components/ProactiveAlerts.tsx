@@ -626,7 +626,7 @@ const ProactiveAlerts: React.FC<ProactiveAlertsProps> = ({ user, userPlan }) => 
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div className="flex items-center space-x-3">
                 <div className={`p-2 rounded-lg ${getSeverityColor(selectedAlert.severity)}`}>
-                  {getAlertIcon(selectedAlert.type)({ className: "w-5 h-5" })}
+                  {(() => { const Icon = getAlertIcon(selectedAlert.type); return <Icon className="w-5 h-5" />; })()}
                 </div>
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900">{selectedAlert.title}</h3>

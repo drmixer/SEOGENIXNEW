@@ -770,6 +770,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         onNavigateToLanding={onNavigateToLanding}
         user={user}
         onSignOut={onSignOut}
+        onOpenSettings={handleSettingsClick}
       />
       
       <div className="flex flex-1 min-h-0">

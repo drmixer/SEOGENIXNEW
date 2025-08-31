@@ -7,9 +7,10 @@ interface DashboardHeaderProps {
   onNavigateToLanding: () => void;
   user: any;
   onSignOut: () => void;
+  onOpenSettings?: () => void;
 }
 
-const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userPlan, onNavigateToLanding, user, onSignOut }) => {
+const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userPlan, onNavigateToLanding, user, onSignOut, onOpenSettings }) => {
   const planColors = {
     free: 'bg-gray-100 text-gray-700',
     core: 'bg-blue-100 text-blue-700',
@@ -76,7 +77,17 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userPlan, onNavigateT
               <span>{getUserDisplayName()}</span>
             </div>
             
-            <button className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+            <button
+              onClick={() => {
+                try {
+                  onOpenSettings?.();
+                } catch (e) {
+                  console.warn('Failed to open settings', e);
+                }
+              }}
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Open Settings"
+            >
               <Settings className="w-5 h-5" />
             </button>
             

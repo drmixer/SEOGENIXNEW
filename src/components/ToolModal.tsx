@@ -1554,7 +1554,69 @@ const ToolResultsDisplay: React.FC<{
 
           {data.primarySiteAnalysis && data.competitorAnalyses && data.competitorAnalyses.length > 0 && (
             <div className="space-y-3">
-              <h4 className="font-medium text-gray-900">Side-by-Side Compare</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-gray-900">Side-by-Side Compare</h4>
+                <button
+                  onClick={() => {
+                    try {
+                      const primary = data.primarySiteAnalysis || {};
+                      const comps = Array.isArray(data.competitorAnalyses) ? data.competitorAnalyses : [];
+                      const getSub = (o: any, keyA: string, keyB: string) => (o?.subscores?.[keyA] ?? o?.scores?.[keyA] ?? o?.subscores?.[keyB] ?? o?.scores?.[keyB] ?? 0);
+                      const yoAI = getSub(primary, 'aiUnderstanding', 'ai_understanding');
+                      const yoCit = getSub(primary, 'citationLikelihood', 'citation_likelihood');
+                      const yoVoice = getSub(primary, 'conversationalReadiness', 'conversational_readiness');
+                      const yoStruct = getSub(primary, 'contentStructure', 'content_structure');
+                      const yoOverall = primary.overallScore || 0;
+                      const rows: string[] = [];
+                      rows.push(['site','overall','ai','citation','voice','structure','d_overall','d_ai','d_citation','d_voice','d_structure'].join(','));
+                      const norm = (s: string) => '"' + String(s || '').replaceAll('"','""') + '"';
+                      // Your row
+                      rows.push([
+                        norm(primary.name || primary.url || 'Your site'),
+                        yoOverall,
+                        yoAI,
+                        yoCit,
+                        yoVoice,
+                        yoStruct,
+                        0,0,0,0,0
+                      ].join(','));
+                      // Competitors
+                      comps.forEach((c: any) => {
+                        const ai = getSub(c, 'aiUnderstanding', 'ai_understanding');
+                        const cit = getSub(c, 'citationLikelihood', 'citation_likelihood');
+                        const voice = getSub(c, 'conversationalReadiness', 'conversational_readiness');
+                        const struct = getSub(c, 'contentStructure', 'content_structure');
+                        const overall = c.overallScore || c.score || 0;
+                        rows.push([
+                          norm(c.name || c.url),
+                          overall,
+                          ai,
+                          cit,
+                          voice,
+                          struct,
+                          overall - yoOverall,
+                          ai - yoAI,
+                          cit - yoCit,
+                          voice - yoVoice,
+                          struct - yoStruct
+                        ].join(','));
+                      });
+                      const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'competitive_compare.csv';
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    } catch (e) {
+                      console.warn('Failed to export CSV', e);
+                    }
+                  }}
+                  className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >Export CSV</button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
@@ -1694,6 +1756,19 @@ const ToolResultsDisplay: React.FC<{
             </div>
           </div>
           
+          {data.rejectedSummary && (
+            <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+              <div className="text-sm font-medium text-yellow-800 mb-1">Filtered out during discovery</div>
+              <div className="text-xs text-yellow-700 flex flex-wrap gap-2">
+                {Object.entries(data.rejectedSummary).map(([reason, count]: any) => (
+                  <span key={reason} className="px-2 py-0.5 bg-white border border-yellow-200 rounded">
+                    {String(reason).replace(/_/g,' ')}: {count as any}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {data.competitorSuggestions && data.competitorSuggestions.length > 0 && (
             <div className="space-y-4">
               <h4 className="font-medium text-gray-900">New Competitors Discovered:</h4>
