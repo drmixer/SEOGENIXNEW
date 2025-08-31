@@ -545,9 +545,10 @@ export const apiService = {
       method: 'POST',
       body: JSON.stringify({ projectId, primaryUrl, competitorUrls, industry, analysisType })
     }).then(response => {
-      if (response.output) {
-        return response.output;
-      }
+      // Normalize common envelopes: {success,data|output|result}
+      if (response?.data) return response.data;
+      if (response?.output) return response.output;
+      if (response?.result) return response.result;
       return response;
     });
     
@@ -583,9 +584,9 @@ export const apiService = {
       method: 'POST',
       body: JSON.stringify({ projectId, url, industry, businessDescription, existingCompetitors, analysisDepth, options })
     }).then(response => {
-      if (response.output) {
-        return response.output;
-      }
+      if (response?.data) return response.data;
+      if (response?.output) return response.output;
+      if (response?.result) return response.result;
       return response;
     });
     
